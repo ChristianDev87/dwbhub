@@ -34,7 +34,8 @@
           { "context": "OpenAPI + generated client drift", "integration_id": 15368 },
           { "context": "SQL tenant_id lint", "integration_id": 15368 },
           { "context": "security (pnpm audit + dotnet vulnerable + trivy)", "integration_id": 15368 },
-          { "context": "container build smoke (api + web)", "integration_id": 15368 }
+          { "context": "container build smoke (api + web)", "integration_id": 15368 },
+          { "context": "e2e smoke (Playwright via compose)", "integration_id": 15368 }
         ]
       }
     }

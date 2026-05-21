@@ -192,7 +192,6 @@ jobs:
 
   e2e-smoke:
     name: e2e smoke (Playwright via compose)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, linux, dotnet10]
     needs: [backend-lint-and-test, frontend-lint-typecheck-test, container-smoke]
     env:
