@@ -194,6 +194,16 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, linux, dotnet10]
     needs: [backend-lint-and-test, frontend-lint-typecheck-test, container-smoke]
+    env:
+      # Runner is itself a container; reach host-published compose ports via host-gateway
+      # (the watcher launches runners with --add-host=host-gateway:host-gateway).
+      E2E_HOST: host-gateway
+      # High ports to avoid clashing with co-tenant services on the runner host.
+      API_PORT: "15080"
+      WEB_PORT: "15173"
+      POSTGRES_PORT: "15432"
+      MAILHOG_SMTP_PORT: "11025"
+      MAILHOG_UI_PORT: "18025"
     steps:
       - uses: actions/checkout@v4
       - name: Install web deps
@@ -206,3 +216,4 @@ jobs:
         with:
           name: playwright-report
           path: web/playwright-report
+          if-no-files-found: ignore
