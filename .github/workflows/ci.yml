@@ -16,7 +16,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Group by the source branch (PR head or pushed ref), so a `push` to develop and the
+  # `pull_request.synchronize` it triggers land in the same group and one cancels the other.
+  # Without this normalisation, push (ref = refs/heads/develop) and PR (ref = refs/pull/N/merge)
+  # would sit in separate groups and run the full pipeline twice for every commit.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 env:
