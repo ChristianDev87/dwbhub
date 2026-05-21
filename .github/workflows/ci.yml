@@ -1,0 +1,99 @@
+name: ci
+
+# Phase A: 4 jobs validated to run on the self-hosted runner (image: github-runner:latest,
+# labels [self-hosted, linux, dotnet10]). Security-audit / container-smoke / e2e-smoke
+# follow once Phase A is green.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  backend-lint-and-test:
+    name: backend (lint + unit + integration + security)
+    runs-on: [self-hosted, linux, dotnet10]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore tools
+        run: dotnet tool restore
+      - name: Restore packages
+        run: dotnet restore api/DwbHub.sln
+      - name: Verify formatting
+        run: dotnet format api/DwbHub.sln --verify-no-changes --no-restore
+      - name: Build (warnings as errors)
+        run: dotnet build api/DwbHub.sln --no-restore -c Release
+      - name: Unit tests
+        run: dotnet test api/tests/DwbHub.Tests.Unit/DwbHub.Tests.Unit.csproj --no-build -c Release --logger "trx;LogFileName=unit.trx" --collect:"XPlat Code Coverage"
+      - name: Integration tests
+        run: dotnet test api/tests/DwbHub.Tests.Integration/DwbHub.Tests.Integration.csproj --no-build -c Release --logger "trx;LogFileName=integration.trx"
+      - name: Security tests
+        run: dotnet test api/tests/DwbHub.Tests.Security/DwbHub.Tests.Security.csproj --no-build -c Release --logger "trx;LogFileName=security.trx"
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: |
+            **/TestResults/**/*.trx
+            **/TestResults/**/*.xml
+
+  frontend-lint-typecheck-test:
+    name: frontend (lint + typecheck + vitest + build)
+    runs-on: [self-hosted, linux, dotnet10]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm --filter dwbhub-web lint
+      - name: Prettier format check
+        run: pnpm --filter dwbhub-web format:check
+      - name: Typecheck
+        run: pnpm --filter dwbhub-web typecheck
+      - name: Vitest
+        run: pnpm --filter dwbhub-web test
+      - name: Build (production bundle)
+        run: pnpm --filter dwbhub-web build
+      - name: Upload web bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 7
+
+  openapi-drift:
+    name: OpenAPI + generated client drift
+    runs-on: [self-hosted, linux, dotnet10]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore tools
+        run: dotnet tool restore
+      - name: Install web deps
+        run: pnpm install --frozen-lockfile
+      - name: Verify openapi.yaml has no drift
+        run: pwsh ./tools/verify-openapi.ps1
+      - name: Verify generated client has no drift
+        run: pwsh ./scripts/gen-openapi-client.ps1 -Check
+
+  sql-tenant-filter-lint:
+    name: SQL tenant_id lint
+    runs-on: [self-hosted, linux, dotnet10]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint
+        run: pwsh ./tools/check-tenant-filter.ps1
+      - name: Pester tests
+        run: pwsh -NoLogo -NoProfile -Command "Invoke-Pester -Path tools/tests -Output Detailed -CI"
