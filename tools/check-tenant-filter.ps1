@@ -50,7 +50,9 @@ foreach ($file in $files) {
         # Allow statements that only touch allowlisted tables.
         $touchesAllowlistOnly = $true
         foreach ($table in [regex]::Matches($stmt, '(?i)\bFROM\s+([\w.]+)|\bINTO\s+([\w.]+)|\bUPDATE\s+([\w.]+)')) {
-            $name = ($table.Groups[1].Value, $table.Groups[2].Value, $table.Groups[3].Value | Where-Object { $_ })[0]
+            # @(...) forces array context so a single non-empty value isn't unwrapped into a bare
+            # string (whose [0] index would then return the first character of the table name).
+            $name = @($table.Groups[1].Value, $table.Groups[2].Value, $table.Groups[3].Value | Where-Object { $_ })[0]
             if ($name) {
                 # Strip a schema-qualifier prefix so allowlist lookups work for `public.tenants` etc.
                 $name = $name -replace '^.*\.', ''

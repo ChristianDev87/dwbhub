@@ -17,8 +17,13 @@ if (-not (Test-Path $spec)) {
 
 New-Item -ItemType Directory -Force (Split-Path $outFile) | Out-Null
 
+# pnpm --filter changes cwd to web/ before running the binary, so paths must be
+# resolved to absolute form against the repo root or they'll be interpreted as
+# web/shared/openapi.yaml (which doesn't exist).
+$specAbs = (Resolve-Path $spec).Path
+
 Write-Host "Generating TypeScript types from $spec ..." -ForegroundColor Cyan
-pnpm --filter dwbhub-web exec openapi-typescript $spec --output $tempFile
+pnpm --filter dwbhub-web exec openapi-typescript $specAbs --output $tempFile
 if ($LASTEXITCODE -ne 0) { throw "openapi-typescript failed." }
 
 # Prepend a banner so the generated file is obvious in code review.
