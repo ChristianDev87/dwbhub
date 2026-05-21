@@ -42,9 +42,8 @@ public sealed class PerStartFileLoggerTests : IDisposable
         PerStartFileLogger.Initialize(_tempDir, retainStartLogs: 10);
 
         var remaining = Directory.GetFiles(_tempDir, "dwbhub-*.log").Length;
-        // 10 retained + 1 freshly created = 11 maximum
-        remaining.Should().BeLessThanOrEqualTo(11);
-        remaining.Should().BeGreaterThanOrEqualTo(10);
+        // 12 seeded + 1 fresh = 13 before pruning; retain=10 means delete 3, leaving exactly 10
+        remaining.Should().Be(10);
     }
 
     [Fact]
@@ -65,5 +64,33 @@ public sealed class PerStartFileLoggerTests : IDisposable
         var path = PerStartFileLogger.Initialize(_tempDir, retainStartLogs: 10);
         File.Exists(path).Should().BeTrue();
         Directory.GetFiles(_tempDir, "dwbhub-*.log").Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void Initialize_ThrowsOnNullDirectory()
+    {
+        FluentActions.Invoking(() => PerStartFileLogger.Initialize(null!, 10))
+            .Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Initialize_ThrowsOnWhitespaceDirectory()
+    {
+        FluentActions.Invoking(() => PerStartFileLogger.Initialize("   ", 10))
+            .Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Initialize_ThrowsOnZeroRetain()
+    {
+        FluentActions.Invoking(() => PerStartFileLogger.Initialize(_tempDir, 0))
+            .Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void Initialize_ThrowsOnNegativeRetain()
+    {
+        FluentActions.Invoking(() => PerStartFileLogger.Initialize(_tempDir, -1))
+            .Should().Throw<ArgumentOutOfRangeException>();
     }
 }

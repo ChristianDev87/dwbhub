@@ -19,6 +19,10 @@ public static class PerStartFileLogger
         var fileName = $"{FilePrefix}{timestamp}{FileSuffix}";
         var filePath = Path.Combine(logDirectory, fileName);
 
+        // File.Create overwrites silently on collision. Two callers in the same UTC second
+        // would share one empty log file, which interleaves their entries but does not lose
+        // data. Acceptable for now — see Plan 0.6 if multi-process operator scenarios become
+        // real.
         // Touch the file so callers can rely on its existence.
         using (File.Create(filePath))
         {
@@ -43,9 +47,11 @@ public static class PerStartFileLogger
             {
                 file.Delete();
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                // Another process may still hold the file; skip silently.
+                // Another process may still hold the file; skip silently. (Once Serilog
+                // is wired the actual prior log file is owned by us with FileShare.Read
+                // so this is mostly a safety net for concurrent operators.)
             }
         }
     }
