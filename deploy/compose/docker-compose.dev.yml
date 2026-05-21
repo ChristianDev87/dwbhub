@@ -12,10 +12,15 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
 
   web:
-    # Same base as deploy/docker/Dockerfile.web build stage. node:22-alpine
-    # resolved to an image without npm/corepack on PATH on the CI runner
-    # (sh: npm: not found); bookworm-slim ships them reliably on /usr/local/bin.
+    # CRITICAL: must !reset the inherited `build:` from base compose.yml.
+    # Without this, `docker compose build` builds Dockerfile.web (nginx runtime
+    # stage) AND tags the result with the `image:` name below, silently
+    # poisoning the upstream tag in the local docker cache. The container then
+    # starts the nginx entrypoint and our `sh -c "npm..."` CMD lands in nginx,
+    # giving the misleading "sh: npm: not found" error.
+    build: !reset null
     image: node:22-bookworm-slim
+    pull_policy: always
     working_dir: /repo
     command: >-
       sh -c "npm install -g pnpm@11.1.3

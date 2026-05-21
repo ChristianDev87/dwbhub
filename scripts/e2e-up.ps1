@@ -23,10 +23,12 @@ $composeFiles = @("-f", "docker-compose.yml", "-f", "docker-compose.dev.yml")
 Write-Host "Pre-cleaning any leftover compose stack ..." -ForegroundColor DarkYellow
 docker compose @composeFiles down -v --remove-orphans 2>$null | Out-Null
 
-# The compose file pins images to dwbhub-{api,web}:local which don't exist in any registry.
-# Always build unless the caller explicitly opts out.
+# Build only the api service. The web service in the dev override uses an upstream
+# node:22-bookworm-slim image (compose pulls it); never let `compose build` touch
+# web here — its inherited build directive from the base compose.yml would tag the
+# nginx-runtime build result as `node:22-bookworm-slim`, poisoning the cached tag.
 if (-not $NoBuild.IsPresent) {
-    docker compose @composeFiles build
+    docker compose @composeFiles build api
 }
 docker compose @composeFiles up -d
 Pop-Location
