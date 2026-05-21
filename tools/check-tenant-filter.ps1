@@ -38,17 +38,23 @@ foreach ($file in $files) {
     $text = Get-Content $file.FullName -Raw
     if ($text -match $optOutPattern) { continue }
 
-    # Crude statement splitter: by semicolon outside string literals.
-    # Good enough for migrations and Dapper SQL constants.
-    $statements = $text -split '(?<!\\);'
+    # Crude statement splitter: strip single-quoted string literals, then split on semicolons.
+    # SQL escapes single quotes by doubling them (''); the regex below collapses any
+    # 'string with ;' into empty quotes before the split so embedded semicolons don't break statements.
+    $stripped = $text -replace "'(?:[^']|'')*'", "''"
+    $statements = $stripped -split ';'
     foreach ($stmt in $statements) {
         if ($stmt -notmatch $mutationPattern) { continue }
         if ($stmt -match $tenantPattern) { continue }
 
         # Allow statements that only touch allowlisted tables.
         $touchesAllowlistOnly = $true
-        foreach ($table in [regex]::Matches($stmt, '(?i)\bFROM\s+(\w+)|\bINTO\s+(\w+)|\bUPDATE\s+(\w+)')) {
+        foreach ($table in [regex]::Matches($stmt, '(?i)\bFROM\s+([\w.]+)|\bINTO\s+([\w.]+)|\bUPDATE\s+([\w.]+)')) {
             $name = ($table.Groups[1].Value, $table.Groups[2].Value, $table.Groups[3].Value | Where-Object { $_ })[0]
+            if ($name) {
+                # Strip a schema-qualifier prefix so allowlist lookups work for `public.tenants` etc.
+                $name = $name -replace '^.*\.', ''
+            }
             if ($name -and ($tableAllowlist -notcontains $name.ToLower())) {
                 $touchesAllowlistOnly = $false
                 break

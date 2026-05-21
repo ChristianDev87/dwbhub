@@ -19,4 +19,14 @@ Describe "check-tenant-filter" {
         $output = & pwsh -NoLogo -NoProfile -File $script:scriptPath -Path (Join-Path $script:fixturesDir "no-tenant-filter-comment.sql") *>&1
         $LASTEXITCODE | Should -Be 0
     }
+
+    It "accepts SQL with semicolons inside string literals" {
+        $null = & pwsh -NoLogo -NoProfile -File $script:scriptPath -Path (Join-Path $script:fixturesDir "string-literal-semicolon.sql") *>&1
+        $LASTEXITCODE | Should -Be 0
+    }
+
+    It "accepts schema-qualified allowlisted tables" {
+        $null = & pwsh -NoLogo -NoProfile -File $script:scriptPath -Path (Join-Path $script:fixturesDir "schema-qualified-allowlist.sql") *>&1
+        $LASTEXITCODE | Should -Be 0
+    }
 }
