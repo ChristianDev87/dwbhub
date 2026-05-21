@@ -191,7 +191,11 @@ jobs:
           docker rm -f dwbhub-api-smoke dwbhub-web-smoke 2>/dev/null || true
 
   e2e-smoke:
+    # Heavy full-stack job: only runs as part of a PR. The MainSecure ruleset requires
+    # this check to pass before the PR can be merged, so main is always protected by
+    # a passing e2e — without paying the e2e cost on every develop push.
     name: e2e smoke (Playwright via compose)
+    if: github.event_name == 'pull_request'
     runs-on: [self-hosted, linux, dotnet10]
     needs: [backend-lint-and-test, frontend-lint-typecheck-test, container-smoke]
     env:
