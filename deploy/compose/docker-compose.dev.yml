@@ -1,3 +1,9 @@
+# Requires Docker Compose v2.24+ (the `!override` tag was introduced in v2.24).
+# Compose v2.20 only supports `!reset`, which on our installed Compose v5.1.3
+# behaves unexpectedly (drops the list entirely without applying the block-sequence
+# replacement). For CI (ubuntu-24.04) this is unproblematic — its default Compose
+# binary is well past v2.24. For older operator environments, upgrade Compose or
+# remove this dev override file and roll your own dev workflow.
 name: dwbhub
 
 services:
@@ -15,7 +21,7 @@ services:
       && pnpm --filter dwbhub-web dev --host 0.0.0.0 --port 5173"
     environment:
       VITE_API_BASE: http://api:8080
-    ports: !reset
+    ports: !override
       - "${WEB_PORT:-5173}:5173"
     volumes:
       - ../../:/repo
