@@ -9,7 +9,9 @@ public sealed class HealthController : ControllerBase
 {
     private static readonly DateTimeOffset s_startedAt = DateTimeOffset.UtcNow;
     private static readonly string s_version =
-        Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
+        Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion ?? "0.0.0";
 
     [HttpGet]
     public IActionResult Get()

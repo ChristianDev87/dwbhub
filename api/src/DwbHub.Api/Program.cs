@@ -5,7 +5,10 @@ const int defaultRetainStartLogs = 10;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var logDirectory = Path.Combine(builder.Environment.ContentRootPath, "logs");
+var enableSwagger = builder.Environment.IsDevelopment();
+
+var logDirectory = Environment.GetEnvironmentVariable("DWBHUB_LOG_DIR")
+    ?? Path.Combine(builder.Environment.ContentRootPath, "logs");
 var retainStartLogs = builder.Configuration.GetValue<int?>("Logging:RetainStartLogs") ?? defaultRetainStartLogs;
 var logFilePath = PerStartFileLogger.Initialize(logDirectory, retainStartLogs);
 
@@ -19,15 +22,18 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
+if (enableSwagger)
 {
-    options.SwaggerDoc("v1", new() { Title = "DwbHub API", Version = "v1" });
-});
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen(options =>
+    {
+        options.SwaggerDoc("v1", new() { Title = "DwbHub API", Version = "v1" });
+    });
+}
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+if (enableSwagger)
 {
     app.UseSwagger();
     app.UseSwaggerUI();
