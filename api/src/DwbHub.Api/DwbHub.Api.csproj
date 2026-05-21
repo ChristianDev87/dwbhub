@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DwbHub.Application\DwbHub.Application.csproj" />
+    <ProjectReference Include="..\DwbHub.Data\DwbHub.Data.csproj" />
+    <ProjectReference Include="..\DwbHub.Bot\DwbHub.Bot.csproj" />
+    <ProjectReference Include="..\DwbHub.Infrastructure\DwbHub.Infrastructure.csproj" />
+    <ProjectReference Include="..\DwbHub.Core\DwbHub.Core.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>
