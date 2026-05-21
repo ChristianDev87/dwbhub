@@ -1,20 +1,54 @@
-# DwbHub — initial .gitignore (wird in Spec-0-Implementation erweitert)
+# DwbHub .gitignore
 
-# Build artifacts
+# .NET
 bin/
 obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.dll
+*.pdb
+*.exe
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+artifacts/
+
+# JS/TS
+node_modules/
 dist/
 build/
 out/
-node_modules/
-*.user
-.vs/
-.idea/
-.vscode/
-
-# Logs
-logs/
+.next/
+.cache/
+.vite/
+.turbo/
+storybook-static/
+playwright-report/
+test-results/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.recommended.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
 
 # Local env / secrets
 .env
@@ -24,11 +58,11 @@ appsettings.Local.json
 appsettings.Development.json
 *.local.json
 
-# OS
-.DS_Store
-Thumbs.db
+# Logs
+logs/
 
-# Temp files
+# Temp / scratch
 *.tmp
 *.bak
+*.swp
 asd.txt
