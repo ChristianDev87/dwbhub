@@ -27,15 +27,35 @@ try {
     dotnet tool run swagger tofile --yaml --output $tempSpec $dllRelative v1
     if ($LASTEXITCODE -ne 0) { throw "swagger tofile failed." }
 
+    # Normalize the dumped spec to LF so comparisons are deterministic across
+    # Windows (swagger tofile may emit CRLF) and Linux (LF).  The committed file
+    # is stored with eol=lf per .gitattributes, so we must compare LF-only.
+    $dumpedContent    = (Get-Content $tempSpec -Raw) -replace "`r`n", "`n"
+    $committedContent = (Get-Content $committedSpec -Raw) -replace "`r`n", "`n"
+
     if ($Update.IsPresent) {
-        Copy-Item $tempSpec $committedSpec -Force
+        # Write raw LF bytes; Copy-Item would preserve whatever line endings swagger produced.
+        [System.IO.File]::WriteAllText([System.IO.Path]::GetFullPath($committedSpec), $dumpedContent)
         Write-Host "[UPDATED] $committedSpec" -ForegroundColor Yellow
         exit 0
     }
 
+    if ($dumpedContent -eq $committedContent) {
+        Write-Host "[OK] shared/openapi.yaml matches." -ForegroundColor Green
+        exit 0
+    }
+
+    # Write normalized copies to temp files so Diff-Files.ps1 shows a readable diff.
+    $tempNormDump      = Join-Path ([IO.Path]::GetTempPath()) "dwbhub-openapi-norm-dump-$([guid]::NewGuid()).yaml"
+    $tempNormCommitted = Join-Path ([IO.Path]::GetTempPath()) "dwbhub-openapi-norm-committed-$([guid]::NewGuid()).yaml"
+    [System.IO.File]::WriteAllText($tempNormDump,      $dumpedContent)
+    [System.IO.File]::WriteAllText($tempNormCommitted, $committedContent)
     & (Join-Path $PSScriptRoot "lib/Diff-Files.ps1") `
-        -Expected $committedSpec -Actual $tempSpec -Label "shared/openapi.yaml"
-    exit $LASTEXITCODE
+        -Expected $tempNormCommitted -Actual $tempNormDump -Label "shared/openapi.yaml"
+    $exitCode = $LASTEXITCODE
+    Remove-Item $tempNormDump      -ErrorAction SilentlyContinue
+    Remove-Item $tempNormCommitted -ErrorAction SilentlyContinue
+    exit $exitCode
 }
 finally {
     $env:ASPNETCORE_ENVIRONMENT = $originalEnv

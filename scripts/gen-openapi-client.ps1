@@ -33,6 +33,9 @@ $banner = @"
  */
 "@
 $content = "$banner`r`n" + (Get-Content $tempFile -Raw)
+# Normalize to LF so the committed file (eol=lf per .gitattributes) always matches
+# regardless of whether pwsh is running on Windows (CRLF here-strings) or Linux (LF).
+$content = $content -replace "`r`n", "`n"
 
 if ($Check.IsPresent) {
     if (-not (Test-Path $outFile)) {
@@ -40,11 +43,16 @@ if ($Check.IsPresent) {
         Remove-Item $tempFile -ErrorAction SilentlyContinue
         exit 1
     }
-    $committed = Get-Content $outFile -Raw
+    # Also normalize the committed file in case core.autocrlf injected CRLFs on checkout.
+    $committed = (Get-Content $outFile -Raw) -replace "`r`n", "`n"
     if ($committed -ne $content) {
         Write-Host "[DRIFT] web/src/lib/api/generated/schema.d.ts is out of sync." -ForegroundColor Red
-        & (Join-Path $repoRoot "tools/lib/Diff-Files.ps1") -Expected $outFile -Actual $tempFile -Label "schema.d.ts" | Out-Null
-        Remove-Item $tempFile -ErrorAction SilentlyContinue
+        # Write LF-normalized content to a temp file so Diff-Files.ps1 shows a meaningful diff.
+        $tempNorm = Join-Path ([IO.Path]::GetTempPath()) "dwbhub-schema-norm-$([guid]::NewGuid()).d.ts"
+        [System.IO.File]::WriteAllText($tempNorm, $content)
+        & (Join-Path $repoRoot "tools/lib/Diff-Files.ps1") -Expected $outFile -Actual $tempNorm -Label "schema.d.ts" | Out-Null
+        Remove-Item $tempNorm  -ErrorAction SilentlyContinue
+        Remove-Item $tempFile  -ErrorAction SilentlyContinue
         exit 1
     }
     Write-Host "[OK] schema.d.ts is up to date." -ForegroundColor Green
@@ -52,6 +60,7 @@ if ($Check.IsPresent) {
     exit 0
 }
 
-$content | Set-Content $outFile -NoNewline
+# Use WriteAllText to write raw bytes; Set-Content can append system line endings.
+[System.IO.File]::WriteAllText([System.IO.Path]::GetFullPath($outFile), $content)
 Remove-Item $tempFile -ErrorAction SilentlyContinue
 Write-Host "[UPDATED] $outFile" -ForegroundColor Yellow
