@@ -18,6 +18,11 @@ Push-Location (Join-Path $repoRoot "deploy/compose")
 if (-not (Test-Path ".env")) { Copy-Item ".env.example" ".env" }
 $composeFiles = @("-f", "docker-compose.yml", "-f", "docker-compose.dev.yml")
 
+# Pre-clean: a previous run that was hard-cancelled (SIGKILL on the runner-container)
+# can leave the compose stack up, holding host ports. Always nuke the stack before bring-up.
+Write-Host "Pre-cleaning any leftover compose stack ..." -ForegroundColor DarkYellow
+docker compose @composeFiles down -v --remove-orphans 2>$null | Out-Null
+
 # The compose file pins images to dwbhub-{api,web}:local which don't exist in any registry.
 # Always build unless the caller explicitly opts out.
 if (-not $NoBuild.IsPresent) {
@@ -40,9 +45,23 @@ function Wait-Url([string] $url, [int] $timeoutSec = 120) {
 $apiUrl = "http://${e2eHost}:${apiPort}/api/health"
 $webUrl = "http://${e2eHost}:${webPort}/"
 Write-Host "Waiting for $apiUrl ..." -ForegroundColor Cyan
-Wait-Url $apiUrl
+try { Wait-Url $apiUrl } catch {
+    Write-Host "API never came up — dumping logs for diagnostics" -ForegroundColor Red
+    Push-Location (Join-Path $repoRoot "deploy/compose")
+    docker compose @composeFiles logs --tail 100 api
+    docker compose @composeFiles down -v --remove-orphans
+    Pop-Location
+    throw
+}
 Write-Host "Waiting for $webUrl ..." -ForegroundColor Cyan
-Wait-Url $webUrl
+try { Wait-Url $webUrl } catch {
+    Write-Host "Web never came up — dumping logs for diagnostics" -ForegroundColor Red
+    Push-Location (Join-Path $repoRoot "deploy/compose")
+    docker compose @composeFiles logs --tail 100 web
+    docker compose @composeFiles down -v --remove-orphans
+    Pop-Location
+    throw
+}
 
 Write-Host "Stack ready. Running Playwright ..." -ForegroundColor Cyan
 Push-Location (Join-Path $repoRoot "web")
@@ -52,7 +71,9 @@ try {
     pnpm exec playwright test
 } finally {
     Pop-Location
+    # --remove-orphans + -v: full teardown even if the container set has drifted from the
+    # compose file (e.g. an interrupted previous run added/removed services).
     Push-Location (Join-Path $repoRoot "deploy/compose")
-    docker compose @composeFiles down
+    docker compose @composeFiles down -v --remove-orphans
     Pop-Location
 }

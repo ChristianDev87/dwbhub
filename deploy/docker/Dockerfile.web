@@ -1,10 +1,15 @@
 # syntax=docker/dockerfile:1.7
 
 # ---- build stage ----
-FROM node:22-alpine AS build
+# Debian-slim base instead of Alpine: in our environment node:22-alpine resolved
+# to an image where neither `corepack` nor `npm` were on PATH (both exited 127),
+# pointing at a stale/partial image manifest in the local docker cache. The
+# bookworm-slim variant ships node + npm on /usr/local/bin reliably and is the
+# more conservative choice for a build stage. Runtime stage stays Alpine.
+FROM node:22-bookworm-slim AS build
 WORKDIR /repo
 
-RUN corepack enable && corepack prepare pnpm@11.1.3 --activate
+RUN npm install -g pnpm@11.1.3
 
 # Restore lockfile first for cache friendliness.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
