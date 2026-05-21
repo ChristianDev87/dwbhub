@@ -1,0 +1,34 @@
+# DwbHub — initial .gitignore (wird in Spec-0-Implementation erweitert)
+
+# Build artifacts
+bin/
+obj/
+dist/
+build/
+out/
+node_modules/
+*.user
+.vs/
+.idea/
+.vscode/
+
+# Logs
+logs/
+*.log
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+appsettings.Development.json
+*.local.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.tmp
+*.bak
+asd.txt
