@@ -13,6 +13,11 @@ export default tseslint.config(
       "test-results",
       "src/lib/api/generated/**",
       "coverage",
+      // Compiled artefacts (mirrored in web/.gitignore). `tsc -b` emits these next to the source files
+      // when no outDir is configured; without ignoring them ESLint reports drift on every IDE save.
+      "**/*.js",
+      "**/*.d.ts",
+      "**/*.tsbuildinfo",
     ],
   },
   {

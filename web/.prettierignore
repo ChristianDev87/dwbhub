@@ -1,0 +1,22 @@
+# Mirrors web/.gitignore for Prettier — build outputs, dependencies, generated
+# code, and other artefacts should never be reformatted.
+
+# Build outputs
+dist/
+build/
+storybook-static/
+
+# Dependencies
+node_modules/
+
+# Test outputs
+coverage/
+playwright-report/
+test-results/
+
+# Generated code
+src/lib/api/generated/
+
+# Local TypeScript build artefacts (`tsc -b` emits these next to sources)
+**/*.d.ts
+**/*.tsbuildinfo
