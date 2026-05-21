@@ -4,7 +4,11 @@
 FROM node:22-alpine AS build
 WORKDIR /repo
 
-RUN corepack enable && corepack prepare pnpm@11.1.3 --activate
+# Install pnpm directly rather than going through corepack. Recent node:22-alpine
+# images ship without the corepack shim on PATH (RUN corepack enable -> exit 127),
+# and corepack is still flagged as experimental upstream — pinning via npm is
+# more reliable and produces the same lockfile-compatible pnpm binary.
+RUN npm install -g pnpm@11.1.3
 
 # Restore lockfile first for cache friendliness.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
