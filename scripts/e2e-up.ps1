@@ -16,19 +16,38 @@ $webPort = if ($env:WEB_PORT) { $env:WEB_PORT } else { "5173" }
 
 Push-Location (Join-Path $repoRoot "deploy/compose")
 if (-not (Test-Path ".env")) { Copy-Item ".env.example" ".env" }
-$composeFiles = @("-f", "docker-compose.yml", "-f", "docker-compose.dev.yml")
+
+# By default we run Playwright against the *production-style* stack
+# (built nginx image serving the Vite bundle). The dev override mounts
+# the repo as a volume to enable Vite HMR, which only works when the
+# docker daemon shares a filesystem with the caller — true on a local
+# dev box, NOT true when the caller is itself a runner container in CI
+# (the mount lands on the host's filesystem, where /runner/_work/... is
+# empty, and pnpm exits with ERR_PNPM_NO_PKG_MANIFEST).
+#
+# CI overrides the default by setting E2E_USE_DEV=0 (or unsetting it).
+# Local dev sets E2E_USE_DEV=1 if they want hot-reload during e2e.
+$useDev = $env:E2E_USE_DEV -eq "1"
+$composeFiles = if ($useDev) {
+    @("-f", "docker-compose.yml", "-f", "docker-compose.dev.yml")
+} else {
+    @("-f", "docker-compose.yml")
+}
 
 # Pre-clean: a previous run that was hard-cancelled (SIGKILL on the runner-container)
 # can leave the compose stack up, holding host ports. Always nuke the stack before bring-up.
 Write-Host "Pre-cleaning any leftover compose stack ..." -ForegroundColor DarkYellow
 docker compose @composeFiles down -v --remove-orphans 2>$null | Out-Null
 
-# Build only the api service. The web service in the dev override uses an upstream
-# node:22-bookworm-slim image (compose pulls it); never let `compose build` touch
-# web here — its inherited build directive from the base compose.yml would tag the
-# nginx-runtime build result as `node:22-bookworm-slim`, poisoning the cached tag.
+# Build the images. In production-stack mode (default in CI) we build both api
+# and web from their multi-stage Dockerfiles. In dev mode we only build api,
+# since web uses an upstream node image with a live volume mount.
 if (-not $NoBuild.IsPresent) {
-    docker compose @composeFiles build api
+    if ($useDev) {
+        docker compose @composeFiles build api
+    } else {
+        docker compose @composeFiles build
+    }
 }
 docker compose @composeFiles up -d
 Pop-Location
