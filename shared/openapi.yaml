@@ -1,0 +1,13 @@
+openapi: 3.0.1
+info:
+  title: DwbHub API
+  version: v1
+paths:
+  /api/health:
+    get:
+      tags:
+        - Health
+      responses:
+        '200':
+          description: OK
+components: { }
