@@ -1,0 +1,15 @@
+{
+  "common": {
+    "loading": "Wird geladen...",
+    "error": "Es ist ein Fehler aufgetreten",
+    "retry": "Erneut versuchen"
+  },
+  "hello": {
+    "title": "Hallo DwbHub",
+    "subtitle": "Foundation läuft. Spec 0 ist live.",
+    "api_status_label": "API-Status",
+    "api_status_loading": "Status wird abgefragt...",
+    "api_status_ok": "OK (Version {{version}}, Uptime {{uptime}}s)",
+    "api_status_error": "API nicht erreichbar"
+  }
+}

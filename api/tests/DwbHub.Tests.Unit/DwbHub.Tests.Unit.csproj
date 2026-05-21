@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DwbHub.Application\DwbHub.Application.csproj" />
+    <ProjectReference Include="..\..\src\DwbHub.Infrastructure\DwbHub.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\DwbHub.Core\DwbHub.Core.csproj" />
+    <ProjectReference Include="..\..\src\DwbHub.Api\DwbHub.Api.csproj" />
+  </ItemGroup>
+
+</Project>

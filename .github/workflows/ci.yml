@@ -1,0 +1,208 @@
+name: ci
+
+# Phase A (validated 2026-05-21): backend, frontend, openapi-drift, sql-tenant-filter-lint.
+# Phase B (added once Phase A was green): security-audit, container-smoke, e2e-smoke.
+# All jobs target the self-hosted runner image github-runner:latest with labels
+# [self-hosted, linux, dotnet10] (pre-installs: .NET 10 SDK, Node 22, pnpm 11.1.3,
+# pwsh 7, Pester 5.5+, docker CLI + buildx + compose).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  backend-lint-and-test:
+    name: backend (lint + unit + integration + security)
+    runs-on: [self-hosted, linux, dotnet10]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore tools
+        run: dotnet tool restore
+      - name: Restore packages
+        run: dotnet restore api/DwbHub.sln
+      - name: Verify formatting
+        run: dotnet format api/DwbHub.sln --verify-no-changes --no-restore
+      - name: Build (warnings as errors)
+        run: dotnet build api/DwbHub.sln --no-restore -c Release
+      - name: Unit tests
+        run: dotnet test api/tests/DwbHub.Tests.Unit/DwbHub.Tests.Unit.csproj --no-build -c Release --logger "trx;LogFileName=unit.trx" --collect:"XPlat Code Coverage"
+      - name: Integration tests
+        run: dotnet test api/tests/DwbHub.Tests.Integration/DwbHub.Tests.Integration.csproj --no-build -c Release --logger "trx;LogFileName=integration.trx"
+      - name: Security tests
+        run: dotnet test api/tests/DwbHub.Tests.Security/DwbHub.Tests.Security.csproj --no-build -c Release --logger "trx;LogFileName=security.trx"
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: |
+            **/TestResults/**/*.trx
+            **/TestResults/**/*.xml
+
+  frontend-lint-typecheck-test:
+    name: frontend (lint + typecheck + vitest + build)
+    runs-on: [self-hosted, linux, dotnet10]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm --filter dwbhub-web lint
+      - name: Prettier format check
+        run: pnpm --filter dwbhub-web format:check
+      - name: Typecheck
+        run: pnpm --filter dwbhub-web typecheck
+      - name: Vitest
+        run: pnpm --filter dwbhub-web test
+      - name: Build (production bundle)
+        run: pnpm --filter dwbhub-web build
+      - name: Upload web bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 7
+
+  openapi-drift:
+    name: OpenAPI + generated client drift
+    runs-on: [self-hosted, linux, dotnet10]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore tools
+        run: dotnet tool restore
+      - name: Install web deps
+        run: pnpm install --frozen-lockfile
+      - name: Verify openapi.yaml has no drift
+        run: pwsh ./tools/verify-openapi.ps1
+      - name: Verify generated client has no drift
+        run: pwsh ./scripts/gen-openapi-client.ps1 -Check
+
+  sql-tenant-filter-lint:
+    name: SQL tenant_id lint
+    runs-on: [self-hosted, linux, dotnet10]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint
+        run: pwsh ./tools/check-tenant-filter.ps1
+      - name: Pester tests
+        run: pwsh -NoLogo -NoProfile -Command "Invoke-Pester -Path tools/tests -Output Detailed -CI"
+
+  security-audit:
+    name: security (pnpm audit + dotnet vulnerable + trivy)
+    runs-on: [self-hosted, linux, dotnet10]
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+      - name: pnpm audit (high+)
+        run: pnpm audit --audit-level=high
+      - name: Restore .NET packages
+        run: dotnet restore api/DwbHub.sln
+      - name: dotnet vulnerable packages
+        shell: bash
+        run: |
+          OUTPUT=$(dotnet list api/DwbHub.sln package --vulnerable --include-transitive)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -E "(High|Critical)" >/dev/null; then
+            echo "::error::High/Critical vulnerable .NET packages detected."
+            exit 1
+          fi
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+  container-smoke:
+    name: container build smoke (api + web)
+    runs-on: [self-hosted, linux, dotnet10]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image (amd64 only, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile.api
+          platforms: linux/amd64
+          tags: dwbhub-api:smoke
+          load: true
+      - name: Build Web image (amd64 only, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile.web
+          platforms: linux/amd64
+          tags: dwbhub-web:smoke
+          load: true
+      - name: Smoke-run API health
+        shell: bash
+        run: |
+          # Bind to a high host port to avoid clashing with co-tenant services on the runner host.
+          # The runner container is launched by the watcher with --add-host=host-gateway:host-gateway,
+          # so `host-gateway` resolves to the docker bridge gateway (reaches host-published ports).
+          docker run -d --name dwbhub-api-smoke -p 15080:8080 \
+            -e DWBHUB_JWT_SECRET=ZGV2X2p3dF9zZWNyZXRfZG9fbm90X3VzZV9pbl9wcm9k \
+            -e DWBHUB_ENCRYPTION_KEY=ZGV2X2VuY3J5cHRpb25fa2V5XzMyYnl0ZXNfdGVzdF9vbg== \
+            dwbhub-api:smoke
+          for i in {1..30}; do
+            if curl -fsS http://host-gateway:15080/api/health >/dev/null; then
+              echo "API healthy"; exit 0
+            fi
+            sleep 1
+          done
+          docker logs dwbhub-api-smoke
+          exit 1
+      - name: Smoke-run Web index
+        shell: bash
+        run: |
+          docker run -d --name dwbhub-web-smoke -p 15173:8080 dwbhub-web:smoke
+          for i in {1..15}; do
+            if curl -fsS http://host-gateway:15173/ >/dev/null; then
+              echo "Web reachable"; exit 0
+            fi
+            sleep 1
+          done
+          docker logs dwbhub-web-smoke
+          exit 1
+      - name: Tear down
+        if: always()
+        shell: bash
+        run: |
+          docker rm -f dwbhub-api-smoke dwbhub-web-smoke 2>/dev/null || true
+
+  e2e-smoke:
+    name: e2e smoke (Playwright via compose)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, dotnet10]
+    needs: [backend-lint-and-test, frontend-lint-typecheck-test, container-smoke]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install web deps
+        run: pnpm install --frozen-lockfile
+      - name: Run E2E
+        run: pwsh ./scripts/e2e-up.ps1
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: web/playwright-report

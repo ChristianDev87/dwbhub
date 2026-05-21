@@ -1,0 +1,55 @@
+# syntax=docker/dockerfile:1.7
+
+# ---- build stage ----
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
+ARG TARGETARCH
+WORKDIR /src
+
+# Copy only the files needed for restore first, to maximise layer cache.
+COPY api/Directory.Build.props api/Directory.Packages.props api/DwbHub.sln api/
+COPY api/src/DwbHub.Api/DwbHub.Api.csproj api/src/DwbHub.Api/
+COPY api/src/DwbHub.Core/DwbHub.Core.csproj api/src/DwbHub.Core/
+COPY api/src/DwbHub.Data/DwbHub.Data.csproj api/src/DwbHub.Data/
+COPY api/src/DwbHub.Application/DwbHub.Application.csproj api/src/DwbHub.Application/
+COPY api/src/DwbHub.Bot/DwbHub.Bot.csproj api/src/DwbHub.Bot/
+COPY api/src/DwbHub.Infrastructure/DwbHub.Infrastructure.csproj api/src/DwbHub.Infrastructure/
+COPY api/tests/DwbHub.Tests.Unit/DwbHub.Tests.Unit.csproj api/tests/DwbHub.Tests.Unit/
+COPY api/tests/DwbHub.Tests.Integration/DwbHub.Tests.Integration.csproj api/tests/DwbHub.Tests.Integration/
+COPY api/tests/DwbHub.Tests.Security/DwbHub.Tests.Security.csproj api/tests/DwbHub.Tests.Security/
+
+WORKDIR /src/api
+RUN dotnet restore --arch $TARGETARCH
+
+# Now copy everything else.
+WORKDIR /src
+COPY . .
+
+WORKDIR /src/api
+RUN dotnet publish src/DwbHub.Api/DwbHub.Api.csproj \
+    -c Release \
+    --arch $TARGETARCH \
+    --no-restore \
+    -o /app/publish
+
+# ---- runtime stage ----
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
+WORKDIR /app
+
+RUN apk add --no-cache icu-libs icu-data-full \
+    && addgroup -S dwbhub && adduser -S dwbhub -G dwbhub \
+    && mkdir -p /app/logs && chown -R dwbhub:dwbhub /app
+
+COPY --from=build --chown=dwbhub:dwbhub /app/publish .
+
+ENV ASPNETCORE_URLS=http://+:8080 \
+    DOTNET_RUNNING_IN_CONTAINER=true \
+    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+
+USER dwbhub
+EXPOSE 8080
+VOLUME ["/app/logs"]
+
+HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=4 \
+    CMD wget --quiet --spider http://localhost:8080/api/health || exit 1
+
+ENTRYPOINT ["dotnet", "DwbHub.Api.dll"]

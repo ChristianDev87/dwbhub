@@ -1,0 +1,16 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <NoWarn>$(NoWarn);CA1014</NoWarn>
+    <RootNamespace>DwbHub</RootNamespace>
+    <Company>DwbHub Contributors</Company>
+    <Product>DwbHub</Product>
+    <Copyright>Copyright © DwbHub Contributors. AGPLv3.</Copyright>
+  </PropertyGroup>
+</Project>

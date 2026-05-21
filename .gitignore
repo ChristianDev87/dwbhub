@@ -1,20 +1,54 @@
-# DwbHub — initial .gitignore (wird in Spec-0-Implementation erweitert)
+# DwbHub .gitignore
 
-# Build artifacts
+# .NET
 bin/
 obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.dll
+*.pdb
+*.exe
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+artifacts/
+
+# JS/TS
+node_modules/
 dist/
 build/
 out/
-node_modules/
-*.user
-.vs/
-.idea/
-.vscode/
-
-# Logs
-logs/
+.next/
+.cache/
+.vite/
+.turbo/
+storybook-static/
+playwright-report/
+test-results/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.recommended.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
 
 # Local env / secrets
 .env
@@ -24,11 +58,27 @@ appsettings.Local.json
 appsettings.Development.json
 *.local.json
 
-# OS
-.DS_Store
-Thumbs.db
+# Logs
+logs/
 
-# Temp files
+# Temp / scratch
 *.tmp
 *.bak
+*.swp
 asd.txt
+
+# Internal planning artefacts (specs/plans live here for the maintainer; not part of the public repo)
+docs/superpowers/
+
+# GitHub-platform-specific config: workflows go in the repo for the self-hosted runner,
+# but the PR template stays local until the maintainer finalises external contribution guidelines.
+.github/pull_request_template.md
+
+# User-facing project documentation kept local while still being drafted. The maintainer
+# will publish a polished version when the project is ready for public consumption.
+# Backup: C:\Users\Delta\dwbhub-docs-backup\
+PROJECT_BRIEFING_V2.md
+README.md
+CONTRIBUTING.md
+CHANGELOG.md
+CODE_OF_CONDUCT.md

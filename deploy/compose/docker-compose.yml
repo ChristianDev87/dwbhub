@@ -1,0 +1,70 @@
+name: dwbhub
+
+x-common-env: &common-env
+  DWBHUB_PUBLIC_URL: ${DWBHUB_PUBLIC_URL:-http://localhost:5173}
+  DWBHUB_ALLOWED_ORIGINS: ${DWBHUB_ALLOWED_ORIGINS:-http://localhost:5173}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dwbhub}
+      POSTGRES_USER: ${POSTGRES_USER:-dwbhub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dwbhub_dev_pw}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-dwbhub}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mailhog:
+    image: axllent/mailpit:v1.21
+    restart: unless-stopped
+    ports:
+      - "${MAILHOG_SMTP_PORT:-1025}:1025"
+      - "${MAILHOG_UI_PORT:-8025}:8025"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.api
+    image: dwbhub-api:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    environment:
+      <<: *common-env
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      DWBHUB_DB_CONNECTION: ${DWBHUB_DB_CONNECTION:-Host=postgres;Port=5432;Database=dwbhub;Username=dwbhub;Password=dwbhub_dev_pw}
+      DWBHUB_SMTP_HOST: ${DWBHUB_SMTP_HOST:-mailhog}
+      DWBHUB_SMTP_PORT: ${DWBHUB_SMTP_PORT:-1025}
+      DWBHUB_SMTP_FROM: ${DWBHUB_SMTP_FROM:-DwbHub <noreply@dwbhub.local>}
+      DWBHUB_JWT_SECRET: ${DWBHUB_JWT_SECRET}
+      DWBHUB_ENCRYPTION_KEY: ${DWBHUB_ENCRYPTION_KEY}
+    ports:
+      - "${API_PORT:-5080}:8080"
+    volumes:
+      - api-logs:/app/logs
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.web
+    image: dwbhub-web:local
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-5173}:8080"
+
+volumes:
+  pg-data:
+  api-logs:
