@@ -1,4 +1,10 @@
-import { forwardRef, type ButtonHTMLAttributes, type ReactElement, type ReactNode, cloneElement } from "react";
+import {
+  forwardRef,
+  type ButtonHTMLAttributes,
+  type ReactElement,
+  type ReactNode,
+  cloneElement,
+} from "react";
 import type React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/cn";
@@ -41,7 +47,8 @@ type ButtonOwnProps = VariantProps<typeof buttonVariants> & {
   render?: ReactElement<{ className?: string; children?: ReactNode }>;
 };
 
-export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & ButtonOwnProps;
+export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
+  ButtonOwnProps;
 
 export const Button = forwardRef<HTMLElement, ButtonProps>(function Button(
   { className, variant, size, render, children, ...props },
@@ -68,7 +75,11 @@ export const Button = forwardRef<HTMLElement, ButtonProps>(function Button(
   }
 
   return (
-    <button ref={ref as React.Ref<HTMLButtonElement>} className={merged} {...props}>
+    <button
+      ref={ref as React.Ref<HTMLButtonElement>}
+      className={merged}
+      {...props}
+    >
       {children}
     </button>
   );

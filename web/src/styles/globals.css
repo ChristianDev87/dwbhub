@@ -44,7 +44,9 @@
   }
 }
 
-html, body, #root {
+html,
+body,
+#root {
   min-height: 100%;
 }
 

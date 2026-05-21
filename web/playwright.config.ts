@@ -6,7 +6,9 @@ export default defineConfig({
   forbidOnly: !!process.env["CI"],
   retries: process.env["CI"] ? 2 : 0,
   workers: process.env["CI"] ? 1 : undefined,
-  reporter: process.env["CI"] ? [["github"], ["html", { open: "never" }]] : "list",
+  reporter: process.env["CI"]
+    ? [["github"], ["html", { open: "never" }]]
+    : "list",
   timeout: 30_000,
   use: {
     baseURL: process.env["E2E_BASE_URL"] ?? "http://localhost:5173",

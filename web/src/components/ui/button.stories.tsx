@@ -18,9 +18,13 @@ export const Outline: Story = { args: { variant: "outline" } };
 
 export const Ghost: Story = { args: { variant: "ghost" } };
 
-export const Destructive: Story = { args: { variant: "destructive", children: "Löschen" } };
+export const Destructive: Story = {
+  args: { variant: "destructive", children: "Löschen" },
+};
 
-export const Link: Story = { args: { variant: "link", children: "Weiter lesen" } };
+export const Link: Story = {
+  args: { variant: "link", children: "Weiter lesen" },
+};
 
 export const Sizes: Story = {
   render: () => (

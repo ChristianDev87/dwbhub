@@ -1,0 +1,20 @@
+# Local TypeScript build artifacts from `tsc -b` / IDE incremental builds.
+# Source of truth is the .ts/.tsx files; compiled .js/.d.ts/.tsbuildinfo are never committed.
+*.js
+*.d.ts
+*.tsbuildinfo
+!eslint.config.js
+!postcss.config.js
+
+# Storybook output
+storybook-static/
+
+# Vitest coverage
+coverage/
+
+# Lighthouse local results
+.lighthouseci/
+
+# Playwright local artifacts
+playwright-report/
+test-results/

@@ -47,7 +47,9 @@ export function HelloPage(): React.JSX.Element {
         data-testid="api-status"
       >
         <span className="font-semibold">{t("hello.api_status_label")}:</span>{" "}
-        {state.kind === "loading" && <span>{t("hello.api_status_loading")}</span>}
+        {state.kind === "loading" && (
+          <span>{t("hello.api_status_loading")}</span>
+        )}
         {state.kind === "ok" && (
           <span data-testid="api-status-ok">
             {t("hello.api_status_ok", {

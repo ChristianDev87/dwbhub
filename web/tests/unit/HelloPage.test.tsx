@@ -14,9 +14,9 @@ describe("HelloPage", () => {
 
     render(<HelloPage />);
 
-    expect(
-      screen.getByRole("heading", { level: 1 }),
-    ).toHaveTextContent(/Hallo DwbHub|Hello DwbHub/);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      /Hallo DwbHub|Hello DwbHub/,
+    );
   });
 
   test("shows api status OK after successful fetch", async () => {
@@ -38,7 +38,9 @@ describe("HelloPage", () => {
   });
 
   test("shows error state when fetch fails", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("network down"));
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(
+      new Error("network down"),
+    );
 
     render(<HelloPage />);
 
@@ -46,6 +48,8 @@ describe("HelloPage", () => {
       expect(screen.getByTestId("api-status-error")).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId("api-status-error").textContent).toMatch(/\(network down\)/);
+    expect(screen.getByTestId("api-status-error").textContent).toMatch(
+      /\(network down\)/,
+    );
   });
 });
