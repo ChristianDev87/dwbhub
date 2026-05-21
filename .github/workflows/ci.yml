@@ -166,6 +166,9 @@ jobs:
           # Bind to a high host port to avoid clashing with co-tenant services on the runner host.
           # The runner container is launched by the watcher with --add-host=host-gateway:host-gateway,
           # so `host-gateway` resolves to the docker bridge gateway (reaches host-published ports).
+          # Pre-clean: a previous hard-cancelled run can leave an orphan dwbhub-api-smoke holding
+          # both the name and port 15080 — Tear-Down only runs if the job exits gracefully.
+          docker rm -f dwbhub-api-smoke 2>/dev/null || true
           docker run -d --name dwbhub-api-smoke -p 15080:8080 \
             -e DWBHUB_JWT_SECRET=ZGV2X2p3dF9zZWNyZXRfZG9fbm90X3VzZV9pbl9wcm9k \
             -e DWBHUB_ENCRYPTION_KEY=ZGV2X2VuY3J5cHRpb25fa2V5XzMyYnl0ZXNfdGVzdF9vbg== \
@@ -181,6 +184,7 @@ jobs:
       - name: Smoke-run Web index
         shell: bash
         run: |
+          docker rm -f dwbhub-web-smoke 2>/dev/null || true
           docker run -d --name dwbhub-web-smoke -p 15173:8080 dwbhub-web:smoke
           for i in {1..15}; do
             if curl -fsS http://host-gateway:15173/ >/dev/null; then
