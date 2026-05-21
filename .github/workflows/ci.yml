@@ -124,7 +124,7 @@ jobs:
             exit 1
           fi
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: .
@@ -156,12 +156,15 @@ jobs:
       - name: Smoke-run API health
         shell: bash
         run: |
-          docker run -d --name dwbhub-api-smoke -p 5080:8080 \
+          # Bind to a high host port to avoid clashing with co-tenant services on the runner host.
+          # The runner container is launched by the watcher with --add-host=host-gateway:host-gateway,
+          # so `host-gateway` resolves to the docker bridge gateway (reaches host-published ports).
+          docker run -d --name dwbhub-api-smoke -p 15080:8080 \
             -e DWBHUB_JWT_SECRET=ZGV2X2p3dF9zZWNyZXRfZG9fbm90X3VzZV9pbl9wcm9k \
             -e DWBHUB_ENCRYPTION_KEY=ZGV2X2VuY3J5cHRpb25fa2V5XzMyYnl0ZXNfdGVzdF9vbg== \
             dwbhub-api:smoke
           for i in {1..30}; do
-            if curl -fsS http://localhost:5080/api/health >/dev/null; then
+            if curl -fsS http://host-gateway:15080/api/health >/dev/null; then
               echo "API healthy"; exit 0
             fi
             sleep 1
@@ -171,9 +174,9 @@ jobs:
       - name: Smoke-run Web index
         shell: bash
         run: |
-          docker run -d --name dwbhub-web-smoke -p 5173:8080 dwbhub-web:smoke
+          docker run -d --name dwbhub-web-smoke -p 15173:8080 dwbhub-web:smoke
           for i in {1..15}; do
-            if curl -fsS http://localhost:5173/ >/dev/null; then
+            if curl -fsS http://host-gateway:15173/ >/dev/null; then
               echo "Web reachable"; exit 0
             fi
             sleep 1
