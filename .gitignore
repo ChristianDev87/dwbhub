@@ -74,3 +74,12 @@ docs/superpowers/
 # operator currently runs an external CI/CD runner. Move back into the public repo when the
 # project switches to GitHub-hosted Actions or adds repo-scoped templates.
 .github/
+
+# User-facing project documentation kept local while still being drafted. The maintainer
+# will publish a polished version when the project is ready for public consumption.
+# Backup: C:\Users\Delta\dwbhub-docs-backup\
+PROJECT_BRIEFING_V2.md
+README.md
+CONTRIBUTING.md
+CHANGELOG.md
+CODE_OF_CONDUCT.md
