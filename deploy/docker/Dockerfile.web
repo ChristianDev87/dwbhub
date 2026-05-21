@@ -17,7 +17,7 @@ COPY web web
 RUN pnpm --filter dwbhub-web build
 
 # ---- runtime stage ----
-FROM nginx:1.27-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
 
 COPY --from=build /repo/web/dist /usr/share/nginx/html
 COPY deploy/docker/nginx.conf /etc/nginx/nginx.conf
