@@ -1,0 +1,15 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Try again"
+  },
+  "hello": {
+    "title": "Hello DwbHub",
+    "subtitle": "Foundation is up. Spec 0 is live.",
+    "api_status_label": "API status",
+    "api_status_loading": "Querying status...",
+    "api_status_ok": "OK (version {{version}}, uptime {{uptime}}s)",
+    "api_status_error": "API unreachable"
+  }
+}
