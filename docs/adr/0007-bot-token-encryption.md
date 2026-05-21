@@ -13,7 +13,7 @@ Discord bot tokens give full control over the bot. Storing them in plaintext wou
 - `ITokenEncryption` service exposes `Encrypt(plaintext)` returning `(ciphertext, nonce, auth_tag, key_version)` and `Decrypt(EncryptedToken)`.
 - Backend self-tests the encryption at startup (encrypt + decrypt a probe string) and fails fast on mismatch.
 - Key rotation is supported via the `key_version` column: new writes use the current version; old reads lazy-re-encrypt to the current version.
-- Serilog redaction filter masks any value matching the Discord bot-token regex `MT[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`.
+- Serilog redaction filter masks any value matching the Discord bot-token regex `[A-Za-z0-9_-]{24,28}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{27,}`. The regex is length-anchored rather than prefix-anchored so it remains correct if Discord adds new token prefixes. Plan 0.4 ships unit tests that lock the masking behavior to known-shape sample tokens.
 
 ## Consequences
 

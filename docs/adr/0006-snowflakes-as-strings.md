@@ -8,8 +8,7 @@ A v1-prototype bug rounded the last three digits of Discord snowflakes after the
 
 ## Decision
 
-- Backend wraps snowflakes in a `DiscordSnowflake` value object stored as `long` internally.
-- A custom `JsonConverter<DiscordSnowflake>` serialises to and deserialises from JSON strings.
+- Backend wraps snowflakes in a `DiscordSnowflake` value object (C# backing field: `long`). The value object serialises to a JSON string (via custom `JsonConverter<DiscordSnowflake>`) and persists to a `TEXT` column in the database.
 - DTOs never expose snowflake fields as `long`; they always go through `DiscordSnowflake`.
 - Frontend type: `type DiscordSnowflake = string`. An ESLint rule (`dwbhub/no-snowflake-parse-int`) bans `parseInt`/`Number(...)` on `DiscordSnowflake`-typed values.
 - A round-trip test in `DwbHub.Tests.Security` exercises a worst-case 19-digit value.

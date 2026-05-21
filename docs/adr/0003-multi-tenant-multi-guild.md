@@ -8,7 +8,7 @@ The Spec-0 brainstorming explicitly decided that v1 must support multiple Discor
 
 ## Decision
 
-- Every domain table carries `tenant_id BIGINT NOT NULL`. CI lint blocks new migrations without it (whitelist for `tenants` itself and pure lookup tables).
+- Every domain table carries `tenant_id BIGINT NOT NULL` (an internal `BIGSERIAL` surrogate key — **not** a Discord snowflake; Discord-side IDs use separate `TEXT` columns per ADR-0006). CI lint blocks new migrations without it (whitelist for `tenants` itself and pure lookup tables).
 - One tenant owns one-to-many guilds: tenants↔guilds is the only place multi-guild logic shows up.
 - URL routing uses `/t/<slug>/...` from day one. The default self-host deployment seeds exactly one tenant during the setup wizard.
 - The repository layer mandates a `long tenantId` argument on every query. A defense-in-depth re-check happens in the service layer using the JWT `tid` claim.
