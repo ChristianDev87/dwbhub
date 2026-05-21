@@ -66,3 +66,6 @@ logs/
 *.bak
 *.swp
 asd.txt
+
+# Internal planning artefacts (specs/plans live here for the maintainer; not part of the public repo)
+docs/superpowers/
