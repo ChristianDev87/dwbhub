@@ -21,20 +21,23 @@ if (-not (Test-Path $dllRelative)) { throw "Build artifact not found: $dllRelati
 Write-Host "Dumping OpenAPI document v1 ..." -ForegroundColor Cyan
 # ASPNETCORE_ENVIRONMENT=Development is required so that AddSwaggerGen / SwaggerDoc("v1")
 # is registered; the flag is gated on IsDevelopment() in Program.cs.
+$originalEnv = $env:ASPNETCORE_ENVIRONMENT
 $env:ASPNETCORE_ENVIRONMENT = "Development"
-dotnet tool run swagger tofile --yaml --output $tempSpec $dllRelative v1
-if ($LASTEXITCODE -ne 0) { throw "swagger tofile failed." }
+try {
+    dotnet tool run swagger tofile --yaml --output $tempSpec $dllRelative v1
+    if ($LASTEXITCODE -ne 0) { throw "swagger tofile failed." }
 
-if ($Update.IsPresent) {
-    Copy-Item $tempSpec $committedSpec -Force
-    Write-Host "[UPDATED] $committedSpec" -ForegroundColor Yellow
-    Remove-Item $tempSpec -ErrorAction SilentlyContinue
-    exit 0
+    if ($Update.IsPresent) {
+        Copy-Item $tempSpec $committedSpec -Force
+        Write-Host "[UPDATED] $committedSpec" -ForegroundColor Yellow
+        exit 0
+    }
+
+    & (Join-Path $PSScriptRoot "lib/Diff-Files.ps1") `
+        -Expected $committedSpec -Actual $tempSpec -Label "shared/openapi.yaml"
+    exit $LASTEXITCODE
 }
-
-& (Join-Path $PSScriptRoot "lib/Diff-Files.ps1") `
-    -Expected $committedSpec -Actual $tempSpec -Label "shared/openapi.yaml"
-$exitCode = $LASTEXITCODE
-
-Remove-Item $tempSpec -ErrorAction SilentlyContinue
-exit $exitCode
+finally {
+    $env:ASPNETCORE_ENVIRONMENT = $originalEnv
+    Remove-Item $tempSpec -ErrorAction SilentlyContinue
+}

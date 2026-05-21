@@ -31,5 +31,8 @@ $expectedLines = Get-Content $Expected
 $actualLines   = Get-Content $Actual
 Compare-Object -ReferenceObject $expectedLines -DifferenceObject $actualLines |
     Select-Object -First 80 |
-    Format-Table -AutoSize | Out-String | Write-Host
+    ForEach-Object {
+        $prefix = if ($_.SideIndicator -eq "<=") { "- (expected only)" } else { "+ (actual only)  " }
+        Write-Host "$prefix $($_.InputObject)"
+    }
 exit 1
