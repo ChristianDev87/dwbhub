@@ -12,7 +12,10 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
 
   web:
-    image: node:22-alpine
+    # Same base as deploy/docker/Dockerfile.web build stage. node:22-alpine
+    # resolved to an image without npm/corepack on PATH on the CI runner
+    # (sh: npm: not found); bookworm-slim ships them reliably on /usr/local/bin.
+    image: node:22-bookworm-slim
     working_dir: /repo
     command: >-
       sh -c "npm install -g pnpm@11.1.3
