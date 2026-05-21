@@ -1,0 +1,33 @@
+# Production example. Copy to docker-compose.prod.yml and adjust to your environment.
+# A reverse proxy (Caddy, Nginx, Traefik) is expected to sit in front of `web` and `api`.
+name: dwbhub
+
+services:
+  postgres:
+    ports: !reset []  # do not expose Postgres publicly in production
+
+  mailhog: !reset null  # remove MailHog in production; configure DWBHUB_SMTP_HOST against your real SMTP provider
+
+  api:
+    image: ghcr.io/your-org/dwbhub-api:${DWBHUB_VERSION:-latest}
+    build: !reset null
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      DWBHUB_PUBLIC_URL: ${DWBHUB_PUBLIC_URL}
+      DWBHUB_ALLOWED_ORIGINS: ${DWBHUB_ALLOWED_ORIGINS}
+      DWBHUB_DB_CONNECTION: ${DWBHUB_DB_CONNECTION}
+      DWBHUB_SMTP_HOST: ${DWBHUB_SMTP_HOST}
+      DWBHUB_SMTP_PORT: ${DWBHUB_SMTP_PORT}
+      DWBHUB_SMTP_USER: ${DWBHUB_SMTP_USER}
+      DWBHUB_SMTP_PASSWORD: ${DWBHUB_SMTP_PASSWORD}
+      DWBHUB_SMTP_FROM: ${DWBHUB_SMTP_FROM}
+      DWBHUB_JWT_SECRET: ${DWBHUB_JWT_SECRET}
+      DWBHUB_ENCRYPTION_KEY: ${DWBHUB_ENCRYPTION_KEY}
+    ports: !reset []
+    expose: ["8080"]
+
+  web:
+    image: ghcr.io/your-org/dwbhub-web:${DWBHUB_VERSION:-latest}
+    build: !reset null
+    ports: !reset []
+    expose: ["8080"]
