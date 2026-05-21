@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+/* Design tokens — extend the default Tailwind theme via CSS variables. */
+@theme {
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(222 47% 11%);
+  --color-primary: hsl(221 83% 53%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-muted: hsl(210 40% 96%);
+  --color-muted-foreground: hsl(215 16% 47%);
+  --color-border: hsl(214 32% 91%);
+  --color-ring: hsl(221 83% 53%);
+  --radius: 0.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-background: hsl(222 47% 11%);
+    --color-foreground: hsl(0 0% 98%);
+    --color-primary: hsl(217 91% 60%);
+    --color-primary-foreground: hsl(222 47% 11%);
+    --color-muted: hsl(217 33% 17%);
+    --color-muted-foreground: hsl(215 20% 65%);
+    --color-border: hsl(217 33% 24%);
+    --color-ring: hsl(217 91% 60%);
+  }
+}
+
+html, body, #root {
+  min-height: 100%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
