@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
-/* Design tokens — extend the default Tailwind theme via CSS variables. */
+/* Class-based dark variant: `dark` class on <html> (or any ancestor) activates dark tokens. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Light-mode design tokens (top-level @theme — required by Tailwind 4). */
 @theme {
   --color-background: hsl(0 0% 100%);
   --color-foreground: hsl(222 47% 11%);
@@ -13,16 +16,31 @@
   --radius: 0.5rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  @theme {
+/* Dark mode — applies when (a) user sets <html class="dark"> OR (b) system preference is dark
+   AND the user has not explicitly chosen light. Override the CSS variables defined by @theme. */
+@layer base {
+  :root.dark {
     --color-background: hsl(222 47% 11%);
     --color-foreground: hsl(0 0% 98%);
     --color-primary: hsl(217 91% 60%);
     --color-primary-foreground: hsl(222 47% 11%);
     --color-muted: hsl(217 33% 17%);
-    --color-muted-foreground: hsl(215 20% 65%);
+    --color-muted-foreground: hsl(215 20% 72%);
     --color-border: hsl(217 33% 24%);
     --color-ring: hsl(217 91% 60%);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not(.light) {
+      --color-background: hsl(222 47% 11%);
+      --color-foreground: hsl(0 0% 98%);
+      --color-primary: hsl(217 91% 60%);
+      --color-primary-foreground: hsl(222 47% 11%);
+      --color-muted: hsl(217 33% 17%);
+      --color-muted-foreground: hsl(215 20% 72%);
+      --color-border: hsl(217 33% 24%);
+      --color-ring: hsl(217 91% 60%);
+    }
   }
 }
 
