@@ -53,8 +53,15 @@ if (-not $ready) {
 
 # Discover the random host port docker assigned
 $pgPort = (docker inspect $pgContainer --format '{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}').Trim()
-$env:DWBHUB_DB_CONNECTION = "Host=localhost;Port=$pgPort;Database=dwbhub;Username=dwbhub;Password=dwbhub_openapi"
-Write-Host "Postgres reachable at localhost:$pgPort" -ForegroundColor Green
+
+# Host resolution depends on where the swagger tofile process runs:
+#   - Local dev (Windows/macOS Docker Desktop, Linux host): localhost reaches host-published ports.
+#   - CI on the self-hosted runner: the runner is itself a docker container. Its loopback has
+#     nothing on $pgPort. The watcher adds `host-gateway` -> docker bridge gateway, which
+#     forwards to host-published ports — that's the address we need.
+$pgHostForTools = if ($env:GITHUB_ACTIONS -eq "true") { "host-gateway" } else { "localhost" }
+$env:DWBHUB_DB_CONNECTION = "Host=$pgHostForTools;Port=$pgPort;Database=dwbhub;Username=dwbhub;Password=dwbhub_openapi"
+Write-Host "Postgres reachable at ${pgHostForTools}:${pgPort}" -ForegroundColor Green
 
 try {
     dotnet tool run swagger tofile --yaml --output $tempSpec $dllRelative v1
