@@ -200,6 +200,10 @@ builder.Services
             ValidateAudience = false,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromSeconds(30),
+            // JwtIssuer stores roles in a plain "role" claim (not ClaimTypes.Role).
+            // Without MapInboundClaims the JWT middleware does not remap it, so we
+            // must tell the validation layer which claim name carries role values.
+            RoleClaimType = "role",
         };
     });
 builder.Services.AddAuthorization();

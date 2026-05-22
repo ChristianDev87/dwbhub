@@ -129,8 +129,8 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
             Name: (string)row["tenant_name"]!,
             Slug: (string)row["tenant_slug"]!,
             Locale: (string)row["tenant_locale"]!,
-            CreatedAt: (DateTimeOffset)row["tenant_created_at"]!,
-            UpdatedAt: (DateTimeOffset)row["tenant_updated_at"]!);
+            CreatedAt: ToDateTimeOffset(row["tenant_created_at"]!),
+            UpdatedAt: ToDateTimeOffset(row["tenant_updated_at"]!));
 
         Guild? guild = row["guild_id"] is null ? null : new Guild(
             Id: (long)row["guild_id"]!,
@@ -140,11 +140,24 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
             DisplayName: (string)row["guild_display_name"]!,
             IsActive: (bool)row["guild_is_active"]!,
             RegisteredByUserId: (long)row["guild_registered_by_user_id"]!,
-            RegisteredAt: (DateTimeOffset)row["guild_registered_at"]!,
-            LastConnectedAt: (DateTimeOffset?)row["guild_last_connected_at"],
-            CreatedAt: (DateTimeOffset)row["guild_created_at"]!,
-            UpdatedAt: (DateTimeOffset)row["guild_updated_at"]!);
+            RegisteredAt: ToDateTimeOffset(row["guild_registered_at"]!),
+            LastConnectedAt: row["guild_last_connected_at"] is null ? null : ToDateTimeOffset(row["guild_last_connected_at"]!),
+            CreatedAt: ToDateTimeOffset(row["guild_created_at"]!),
+            UpdatedAt: ToDateTimeOffset(row["guild_updated_at"]!));
 
         return (tenant, guild);
     }
+
+    /// <summary>
+    /// Npgsql returns DateTime (UTC) for TIMESTAMPTZ when queried via a dynamic
+    /// row dictionary. The Dapper SqlMapper.TypeHandler only applies to strongly-
+    /// typed mappings; dynamic queries bypass it and need an explicit conversion.
+    /// </summary>
+    private static DateTimeOffset ToDateTimeOffset(object value) => value switch
+    {
+        DateTimeOffset dto => dto,
+        DateTime dt => new DateTimeOffset(dt, TimeSpan.Zero),
+        _ => throw new InvalidCastException(
+            $"Cannot convert {value?.GetType().Name} to DateTimeOffset"),
+    };
 }
