@@ -1,5 +1,6 @@
 using Dapper;
 using DwbHub.Application.Auth;
+using DwbHub.Application.Setup;
 using DwbHub.Core.Repositories;
 using DwbHub.Data.Connections;
 using DwbHub.Data.Migrations;
@@ -123,6 +124,17 @@ builder.Services.AddScoped<IPasswordResetService>(sp => new PasswordResetService
     sp.GetRequiredService<IEmailSender>(),
     publicBaseUrl));
 
+// --- Setup wizard (Plan 0.3d) ------------------------------------------
+var bootstrapTokenFile = Environment.GetEnvironmentVariable("DWBHUB_BOOTSTRAP_TOKEN_FILE")
+    ?? "/data/dwbhub/bootstrap-token.txt";
+
+builder.Services.AddSingleton<IBootstrapTokenWriter>(_ =>
+    new DwbHub.Infrastructure.Setup.FileBootstrapTokenWriter(bootstrapTokenFile));
+builder.Services.AddScoped<DwbHub.Core.Repositories.ISystemBootstrapLockRepository,
+                           DwbHub.Data.Repositories.SystemBootstrapLockRepository>();
+builder.Services.AddScoped<IBootstrapTokenProvisioner, BootstrapTokenProvisioner>();
+builder.Services.AddScoped<ISetupService, SetupService>();
+
 var jwtKeyBytes = Convert.FromBase64String(jwtSecret);
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -148,6 +160,16 @@ using (var scope = app.Services.CreateScope())
     var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
     runner.MigrateUp();
     Log.Information("[Migrations] Applied up to current version (VersionInfo table)");
+}
+
+// --- Setup-wizard bootstrap (Plan 0.3d) ---------------------------------
+// Run the provisioner once at startup, after migrations have created the
+// system_bootstrap_lock table. Synchronous (we want startup to fail if the
+// DB is unreachable, not to silently skip).
+using (var scope = app.Services.CreateScope())
+{
+    var provisioner = scope.ServiceProvider.GetRequiredService<IBootstrapTokenProvisioner>();
+    await provisioner.ProvisionAsync();
 }
 
 if (enableSwagger)

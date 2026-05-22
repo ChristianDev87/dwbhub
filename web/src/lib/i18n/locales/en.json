@@ -27,5 +27,36 @@
     "missingToken": "Token missing. Please use the link from your email.",
     "weakPassword": "Password must be at least 8 characters long.",
     "invalidToken": "The link is invalid or expired."
+  },
+  "setup": {
+    "title": "First-time setup",
+    "intro": "On first start, the API wrote a bootstrap token to a file. Paste it here and create the first tenant + owner.",
+    "bootstrapTokenLabel": "Bootstrap token",
+    "bootstrapTokenRequired": "Bootstrap token is required.",
+    "tenantNameLabel": "Tenant name (organization display name)",
+    "tenantNameRequired": "Tenant name is required.",
+    "tenantSlugLabel": "Tenant slug (URL path, lowercase, hyphens allowed)",
+    "tenantSlugInvalid": "Slug: 1–32 chars, lowercase / digits / hyphens, not at the edges.",
+    "tenantLocaleLabel": "Default language",
+    "ownerEmailLabel": "Owner email",
+    "ownerEmailInvalid": "Please enter a valid email address.",
+    "ownerDisplayNameLabel": "Owner display name",
+    "ownerDisplayNameRequired": "Display name is required.",
+    "ownerPasswordLabel": "Password (at least 8 characters)",
+    "ownerPasswordTooShort": "Password must be at least 8 characters long.",
+    "submit": "Complete setup",
+    "errors": {
+      "invalid_bootstrap_token": "Bootstrap token is invalid or already consumed.",
+      "setup_already_completed": "Setup has already been completed.",
+      "slug_in_use": "This slug is already taken.",
+      "weak_password": "Password is too short (at least 8 characters).",
+      "invalid_request": "Inputs invalid — please review.",
+      "network": "Network error — please retry."
+    }
+  },
+  "verifyEmailPrompt": {
+    "title": "Setup complete!",
+    "body": "We sent a verification link to your email address. Click it to activate your owner account.",
+    "tenantHint": "Tenant: {{slug}}"
   }
 }

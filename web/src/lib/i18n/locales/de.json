@@ -27,5 +27,36 @@
     "missingToken": "Token fehlt. Bitte verwende den Link aus der E-Mail.",
     "weakPassword": "Das Passwort muss mindestens 8 Zeichen lang sein.",
     "invalidToken": "Der Link ist ungültig oder abgelaufen."
+  },
+  "setup": {
+    "title": "Erstes Setup",
+    "intro": "Beim ersten Start hat die API einen Bootstrap-Token in eine Datei geschrieben. Kopiere ihn hier rein und lege den ersten Tenant + Owner an.",
+    "bootstrapTokenLabel": "Bootstrap-Token",
+    "bootstrapTokenRequired": "Bootstrap-Token ist erforderlich.",
+    "tenantNameLabel": "Tenant-Name (Org-Anzeigename)",
+    "tenantNameRequired": "Tenant-Name ist erforderlich.",
+    "tenantSlugLabel": "Tenant-Slug (URL-Pfad, klein, Bindestrich erlaubt)",
+    "tenantSlugInvalid": "Slug: 1–32 Zeichen, Kleinbuchstaben/Zahlen/Bindestriche, nicht am Anfang/Ende.",
+    "tenantLocaleLabel": "Standard-Sprache",
+    "ownerEmailLabel": "Email des Owners",
+    "ownerEmailInvalid": "Bitte eine gültige Email-Adresse.",
+    "ownerDisplayNameLabel": "Anzeigename des Owners",
+    "ownerDisplayNameRequired": "Anzeigename ist erforderlich.",
+    "ownerPasswordLabel": "Passwort (mindestens 8 Zeichen)",
+    "ownerPasswordTooShort": "Passwort muss mindestens 8 Zeichen lang sein.",
+    "submit": "Setup abschließen",
+    "errors": {
+      "invalid_bootstrap_token": "Bootstrap-Token ist ungültig oder schon verbraucht.",
+      "setup_already_completed": "Das Setup wurde bereits abgeschlossen.",
+      "slug_in_use": "Dieser Slug ist bereits vergeben.",
+      "weak_password": "Passwort ist zu kurz (mindestens 8 Zeichen).",
+      "invalid_request": "Eingaben ungültig — bitte prüfen.",
+      "network": "Netzwerkfehler — bitte erneut versuchen."
+    }
+  },
+  "verifyEmailPrompt": {
+    "title": "Setup erfolgreich!",
+    "body": "Wir haben einen Bestätigungslink an deine Email-Adresse geschickt. Klicke darauf, um deinen Owner-Account freizuschalten.",
+    "tenantHint": "Tenant: {{slug}}"
   }
 }

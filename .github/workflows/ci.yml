@@ -134,6 +134,7 @@ jobs:
       DWBHUB_SMTP_HOST: mailhog
       DWBHUB_SMTP_PORT: "1025"
       DWBHUB_SMTP_FROM: "DwbHub <noreply@ci.local>"
+      DWBHUB_BOOTSTRAP_TOKEN_FILE: /tmp/dwbhub-bootstrap-token.txt
     steps:
       - uses: actions/checkout@v4
       - name: Build API image (amd64 only, no push)
@@ -204,6 +205,7 @@ jobs:
             -e DWBHUB_SMTP_HOST="$DWBHUB_SMTP_HOST" \
             -e DWBHUB_SMTP_PORT="$DWBHUB_SMTP_PORT" \
             -e DWBHUB_SMTP_FROM="$DWBHUB_SMTP_FROM" \
+            -e DWBHUB_BOOTSTRAP_TOKEN_FILE="$DWBHUB_BOOTSTRAP_TOKEN_FILE" \
             dwbhub-api:smoke
           for i in {1..30}; do
             if curl -fsS http://host-gateway:15080/api/health >/dev/null; then

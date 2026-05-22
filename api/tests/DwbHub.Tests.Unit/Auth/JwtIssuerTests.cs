@@ -28,6 +28,7 @@ public sealed class JwtIssuerTests
         Id: 7,
         Name: "Demo",
         Slug: "demo",
+        Locale: "de",
         CreatedAt: DateTimeOffset.UnixEpoch,
         UpdatedAt: DateTimeOffset.UnixEpoch);
 
