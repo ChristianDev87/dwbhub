@@ -23,7 +23,16 @@ type FormValues = z.infer<typeof schema>;
 type SubmitState =
   | { kind: "idle" }
   | { kind: "submitting" }
-  | { kind: "error"; reason: "invalid_bootstrap_token" | "setup_already_completed" | "slug_in_use" | "weak_password" | "invalid_request" | "network" };
+  | {
+      kind: "error";
+      reason:
+        | "invalid_bootstrap_token"
+        | "setup_already_completed"
+        | "slug_in_use"
+        | "weak_password"
+        | "invalid_request"
+        | "network";
+    };
 
 export function SetupPage(): React.JSX.Element {
   const navigate = useNavigate();
@@ -51,12 +60,19 @@ export function SetupPage(): React.JSX.Element {
         navigate(`/t/${body.tenantSlug}/verify-email-prompt`);
         return;
       }
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      const reason = body?.error === "invalid_bootstrap_token" ? "invalid_bootstrap_token"
-        : body?.error === "setup_already_completed" ? "setup_already_completed"
-        : body?.error === "slug_in_use" ? "slug_in_use"
-        : body?.error === "weak_password" ? "weak_password"
-        : "invalid_request";
+      const body = (await res.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      const reason =
+        body?.error === "invalid_bootstrap_token"
+          ? "invalid_bootstrap_token"
+          : body?.error === "setup_already_completed"
+            ? "setup_already_completed"
+            : body?.error === "slug_in_use"
+              ? "slug_in_use"
+              : body?.error === "weak_password"
+                ? "weak_password"
+                : "invalid_request";
       setState({ kind: "error", reason });
     } catch {
       setState({ kind: "error", reason: "network" });
@@ -70,54 +86,114 @@ export function SetupPage(): React.JSX.Element {
     >
       <h1 className="text-2xl font-semibold">{t("setup.title")}</h1>
       <p className="text-sm text-gray-600">{t("setup.intro")}</p>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-3" data-testid="setup-form">
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className="space-y-3"
+        data-testid="setup-form"
+      >
         <label className="block">
           <span>{t("setup.bootstrapTokenLabel")}</span>
-          <input type="text" autoComplete="off" data-testid="setup-bootstrap-token"
+          <input
+            type="text"
+            autoComplete="off"
+            data-testid="setup-bootstrap-token"
             {...register("bootstrapToken")}
-            className="mt-1 w-full rounded border p-2 font-mono text-sm" />
-          {errors.bootstrapToken && <p className="text-sm text-red-600">{t("setup.bootstrapTokenRequired")}</p>}
+            className="mt-1 w-full rounded border p-2 font-mono text-sm"
+          />
+          {errors.bootstrapToken && (
+            <p className="text-sm text-red-600">
+              {t("setup.bootstrapTokenRequired")}
+            </p>
+          )}
         </label>
         <label className="block">
           <span>{t("setup.tenantNameLabel")}</span>
-          <input type="text" data-testid="setup-tenant-name"
-            {...register("tenantName")} className="mt-1 w-full rounded border p-2" />
-          {errors.tenantName && <p className="text-sm text-red-600">{t("setup.tenantNameRequired")}</p>}
+          <input
+            type="text"
+            data-testid="setup-tenant-name"
+            {...register("tenantName")}
+            className="mt-1 w-full rounded border p-2"
+          />
+          {errors.tenantName && (
+            <p className="text-sm text-red-600">
+              {t("setup.tenantNameRequired")}
+            </p>
+          )}
         </label>
         <label className="block">
           <span>{t("setup.tenantSlugLabel")}</span>
-          <input type="text" data-testid="setup-tenant-slug"
-            {...register("tenantSlug")} className="mt-1 w-full rounded border p-2 font-mono" />
-          {errors.tenantSlug && <p className="text-sm text-red-600">{t("setup.tenantSlugInvalid")}</p>}
+          <input
+            type="text"
+            data-testid="setup-tenant-slug"
+            {...register("tenantSlug")}
+            className="mt-1 w-full rounded border p-2 font-mono"
+          />
+          {errors.tenantSlug && (
+            <p className="text-sm text-red-600">
+              {t("setup.tenantSlugInvalid")}
+            </p>
+          )}
         </label>
         <label className="block">
           <span>{t("setup.tenantLocaleLabel")}</span>
-          <select data-testid="setup-tenant-locale"
-            {...register("tenantLocale")} className="mt-1 w-full rounded border p-2">
+          <select
+            data-testid="setup-tenant-locale"
+            {...register("tenantLocale")}
+            className="mt-1 w-full rounded border p-2"
+          >
             <option value="de">Deutsch</option>
             <option value="en">English</option>
           </select>
         </label>
         <label className="block">
           <span>{t("setup.ownerEmailLabel")}</span>
-          <input type="email" autoComplete="email" data-testid="setup-owner-email"
-            {...register("ownerEmail")} className="mt-1 w-full rounded border p-2" />
-          {errors.ownerEmail && <p className="text-sm text-red-600">{t("setup.ownerEmailInvalid")}</p>}
+          <input
+            type="email"
+            autoComplete="email"
+            data-testid="setup-owner-email"
+            {...register("ownerEmail")}
+            className="mt-1 w-full rounded border p-2"
+          />
+          {errors.ownerEmail && (
+            <p className="text-sm text-red-600">
+              {t("setup.ownerEmailInvalid")}
+            </p>
+          )}
         </label>
         <label className="block">
           <span>{t("setup.ownerDisplayNameLabel")}</span>
-          <input type="text" data-testid="setup-owner-display-name"
-            {...register("ownerDisplayName")} className="mt-1 w-full rounded border p-2" />
-          {errors.ownerDisplayName && <p className="text-sm text-red-600">{t("setup.ownerDisplayNameRequired")}</p>}
+          <input
+            type="text"
+            data-testid="setup-owner-display-name"
+            {...register("ownerDisplayName")}
+            className="mt-1 w-full rounded border p-2"
+          />
+          {errors.ownerDisplayName && (
+            <p className="text-sm text-red-600">
+              {t("setup.ownerDisplayNameRequired")}
+            </p>
+          )}
         </label>
         <label className="block">
           <span>{t("setup.ownerPasswordLabel")}</span>
-          <input type="password" autoComplete="new-password" data-testid="setup-owner-password"
-            {...register("ownerPassword")} className="mt-1 w-full rounded border p-2" />
-          {errors.ownerPassword && <p className="text-sm text-red-600">{t("setup.ownerPasswordTooShort")}</p>}
+          <input
+            type="password"
+            autoComplete="new-password"
+            data-testid="setup-owner-password"
+            {...register("ownerPassword")}
+            className="mt-1 w-full rounded border p-2"
+          />
+          {errors.ownerPassword && (
+            <p className="text-sm text-red-600">
+              {t("setup.ownerPasswordTooShort")}
+            </p>
+          )}
         </label>
         {state.kind === "error" && (
-          <p className="text-sm text-red-600 flex items-center gap-2" data-testid="setup-server-error">
+          <p
+            className="text-sm text-red-600 flex items-center gap-2"
+            data-testid="setup-server-error"
+          >
             <AlertCircle className="h-4 w-4" />
             {t(`setup.errors.${state.reason}`)}
           </p>
@@ -128,7 +204,9 @@ export function SetupPage(): React.JSX.Element {
           data-testid="setup-submit"
           className="inline-flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
         >
-          {state.kind === "submitting" && <Loader2 className="h-4 w-4 animate-spin" />}
+          {state.kind === "submitting" && (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          )}
           {t("setup.submit")}
         </button>
       </form>

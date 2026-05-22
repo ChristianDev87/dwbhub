@@ -15,7 +15,10 @@ export function VerifyEmailPromptPage(): React.JSX.Element {
       <CheckCircle2 className="h-12 w-12 text-green-600" />
       <h1 className="text-2xl font-semibold">{t("verifyEmailPrompt.title")}</h1>
       <p>{t("verifyEmailPrompt.body")}</p>
-      <p className="text-sm text-gray-500 mt-4" data-testid="verify-email-prompt-slug">
+      <p
+        className="text-sm text-gray-500 mt-4"
+        data-testid="verify-email-prompt-slug"
+      >
         {t("verifyEmailPrompt.tenantHint", { slug })}
       </p>
     </main>

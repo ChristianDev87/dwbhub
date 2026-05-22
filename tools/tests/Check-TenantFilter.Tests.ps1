@@ -91,4 +91,21 @@ Describe "check-tenant-filter" {
             Pop-Location
         }
     }
+
+    It "passes on Plan-0.3d sources (006/007 migrations, SystemBootstrapLockRepository, SetupService)" {
+        $repoRoot = Resolve-Path (Join-Path $PSScriptRoot ".." "..")
+        Push-Location $repoRoot
+        try {
+            $output = & pwsh -NoLogo -NoProfile -File $script:scriptPath *>&1
+            $LASTEXITCODE | Should -Be 0 -Because "Plan 0.3d sources should pass the lint; output was:`n$($output -join "`n")"
+
+            Test-Path "api/migrations/006_system_bootstrap_lock.sql" | Should -BeTrue
+            Test-Path "api/migrations/007_tenants_locale.sql" | Should -BeTrue
+            Test-Path "api/src/DwbHub.Data/Repositories/SystemBootstrapLockRepository.cs" | Should -BeTrue
+            Test-Path "api/src/DwbHub.Application/Setup/SetupService.cs" | Should -BeTrue
+        }
+        finally {
+            Pop-Location
+        }
+    }
 }

@@ -53,6 +53,7 @@ services:
       - "${API_PORT:-5080}:8080"
     volumes:
       - api-logs:/app/logs
+      - api-data:/data/dwbhub
 
   web:
     build:
@@ -68,3 +69,4 @@ services:
 volumes:
   pg-data:
   api-logs:
+  api-data:

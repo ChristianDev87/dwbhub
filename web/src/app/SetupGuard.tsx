@@ -12,7 +12,11 @@ type GuardState =
  * Top-level wrapper that fetches /api/setup/status once on mount and redirects
  * to /setup if the wizard is not yet complete.
  */
-export function SetupGuard({ children }: { children: React.ReactNode }): React.JSX.Element {
+export function SetupGuard({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
   const [state, setState] = useState<GuardState>({ kind: "checking" });
@@ -21,7 +25,9 @@ export function SetupGuard({ children }: { children: React.ReactNode }): React.J
     const controller = new AbortController();
     void (async () => {
       try {
-        const res = await fetch("/api/setup/status", { signal: controller.signal });
+        const res = await fetch("/api/setup/status", {
+          signal: controller.signal,
+        });
         if (!res.ok) {
           setState({ kind: "error" });
           return;
@@ -45,7 +51,11 @@ export function SetupGuard({ children }: { children: React.ReactNode }): React.J
   }, []);
 
   if (state.kind === "checking" || state.kind === "redirecting") {
-    return <div data-testid="setup-guard-checking" className="p-8">…</div>;
+    return (
+      <div data-testid="setup-guard-checking" className="p-8">
+        …
+      </div>
+    );
   }
   if (state.kind === "error") {
     return (
