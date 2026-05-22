@@ -30,7 +30,9 @@ test.describe("Plan 0.3d smoke (post-SetupGuard)", () => {
     );
   });
 
-  test("api /api/health responds 200 with version info", async ({ request }) => {
+  test("api /api/health responds 200 with version info", async ({
+    request,
+  }) => {
     const res = await request.get("/api/health");
     expect(res.status()).toBe(200);
     const body = await res.json();
