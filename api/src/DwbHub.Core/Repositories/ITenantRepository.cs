@@ -10,6 +10,6 @@ public interface ITenantRepository
 {
     Task<Tenant?> GetByIdAsync(long id, CancellationToken ct = default);
     Task<Tenant?> GetBySlugAsync(string slug, CancellationToken ct = default);
-    Task<long> CreateAsync(string name, string slug, CancellationToken ct = default);
+    Task<long> CreateAsync(string name, string slug, string locale = "de", CancellationToken ct = default);
     Task<IReadOnlyList<Tenant>> ListAsync(CancellationToken ct = default);
 }

@@ -10,7 +10,7 @@ public sealed class TenantRepository(IDbConnectionFactory connectionFactory) : I
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
         const string sql = """
-            SELECT id, name, slug, created_at, updated_at
+            SELECT id, name, slug, locale, created_at, updated_at
             FROM tenants
             WHERE id = @Id;
             """;
@@ -23,7 +23,7 @@ public sealed class TenantRepository(IDbConnectionFactory connectionFactory) : I
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
         const string sql = """
-            SELECT id, name, slug, created_at, updated_at
+            SELECT id, name, slug, locale, created_at, updated_at
             FROM tenants
             WHERE slug = @Slug::citext;
             """;
@@ -32,16 +32,16 @@ public sealed class TenantRepository(IDbConnectionFactory connectionFactory) : I
             .ConfigureAwait(false);
     }
 
-    public async Task<long> CreateAsync(string name, string slug, CancellationToken ct = default)
+    public async Task<long> CreateAsync(string name, string slug, string locale = "de", CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
         const string sql = """
-            INSERT INTO tenants (name, slug)
-            VALUES (@Name, @Slug)
+            INSERT INTO tenants (name, slug, locale)
+            VALUES (@Name, @Slug, @Locale)
             RETURNING id;
             """;
         return await conn.ExecuteScalarAsync<long>(
-            new CommandDefinition(sql, new { Name = name, Slug = slug }, cancellationToken: ct))
+            new CommandDefinition(sql, new { Name = name, Slug = slug, Locale = locale }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
@@ -49,7 +49,7 @@ public sealed class TenantRepository(IDbConnectionFactory connectionFactory) : I
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
         const string sql = """
-            SELECT id, name, slug, created_at, updated_at
+            SELECT id, name, slug, locale, created_at, updated_at
             FROM tenants
             ORDER BY created_at ASC, id ASC;
             """;
