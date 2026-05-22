@@ -11,10 +11,10 @@ public sealed class LoginAttemptRepository(IDbConnectionFactory connectionFactor
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
         const string sql = """
             INSERT INTO login_attempt_log (email, ip_address, success)
-            VALUES (@Email, @IpAddress, @Success);
+            VALUES (@Email, @IpAddress::inet, @Success);
             """;
         await conn.ExecuteAsync(
-            new CommandDefinition(sql, new { Email = email, IpAddress = ipAddress, Success = success }, cancellationToken: ct))
+            new CommandDefinition(sql, new { Email = email, IpAddress = ipAddress.ToString(), Success = success }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 
@@ -25,12 +25,12 @@ public sealed class LoginAttemptRepository(IDbConnectionFactory connectionFactor
             SELECT COUNT(*)::int
             FROM login_attempt_log
             WHERE email = @Email
-              AND ip_address = @IpAddress
+              AND ip_address = @IpAddress::inet
               AND success = false
               AND attempted_at > @Since;
             """;
         return await conn.ExecuteScalarAsync<int>(
-            new CommandDefinition(sql, new { Email = email, IpAddress = ipAddress, Since = since }, cancellationToken: ct))
+            new CommandDefinition(sql, new { Email = email, IpAddress = ipAddress.ToString(), Since = since }, cancellationToken: ct))
             .ConfigureAwait(false);
     }
 }
