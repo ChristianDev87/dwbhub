@@ -1,8 +1,27 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="FluentMigrator" />
+    <PackageReference Include="FluentMigrator.Runner" />
+    <PackageReference Include="FluentMigrator.Runner.Postgres" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DwbHub.Core\DwbHub.Core.csproj" />
   </ItemGroup>
 
+  <!--
+    Embed the raw SQL migrations as resources with simple-name LogicalName,
+    so FluentMigrator's Execute.EmbeddedScript("001_tenants.sql") matches.
+    The .sql files live in api/migrations/ so tools/check-tenant-filter.ps1
+    sees them in their natural location.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\migrations\*.sql">
+      <LogicalName>%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
 
 </Project>
