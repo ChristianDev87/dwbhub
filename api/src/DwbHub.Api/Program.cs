@@ -1,13 +1,18 @@
 using Dapper;
+using DwbHub.Application.Auth;
 using DwbHub.Core.Repositories;
 using DwbHub.Data.Connections;
 using DwbHub.Data.Migrations;
 using DwbHub.Data.Repositories;
+using DwbHub.Infrastructure.Auth;
 using DwbHub.Infrastructure.Logging;
 using FluentMigrator.Runner;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using Serilog;
+using System.Text;
 
 const int defaultRetainStartLogs = 10;
 
@@ -63,6 +68,37 @@ builder.Services
         .ScanIn(typeof(Migration00001_Tenants).Assembly).For.EmbeddedResources())
     .AddLogging(lb => lb.AddFluentMigratorConsole());
 
+// --- Auth wiring (Plan 0.3a) -------------------------------------------
+var jwtSecret = Environment.GetEnvironmentVariable("DWBHUB_JWT_SECRET")
+    ?? throw new InvalidOperationException(
+        "DWBHUB_JWT_SECRET env var is required (Base64-encoded 32+ bytes).");
+
+builder.Services.AddSingleton<IPasswordHasher>(new BCryptPasswordHasher());
+builder.Services.AddSingleton<IJwtIssuer>(new JwtIssuer(jwtSecret));
+
+builder.Services.AddScoped<DwbHub.Core.Repositories.IUserRepository,
+                           DwbHub.Data.Repositories.UserRepository>();
+builder.Services.AddScoped<DwbHub.Core.Repositories.ILoginAttemptRepository,
+                           DwbHub.Data.Repositories.LoginAttemptRepository>();
+builder.Services.AddScoped<ILoginService, LoginService>();
+
+var jwtKeyBytes = Convert.FromBase64String(jwtSecret);
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(jwtKeyBytes),
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30),
+        };
+    });
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
 // --- Apply DB migrations (Plan 0.2) ------------------------------------
@@ -80,6 +116,8 @@ if (enableSwagger)
 }
 
 app.UseSerilogRequestLogging();
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 
 Log.Information("DwbHub.Api starting. LogFile={LogFile}", logFilePath);

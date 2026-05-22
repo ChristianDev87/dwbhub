@@ -3,6 +3,37 @@ info:
   title: DwbHub API
   version: v1
 paths:
+  '/api/tenants/{slug}/auth/login':
+    post:
+      tags:
+        - Auth
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: OK
+  /api/auth/me:
+    get:
+      tags:
+        - Auth
+      responses:
+        '200':
+          description: OK
   /api/health:
     get:
       tags:
@@ -10,4 +41,15 @@ paths:
       responses:
         '200':
           description: OK
-components: { }
+components:
+  schemas:
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          nullable: true
+        password:
+          type: string
+          nullable: true
+      additionalProperties: false

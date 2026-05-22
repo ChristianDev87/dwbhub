@@ -41,4 +41,22 @@ Describe "check-tenant-filter" {
             Pop-Location
         }
     }
+
+    It "passes on Plan-0.3a sources (002_users.sql, 003_login_attempt_log.sql, UserRepository.cs)" {
+        $repoRoot = Resolve-Path (Join-Path $PSScriptRoot ".." "..")
+        Push-Location $repoRoot
+        try {
+            $output = & pwsh -NoLogo -NoProfile -File $script:scriptPath *>&1
+            $LASTEXITCODE | Should -Be 0 -Because "Plan 0.3a migrations + UserRepository should pass the lint; output was:`n$($output -join "`n")"
+
+            # Defensive: verify the files this test exists to validate are actually present.
+            Test-Path "api/migrations/002_users.sql" | Should -BeTrue
+            Test-Path "api/migrations/003_login_attempt_log.sql" | Should -BeTrue
+            Test-Path "api/src/DwbHub.Data/Repositories/UserRepository.cs" | Should -BeTrue
+            Test-Path "api/src/DwbHub.Data/Repositories/LoginAttemptRepository.cs" | Should -BeTrue
+        }
+        finally {
+            Pop-Location
+        }
+    }
 }
