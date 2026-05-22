@@ -1,33 +1,42 @@
 import { expect, test } from "@playwright/test";
 
-test.describe("Plan 0.1 smoke", () => {
-  test("landing page renders German heading and probes the API", async ({
+// Plan 0.3d's SetupGuard redirects `/` to `/setup` until the wizard completes.
+// In e2e CI the DB is always fresh, so `/` always lands on the setup wizard.
+// These smoke tests verify the redirect + SetupPage heading, plus a direct
+// /api/health probe (the HelloPage's status card is unreachable until setup
+// is completed — that's covered by a post-setup smoke test in a later plan).
+
+test.describe("Plan 0.3d smoke (post-SetupGuard)", () => {
+  test("fresh boot redirects to /setup and renders German heading", async ({
     page,
   }) => {
     await page.goto("/");
+    // SetupGuard fetches /api/setup/status then navigate("/setup", {replace:true}).
+    await page.waitForURL("**/setup", { timeout: 15_000 });
 
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Hallo DwbHub",
+      "Erstes Setup",
     );
-
-    const status = page.getByTestId("api-status");
-    await expect(status).toBeVisible();
-
-    // The card may briefly show the loading state; eventually it must reach OK.
-    await expect(page.getByTestId("api-status-ok")).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(page.getByTestId("api-status-ok")).toContainText(/Version/i);
   });
 
-  test("english locale via ?lang=en flips the heading", async ({ page }) => {
+  test("english locale via ?lang=en flips the SetupPage heading", async ({
+    page,
+  }) => {
     await page.goto("/?lang=en");
+    await page.waitForURL("**/setup**", { timeout: 15_000 });
 
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Hello DwbHub",
+      "First-time setup",
     );
-    await expect(page.getByTestId("api-status-ok")).toBeVisible({
-      timeout: 15_000,
-    });
+  });
+
+  test("api /api/health responds 200 with version info", async ({
+    request,
+  }) => {
+    const res = await request.get("/api/health");
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty("status", "ok");
+    expect(body).toHaveProperty("version");
   });
 });

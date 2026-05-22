@@ -86,10 +86,18 @@ try { Wait-Url $webUrl } catch {
 
 Write-Host "Stack ready. Running Playwright ..." -ForegroundColor Cyan
 Push-Location (Join-Path $repoRoot "web")
+$playwrightExitCode = 0
 try {
     $env:E2E_BASE_URL = "http://${e2eHost}:${webPort}"
     pnpm exec playwright install --with-deps chromium firefox
+    if ($LASTEXITCODE -ne 0) { throw "playwright install failed with exit $LASTEXITCODE" }
+
+    # PowerShell's try/finally does NOT propagate native-command exit codes; we MUST
+    # capture $LASTEXITCODE explicitly and re-throw after teardown, otherwise a failing
+    # `pnpm exec playwright test` exits the script with code 0 and CI reports success
+    # despite red tests. This was silent-broken between Plan 0.3d and Plan 0.4 — fixed here.
     pnpm exec playwright test
+    $playwrightExitCode = $LASTEXITCODE
 } finally {
     Pop-Location
     # --remove-orphans + -v: full teardown even if the container set has drifted from the
@@ -97,4 +105,7 @@ try {
     Push-Location (Join-Path $repoRoot "deploy/compose")
     docker compose @composeFiles down -v --remove-orphans
     Pop-Location
+}
+if ($playwrightExitCode -ne 0) {
+    throw "playwright test failed with exit $playwrightExitCode"
 }
