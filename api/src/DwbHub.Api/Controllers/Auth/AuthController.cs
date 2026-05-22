@@ -124,10 +124,10 @@ public sealed class AuthController(
         Response.Cookies.Append(RefreshCookieName, plaintext, new CookieOptions
         {
             HttpOnly = true,
-            Secure   = true,
+            Secure = true,
             SameSite = SameSiteMode.Strict,
-            Path     = RefreshCookiePath,
-            MaxAge   = RefreshCookieLifetime,
+            Path = RefreshCookiePath,
+            MaxAge = RefreshCookieLifetime,
         });
     }
 
@@ -136,10 +136,10 @@ public sealed class AuthController(
         Response.Cookies.Append(RefreshCookieName, "", new CookieOptions
         {
             HttpOnly = true,
-            Secure   = true,
+            Secure = true,
             SameSite = SameSiteMode.Strict,
-            Path     = RefreshCookiePath,
-            MaxAge   = TimeSpan.Zero,
+            Path = RefreshCookiePath,
+            MaxAge = TimeSpan.Zero,
         });
     }
 }

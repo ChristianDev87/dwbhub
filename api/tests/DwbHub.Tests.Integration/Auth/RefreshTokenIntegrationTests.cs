@@ -37,7 +37,7 @@ public sealed class RefreshTokenIntegrationTests : IAsyncLifetime
         _ds = NpgsqlDataSource.Create(_fixture.ConnectionString);
         var factory = new NpgsqlConnectionFactory(_ds);
         _tenants = new TenantRepository(factory);
-        _users   = new UserRepository(factory);
+        _users = new UserRepository(factory);
         _refreshTokens = new RefreshTokenRepository(factory);
         _passwordHasher = new BCryptPasswordHasher();
         _tokenHasher = new TokenHasher();
@@ -187,9 +187,9 @@ public sealed class RefreshTokenIntegrationTests : IAsyncLifetime
     {
         var (tenant, user) = await SeedAsync();
         var t1 = await IssueTokenAsync(tenant, user);
-        var firstOutcome = (RefreshOutcome.Success) await _sut.RefreshAsync(t1, TestIp, null);
+        var firstOutcome = (RefreshOutcome.Success)await _sut.RefreshAsync(t1, TestIp, null);
         var t2 = firstOutcome.RefreshToken;
-        var secondOutcome = (RefreshOutcome.Success) await _sut.RefreshAsync(t2, TestIp, null);
+        var secondOutcome = (RefreshOutcome.Success)await _sut.RefreshAsync(t2, TestIp, null);
         var t3 = secondOutcome.RefreshToken;
 
         // Now reuse t1 → triggers chain revocation.
@@ -250,7 +250,7 @@ public sealed class RefreshTokenIntegrationTests : IAsyncLifetime
     {
         var (tenant, user) = await SeedAsync();
         var t1 = await IssueTokenAsync(tenant, user);
-        var s1 = (RefreshOutcome.Success) await _sut.RefreshAsync(t1, TestIp, null);
+        var s1 = (RefreshOutcome.Success)await _sut.RefreshAsync(t1, TestIp, null);
         var s2 = await _sut.RefreshAsync(s1.RefreshToken, TestIp, null);
         s2.Should().BeOfType<RefreshOutcome.Success>();
     }
