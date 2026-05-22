@@ -54,8 +54,8 @@ public sealed class RefreshTokenRepository(IDbConnectionFactory connectionFactor
             WITH old_token AS (
                 SELECT rt.id AS rt_id, rt.revoked_at, rt.expires_at,
                        rt.issued_role, rt.issued_was_active, rt.replaced_by_token_id,
-                       u.role        AS current_role,
-                       u.is_active   AS current_is_active,
+                       u.role        AS u_role,
+                       u.is_active   AS u_is_active,
                        u.id          AS user_id,
                        u.tenant_id
                 FROM refresh_tokens rt
@@ -67,12 +67,12 @@ public sealed class RefreshTokenRepository(IDbConnectionFactory connectionFactor
                     (tenant_id, user_id, token_hash, expires_at,
                      issued_role, issued_was_active, ip_address, user_agent)
                 SELECT tenant_id, user_id, @NewHash, @NewExpiresAt,
-                       current_role, current_is_active, @IpAddress::inet, @UserAgent
+                       u_role, u_is_active, @IpAddress::inet, @UserAgent
                 FROM old_token
                 WHERE revoked_at IS NULL
                   AND expires_at > now()
-                  AND issued_role     = current_role
-                  AND issued_was_active = current_is_active
+                  AND issued_role     = u_role
+                  AND issued_was_active = u_is_active
                 RETURNING id
             ),
             revoke_old AS (
@@ -88,12 +88,12 @@ public sealed class RefreshTokenRepository(IDbConnectionFactory connectionFactor
                 (SELECT rt_id FROM old_token)                                       AS old_token_id,
                 (SELECT user_id FROM old_token)                                     AS user_id,
                 (SELECT tenant_id FROM old_token)                                   AS tenant_id,
-                (SELECT current_role FROM old_token)                                AS user_role,
+                (SELECT u_role FROM old_token)                                AS user_role,
                 ((SELECT rt_id FROM old_token) IS NOT NULL)                         AS token_found,
                 ((SELECT revoked_at FROM old_token) IS NOT NULL)                    AS was_revoked,
                 (SELECT expires_at > now() FROM old_token)                          AS not_expired,
-                (SELECT issued_role = current_role
-                    AND issued_was_active = current_is_active FROM old_token)       AS rights_unchanged;
+                (SELECT issued_role = u_role
+                    AND issued_was_active = u_is_active FROM old_token)       AS rights_unchanged;
             """;
         return await conn.QuerySingleAsync<RotationResult>(
             new CommandDefinition(sql, new
