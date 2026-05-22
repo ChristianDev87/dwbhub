@@ -17,7 +17,10 @@ export function AppRouter(): React.JSX.Element {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/t/:slug/verify-email" element={<VerifyEmailPage />} />
       <Route path="/t/:slug/password-reset" element={<PasswordResetPage />} />
-      <Route path="/t/:slug/verify-email-prompt" element={<VerifyEmailPromptPage />} />
+      <Route
+        path="/t/:slug/verify-email-prompt"
+        element={<VerifyEmailPromptPage />}
+      />
       <Route
         path="/t/:slug/dashboard"
         element={

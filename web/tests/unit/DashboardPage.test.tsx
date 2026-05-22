@@ -18,21 +18,30 @@ function PrimeAuth({ children }: { children: React.ReactNode }) {
 describe("DashboardPage", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
-    (fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
-      if (url.includes("/api/auth/refresh")) return new Response(null, { status: 401 });
-      if (url.includes("/api/tenants/acme/auth/login")) {
-        return new Response(
-          JSON.stringify({
-            accessToken: "tok",
-            user: { id: 7, email: "alice@acme.test", displayName: "Alice", role: "Owner" },
-            tenant: { id: 1, slug: "acme", name: "Acme Corp" },
-          }),
-          { status: 200 },
-        );
-      }
-      if (url.includes("/api/auth/logout")) return new Response(null, { status: 204 });
-      throw new Error(`unexpected: ${url}`);
-    });
+    (fetch as ReturnType<typeof vi.fn>).mockImplementation(
+      async (url: string) => {
+        if (url.includes("/api/auth/refresh"))
+          return new Response(null, { status: 401 });
+        if (url.includes("/api/tenants/acme/auth/login")) {
+          return new Response(
+            JSON.stringify({
+              accessToken: "tok",
+              user: {
+                id: 7,
+                email: "alice@acme.test",
+                displayName: "Alice",
+                role: "Owner",
+              },
+              tenant: { id: 1, slug: "acme", name: "Acme Corp" },
+            }),
+            { status: 200 },
+          );
+        }
+        if (url.includes("/api/auth/logout"))
+          return new Response(null, { status: 204 });
+        throw new Error(`unexpected: ${url}`);
+      },
+    );
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -50,7 +59,9 @@ describe("DashboardPage", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/Alice/);
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+        /Alice/,
+      );
     });
   });
 
@@ -72,8 +83,12 @@ describe("DashboardPage", () => {
     await userEvent.click(screen.getByTestId("dashboard-logout"));
 
     await waitFor(() => {
-      const calls = (fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
-      expect(calls.some((u: string) => u.includes("/api/auth/logout"))).toBe(true);
+      const calls = (fetch as ReturnType<typeof vi.fn>).mock.calls.map(
+        (c) => c[0],
+      );
+      expect(calls.some((u: string) => u.includes("/api/auth/logout"))).toBe(
+        true,
+      );
     });
   });
 });

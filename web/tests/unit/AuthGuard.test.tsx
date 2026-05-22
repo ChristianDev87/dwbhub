@@ -17,7 +17,10 @@ function setup(initialPath: string) {
               </AuthGuard>
             }
           />
-          <Route path="/login" element={<div data-testid="login-page">login</div>} />
+          <Route
+            path="/login"
+            element={<div data-testid="login-page">login</div>}
+          />
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
@@ -33,7 +36,9 @@ describe("AuthGuard", () => {
   });
 
   it("redirects to /login when unauthenticated", async () => {
-    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue(new Response(null, { status: 401 }));
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      new Response(null, { status: 401 }),
+    );
     setup("/t/acme/dashboard");
 
     await waitFor(() => {
@@ -43,7 +48,9 @@ describe("AuthGuard", () => {
   });
 
   it("shows checking spinner before refresh resolves", () => {
-    (fetch as ReturnType<typeof vi.fn>).mockImplementation(() => new Promise(() => {}));
+    (fetch as ReturnType<typeof vi.fn>).mockImplementation(
+      () => new Promise(() => {}),
+    );
     setup("/t/acme/dashboard");
     expect(screen.getByTestId("auth-guard-checking")).toBeInTheDocument();
   });

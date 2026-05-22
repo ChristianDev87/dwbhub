@@ -20,7 +20,10 @@ async function tryCompleteSetup(request: APIRequestContext): Promise<boolean> {
 test.describe("Plan 0.5 auth flow", () => {
   test("login → dashboard → logout", async ({ page, request }) => {
     const ok = await tryCompleteSetup(request);
-    test.skip(!ok, "Setup not pre-completed and no test-only token endpoint available");
+    test.skip(
+      !ok,
+      "Setup not pre-completed and no test-only token endpoint available",
+    );
 
     await page.goto("/login");
     await expect(page.getByTestId("input-tenantSlug")).toBeVisible();
@@ -31,13 +34,18 @@ test.describe("Plan 0.5 auth flow", () => {
     await page.click('[data-testid="login-submit"]');
 
     await page.waitForURL(`**/t/${SLUG}/dashboard`, { timeout: 15_000 });
-    await expect(page.getByRole("heading", { level: 1 })).toContainText(/Welcome|Willkommen/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(
+      /Welcome|Willkommen/,
+    );
 
     await page.click('[data-testid="dashboard-logout"]');
     await page.waitForURL("**/login", { timeout: 15_000 });
   });
 
-  test("guarded route without auth redirects to /login", async ({ page, request }) => {
+  test("guarded route without auth redirects to /login", async ({
+    page,
+    request,
+  }) => {
     const ok = await tryCompleteSetup(request);
     test.skip(!ok, "Setup not pre-completed");
 

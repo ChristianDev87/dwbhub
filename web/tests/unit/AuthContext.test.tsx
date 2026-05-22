@@ -32,22 +32,29 @@ describe("AuthContext", () => {
   });
 
   it("login success transitions state to authenticated and stores user/tenant", async () => {
-    (fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
-      if (url.includes("/api/tenants/acme/auth/login")) {
-        return new Response(
-          JSON.stringify({
-            accessToken: "fake-jwt-token",
-            user: { id: 7, email: "alice@acme.test", displayName: "Alice", role: "Owner" },
-            tenant: { id: 1, slug: "acme", name: "Acme Corp" },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        );
-      }
-      if (url.includes("/api/auth/refresh")) {
-        return new Response(null, { status: 401 });
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    });
+    (fetch as ReturnType<typeof vi.fn>).mockImplementation(
+      async (url: string) => {
+        if (url.includes("/api/tenants/acme/auth/login")) {
+          return new Response(
+            JSON.stringify({
+              accessToken: "fake-jwt-token",
+              user: {
+                id: 7,
+                email: "alice@acme.test",
+                displayName: "Alice",
+                role: "Owner",
+              },
+              tenant: { id: 1, slug: "acme", name: "Acme Corp" },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (url.includes("/api/auth/refresh")) {
+          return new Response(null, { status: 401 });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      },
+    );
 
     render(
       <MemoryRouter>
@@ -60,7 +67,9 @@ describe("AuthContext", () => {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });
-    expect(screen.getByTestId("state-kind").textContent).toBe("unauthenticated");
+    expect(screen.getByTestId("state-kind").textContent).toBe(
+      "unauthenticated",
+    );
 
     await act(async () => {
       screen.getByTestId("do-login").click();

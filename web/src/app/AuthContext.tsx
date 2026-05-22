@@ -40,7 +40,11 @@ export type LoginResult =
 
 interface AuthContextValue {
   state: AuthState;
-  login: (slug: string, email: string, password: string) => Promise<LoginResult>;
+  login: (
+    slug: string,
+    email: string,
+    password: string,
+  ) => Promise<LoginResult>;
   logout: () => Promise<void>;
   refresh: () => Promise<boolean>;
 }
@@ -59,7 +63,11 @@ interface LoginResponse {
   tenant: Tenant;
 }
 
-export function AuthProvider({ children }: { children: ReactNode }): React.JSX.Element {
+export function AuthProvider({
+  children,
+}: {
+  children: ReactNode;
+}): React.JSX.Element {
   const [state, setState] = useState<AuthState>({ kind: "checking" });
 
   const refresh = useCallback(async (): Promise<boolean> => {
@@ -84,19 +92,29 @@ export function AuthProvider({ children }: { children: ReactNode }): React.JSX.E
   }, []);
 
   const login = useCallback(
-    async (slug: string, email: string, password: string): Promise<LoginResult> => {
+    async (
+      slug: string,
+      email: string,
+      password: string,
+    ): Promise<LoginResult> => {
       try {
-        const res = await fetch(`/api/tenants/${encodeURIComponent(slug)}/auth/login`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        });
+        const res = await fetch(
+          `/api/tenants/${encodeURIComponent(slug)}/auth/login`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          },
+        );
 
         if (res.status === 401) return { kind: "invalid_credentials" };
         if (res.status === 423) {
           const body = (await res.json()) as { retry_after_seconds?: number };
-          return { kind: "locked_out", retryAfterSeconds: body.retry_after_seconds ?? 900 };
+          return {
+            kind: "locked_out",
+            retryAfterSeconds: body.retry_after_seconds ?? 900,
+          };
         }
         if (res.status === 403) {
           const body = (await res.json()) as { error?: string; email?: string };
@@ -123,7 +141,10 @@ export function AuthProvider({ children }: { children: ReactNode }): React.JSX.E
 
   const logout = useCallback(async (): Promise<void> => {
     try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
     } catch {
       // swallow — state cleared either way
     }
@@ -134,5 +155,9 @@ export function AuthProvider({ children }: { children: ReactNode }): React.JSX.E
     void refresh();
   }, [refresh]);
 
-  return <Ctx.Provider value={{ state, login, logout, refresh }}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={{ state, login, logout, refresh }}>
+      {children}
+    </Ctx.Provider>
+  );
 }

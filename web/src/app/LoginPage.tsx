@@ -39,7 +39,9 @@ export function LoginPage(): React.JSX.Element {
         navigate(`/t/${data.tenantSlug}/verify-email-prompt`);
         return;
       case "locked_out":
-        setSubmitError(t("loginpage.lockedOut", { seconds: result.retryAfterSeconds }));
+        setSubmitError(
+          t("loginpage.lockedOut", { seconds: result.retryAfterSeconds }),
+        );
         return;
       case "network_error":
         setSubmitError(t("loginpage.networkError"));
@@ -56,7 +58,9 @@ export function LoginPage(): React.JSX.Element {
       <h1 className="text-2xl font-semibold">{t("loginpage.title")}</h1>
       <form
         className="mt-6 space-y-4"
-        onSubmit={(e: FormEvent<HTMLFormElement>) => void handleSubmit(onSubmit)(e)}
+        onSubmit={(e: FormEvent<HTMLFormElement>) =>
+          void handleSubmit(onSubmit)(e)
+        }
         noValidate
       >
         <div>
@@ -69,7 +73,9 @@ export function LoginPage(): React.JSX.Element {
               autoComplete="organization"
             />
           </label>
-          <p className="text-xs text-gray-500 mt-1">{t("loginpage.tenantSlugHint")}</p>
+          <p className="text-xs text-gray-500 mt-1">
+            {t("loginpage.tenantSlugHint")}
+          </p>
           {errors.tenantSlug && (
             <p data-testid="error-tenantSlug" className="text-sm text-red-600">
               {t(errors.tenantSlug.message ?? "")}
