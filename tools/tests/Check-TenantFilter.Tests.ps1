@@ -59,4 +59,19 @@ Describe "check-tenant-filter" {
             Pop-Location
         }
     }
+
+    It "passes on Plan-0.3b sources (004_refresh_tokens.sql, RefreshTokenRepository.cs)" {
+        $repoRoot = Resolve-Path (Join-Path $PSScriptRoot ".." "..")
+        Push-Location $repoRoot
+        try {
+            $output = & pwsh -NoLogo -NoProfile -File $script:scriptPath *>&1
+            $LASTEXITCODE | Should -Be 0 -Because "Plan 0.3b migration + RefreshTokenRepository should pass the lint; output was:`n$($output -join "`n")"
+
+            Test-Path "api/migrations/004_refresh_tokens.sql" | Should -BeTrue
+            Test-Path "api/src/DwbHub.Data/Repositories/RefreshTokenRepository.cs" | Should -BeTrue
+        }
+        finally {
+            Pop-Location
+        }
+    }
 }

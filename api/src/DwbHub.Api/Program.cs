@@ -82,6 +82,13 @@ builder.Services.AddScoped<DwbHub.Core.Repositories.ILoginAttemptRepository,
                            DwbHub.Data.Repositories.LoginAttemptRepository>();
 builder.Services.AddScoped<ILoginService, LoginService>();
 
+// --- Refresh tokens (Plan 0.3b) ----------------------------------------
+builder.Services.AddSingleton<ITokenHasher, TokenHasher>();
+builder.Services.AddSingleton<ITokenGenerator, TokenGenerator>();
+builder.Services.AddScoped<DwbHub.Core.Repositories.IRefreshTokenRepository,
+                           DwbHub.Data.Repositories.RefreshTokenRepository>();
+builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+
 var jwtKeyBytes = Convert.FromBase64String(jwtSecret);
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
