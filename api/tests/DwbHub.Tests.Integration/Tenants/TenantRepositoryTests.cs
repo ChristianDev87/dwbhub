@@ -84,11 +84,11 @@ public sealed class TenantRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task ListAsync_returns_all_in_creation_order()
     {
-        var first  = await _sut.CreateAsync("Alpha", "alpha");
+        var first = await _sut.CreateAsync("Alpha", "alpha");
         await Task.Delay(20); // ensure distinct created_at timestamps
         var second = await _sut.CreateAsync("Bravo", "bravo");
         await Task.Delay(20);
-        var third  = await _sut.CreateAsync("Charlie", "charlie");
+        var third = await _sut.CreateAsync("Charlie", "charlie");
 
         var all = await _sut.ListAsync();
 
