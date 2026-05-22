@@ -6,11 +6,17 @@
     <PackageReference Include="Serilog.Sinks.File" />
     <PackageReference Include="Serilog.Sinks.Console" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
+    <PackageReference Include="MailKit" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DwbHub.Application\DwbHub.Application.csproj" />
     <ProjectReference Include="..\DwbHub.Core\DwbHub.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Email/Templates/**/*.html" />
+    <EmbeddedResource Include="Email/Templates/**/*.txt" />
   </ItemGroup>
 
 </Project>
