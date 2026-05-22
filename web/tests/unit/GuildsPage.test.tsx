@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { I18nextProvider } from "react-i18next";
-import i18n from "../../src/lib/i18n";
+import { i18n } from "../../src/lib/i18n";
 import { GuildsPage } from "../../src/app/GuildsPage";
 
 function renderPage() {
