@@ -29,4 +29,16 @@ Describe "check-tenant-filter" {
         $null = & pwsh -NoLogo -NoProfile -File $script:scriptPath -Path (Join-Path $script:fixturesDir "schema-qualified-allowlist.sql") *>&1
         $LASTEXITCODE | Should -Be 0
     }
+
+    It "passes on the real Plan-0.2 sources (api/migrations + api/src/DwbHub.Data)" {
+        $repoRoot = Resolve-Path (Join-Path $PSScriptRoot ".." "..")
+        Push-Location $repoRoot
+        try {
+            $output = & pwsh -NoLogo -NoProfile -File $script:scriptPath *>&1
+            $LASTEXITCODE | Should -Be 0 -Because "Plan 0.2 migrations should pass the lint; output was:`n$($output -join "`n")"
+        }
+        finally {
+            Pop-Location
+        }
+    }
 }
