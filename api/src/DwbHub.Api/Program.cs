@@ -1,4 +1,12 @@
+using Dapper;
+using DwbHub.Core.Repositories;
+using DwbHub.Data.Connections;
+using DwbHub.Data.Migrations;
+using DwbHub.Data.Repositories;
 using DwbHub.Infrastructure.Logging;
+using FluentMigrator.Runner;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Serilog;
 
 const int defaultRetainStartLogs = 10;
@@ -31,7 +39,35 @@ if (enableSwagger)
     });
 }
 
+// --- Database wiring (Plan 0.2) ----------------------------------------
+var connectionString = Environment.GetEnvironmentVariable("DWBHUB_DB_CONNECTION")
+    ?? throw new InvalidOperationException(
+        "DWBHUB_DB_CONNECTION env var is required (set in compose/.env or your shell).");
+
+// Dapper: map snake_case columns to PascalCase record properties.
+DefaultTypeMap.MatchNamesWithUnderscores = true;
+
+builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
+builder.Services.AddScoped<IDbConnectionFactory, NpgsqlConnectionFactory>();
+builder.Services.AddScoped<ITenantRepository, TenantRepository>();
+
+builder.Services
+    .AddFluentMigratorCore()
+    .ConfigureRunner(rb => rb
+        .AddPostgres()
+        .WithGlobalConnectionString(connectionString)
+        .ScanIn(typeof(Migration00001_Tenants).Assembly).For.Migrations())
+    .AddLogging(lb => lb.AddFluentMigratorConsole());
+
 var app = builder.Build();
+
+// --- Apply DB migrations (Plan 0.2) ------------------------------------
+using (var scope = app.Services.CreateScope())
+{
+    var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+    runner.MigrateUp();
+    Log.Information("[Migrations] Applied up to current version (VersionInfo table)");
+}
 
 if (enableSwagger)
 {
