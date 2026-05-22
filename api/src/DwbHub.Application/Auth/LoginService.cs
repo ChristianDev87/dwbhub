@@ -1,4 +1,5 @@
 using System.Net;
+using DwbHub.Application.Audit;
 using DwbHub.Core.Entities;
 using DwbHub.Core.Repositories;
 
@@ -10,7 +11,8 @@ public sealed class LoginService(
     ILoginAttemptRepository attempts,
     IPasswordHasher hasher,
     IJwtIssuer issuer,
-    IRefreshTokenService refreshTokenService) : ILoginService
+    IRefreshTokenService refreshTokenService,
+    IAuditWriter auditWriter) : ILoginService
 {
     private const int LockoutThreshold = 5;
     private static readonly TimeSpan LockoutWindow = TimeSpan.FromMinutes(15);
@@ -23,6 +25,10 @@ public sealed class LoginService(
         var failedCount = await attempts.CountFailedSinceAsync(email, ipAddress, since, ct).ConfigureAwait(false);
         if (failedCount >= LockoutThreshold)
         {
+            await auditWriter.RecordAsync(new AuditEvent(
+                TenantId: null, ActorUserId: null, EventType: "auth.login.locked_out",
+                Payload: new Dictionary<string, object?> { ["tenantSlug"] = tenantSlug, ["email"] = email },
+                IpAddress: ipAddress), ct).ConfigureAwait(false);
             return new LoginOutcome.LockedOut((int)LockoutWindow.TotalSeconds);
         }
 
@@ -32,6 +38,13 @@ public sealed class LoginService(
         {
             hasher.VerifyDecoy(password);
             await attempts.RecordAsync(email, ipAddress, success: false, ct).ConfigureAwait(false);
+            await auditWriter.RecordAsync(new AuditEvent(
+                TenantId: null, ActorUserId: null, EventType: "auth.login.failed",
+                Payload: new Dictionary<string, object?>
+                {
+                    ["tenantSlug"] = tenantSlug, ["email"] = email, ["reason"] = "unknown_tenant",
+                },
+                IpAddress: ipAddress), ct).ConfigureAwait(false);
             return new LoginOutcome.InvalidCredentials();
         }
 
@@ -41,15 +54,28 @@ public sealed class LoginService(
         {
             hasher.VerifyDecoy(password);
             await attempts.RecordAsync(email, ipAddress, success: false, ct).ConfigureAwait(false);
+            await auditWriter.RecordAsync(new AuditEvent(
+                TenantId: tenant.Id, ActorUserId: null, EventType: "auth.login.failed",
+                Payload: new Dictionary<string, object?>
+                {
+                    ["tenantSlug"] = tenantSlug, ["email"] = email,
+                    ["reason"] = user is null ? "unknown_user" : "inactive_user",
+                },
+                IpAddress: ipAddress), ct).ConfigureAwait(false);
             return new LoginOutcome.InvalidCredentials();
         }
 
-        // 4. Email-verify gate (Plan 0.3c). Before BCrypt: don't burn CPU + don't leak
-        // timing info to a caller who'll be rejected anyway. Failed-attempt still
-        // recorded so brute-force on unverified accounts still trips lockout.
+        // 4. Email-verify gate
         if (user.EmailVerifiedAt is null)
         {
             await attempts.RecordAsync(email, ipAddress, success: false, ct).ConfigureAwait(false);
+            await auditWriter.RecordAsync(new AuditEvent(
+                TenantId: tenant.Id, ActorUserId: user.Id, EventType: "auth.login.email_not_verified",
+                Payload: new Dictionary<string, object?>
+                {
+                    ["tenantSlug"] = tenantSlug, ["email"] = email,
+                },
+                IpAddress: ipAddress), ct).ConfigureAwait(false);
             return new LoginOutcome.EmailNotVerified(user.Email);
         }
 
@@ -57,6 +83,13 @@ public sealed class LoginService(
         if (!hasher.Verify(password, user.PasswordHash))
         {
             await attempts.RecordAsync(email, ipAddress, success: false, ct).ConfigureAwait(false);
+            await auditWriter.RecordAsync(new AuditEvent(
+                TenantId: tenant.Id, ActorUserId: user.Id, EventType: "auth.login.failed",
+                Payload: new Dictionary<string, object?>
+                {
+                    ["tenantSlug"] = tenantSlug, ["email"] = email, ["reason"] = "wrong_password",
+                },
+                IpAddress: ipAddress), ct).ConfigureAwait(false);
             return new LoginOutcome.InvalidCredentials();
         }
 
@@ -64,6 +97,10 @@ public sealed class LoginService(
         await attempts.RecordAsync(email, ipAddress, success: true, ct).ConfigureAwait(false);
         var token = issuer.Issue(user, tenant);
         var refreshToken = await refreshTokenService.IssueForLoginAsync(user, tenant, ipAddress, userAgent: null, ct).ConfigureAwait(false);
+        await auditWriter.RecordAsync(new AuditEvent(
+            TenantId: tenant.Id, ActorUserId: user.Id, EventType: "auth.login.success",
+            Payload: new Dictionary<string, object?> { ["tenantSlug"] = tenantSlug },
+            IpAddress: ipAddress), ct).ConfigureAwait(false);
         return new LoginOutcome.Success(token, refreshToken, user, tenant);
     }
 }
