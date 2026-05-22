@@ -49,11 +49,11 @@ public sealed class PasswordResetConfirmTests : IAsyncLifetime
         _tokenHasher = new TokenHasher();
         _tokenGenerator = new TokenGenerator();
         var jwtIssuer = new JwtIssuer(Base64Key);
-        _refreshService = new RefreshTokenService(_refreshTokens, _users, _tokenHasher, _tokenGenerator, jwtIssuer, _tenants);
         var renderer = new TemplateEmailRenderer();
         var sender = new MailKitEmailSender(_mail.SmtpHost, _mail.SmtpPort, "DwbHub <noreply@test.local>");
         var auditRepo = new DwbHub.Data.Repositories.AuditLogRepository(factory);
         var auditWriter = new DwbHub.Application.Audit.AuditWriter(auditRepo);
+        _refreshService = new RefreshTokenService(_refreshTokens, _users, _tokenHasher, _tokenGenerator, jwtIssuer, _tenants, auditWriter);
         _sut = new PasswordResetService(
             _authTokens, _tenants, _users,
             _tokenHasher, _tokenGenerator, _passwordHasher, renderer, sender,

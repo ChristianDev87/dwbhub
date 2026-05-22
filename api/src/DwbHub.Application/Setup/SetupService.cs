@@ -1,4 +1,5 @@
 using System.Net;
+using DwbHub.Application.Audit;
 using DwbHub.Application.Auth;
 using DwbHub.Core.Entities;
 using DwbHub.Core.Repositories;
@@ -15,7 +16,8 @@ public sealed class SetupService(
     IPasswordHasher passwordHasher,
     IEmailVerificationService emailVerification,
     IBootstrapTokenWriter tokenWriter,
-    ILogger<SetupService> logger) : ISetupService
+    ILogger<SetupService> logger,
+    IAuditWriter auditWriter) : ISetupService
 {
     public async Task<SetupStatus> GetStatusAsync(CancellationToken ct = default)
     {
@@ -135,6 +137,11 @@ public sealed class SetupService(
                 "[Setup] Could not delete bootstrap-token file at {Location}. Lock row is consumed; file deletion is hygiene only.",
                 tokenWriter.Location);
         }
+
+        await auditWriter.RecordAsync(new AuditEvent(
+            TenantId: tenantId, ActorUserId: ownerUserId, EventType: "setup.completed",
+            Payload: new Dictionary<string, object?> { ["tenantSlug"] = tenant.Slug },
+            IpAddress: ip, UserAgent: userAgent), ct).ConfigureAwait(false);
 
         return new SetupOutcome.Success(
             TenantId: tenantId,

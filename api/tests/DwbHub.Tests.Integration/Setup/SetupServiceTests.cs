@@ -60,7 +60,7 @@ public sealed class SetupServiceTests : IAsyncLifetime
         _sut = new SetupService(
             _locks, _tenants, _users,
             _tokenHasher, _passwordHasher, _emailVerification, _writer,
-            NullLogger<SetupService>.Instance);
+            NullLogger<SetupService>.Instance, auditWriter);
     }
 
     public async Task InitializeAsync()
@@ -188,6 +188,20 @@ public sealed class SetupServiceTests : IAsyncLifetime
         var outcome = await _sut.CompleteAsync(MakeRequest(token), TestIp, null);
 
         outcome.Should().BeOfType<SetupOutcome.SlugInUse>();
+    }
+
+    [Fact]
+    public async Task Setup_completed_emits_setup_completed_event()
+    {
+        var token = await SeedPendingLockAsync();
+        var outcome = await _sut.CompleteAsync(MakeRequest(token), ip: null, userAgent: null);
+        outcome.Should().BeOfType<SetupOutcome.Success>();
+
+        await using var conn = _ds.CreateConnection();
+        await conn.OpenAsync();
+        var et = await conn.QuerySingleAsync<string?>(
+            "SELECT event_type FROM audit_log WHERE event_type = 'setup.completed' LIMIT 1");
+        et.Should().Be("setup.completed");
     }
 
     private sealed class InMemoryWriter : IBootstrapTokenWriter

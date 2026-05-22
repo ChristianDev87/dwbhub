@@ -45,7 +45,7 @@ public sealed class LoginIntegrationTests : IAsyncLifetime
         var auditRepo = new DwbHub.Data.Repositories.AuditLogRepository(factory);
         var auditWriter = new DwbHub.Application.Audit.AuditWriter(auditRepo);
         var refreshTokenService = new RefreshTokenService(
-            refreshTokens, _users, tokenHasher, tokenGenerator, issuer, _tenants);
+            refreshTokens, _users, tokenHasher, tokenGenerator, issuer, _tenants, auditWriter);
         _sut = new LoginService(_tenants, _users, attempts, _hasher, issuer, refreshTokenService, auditWriter);
     }
 

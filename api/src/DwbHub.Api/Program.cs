@@ -88,7 +88,19 @@ builder.Services.AddSingleton<ITokenHasher, TokenHasher>();
 builder.Services.AddSingleton<ITokenGenerator, TokenGenerator>();
 builder.Services.AddScoped<DwbHub.Core.Repositories.IRefreshTokenRepository,
                            DwbHub.Data.Repositories.RefreshTokenRepository>();
-builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+builder.Services.AddScoped<IRefreshTokenService>(sp =>
+{
+    var auditRepo = new DwbHub.Data.Repositories.AuditLogRepository(sp.GetRequiredService<IDbConnectionFactory>());
+    var auditWriter = new DwbHub.Application.Audit.AuditWriter(auditRepo);
+    return new RefreshTokenService(
+        sp.GetRequiredService<DwbHub.Core.Repositories.IRefreshTokenRepository>(),
+        sp.GetRequiredService<DwbHub.Core.Repositories.IUserRepository>(),
+        sp.GetRequiredService<ITokenHasher>(),
+        sp.GetRequiredService<ITokenGenerator>(),
+        sp.GetRequiredService<IJwtIssuer>(),
+        sp.GetRequiredService<DwbHub.Core.Repositories.ITenantRepository>(),
+        auditWriter);
+});
 
 // --- Email + verify + reset (Plan 0.3c) --------------------------------
 var smtpHost = Environment.GetEnvironmentVariable("DWBHUB_SMTP_HOST")
@@ -145,7 +157,21 @@ builder.Services.AddSingleton<IBootstrapTokenWriter>(_ =>
 builder.Services.AddScoped<DwbHub.Core.Repositories.ISystemBootstrapLockRepository,
                            DwbHub.Data.Repositories.SystemBootstrapLockRepository>();
 builder.Services.AddScoped<IBootstrapTokenProvisioner, BootstrapTokenProvisioner>();
-builder.Services.AddScoped<ISetupService, SetupService>();
+builder.Services.AddScoped<ISetupService>(sp =>
+{
+    var auditRepo = new DwbHub.Data.Repositories.AuditLogRepository(sp.GetRequiredService<IDbConnectionFactory>());
+    var auditWriter = new DwbHub.Application.Audit.AuditWriter(auditRepo);
+    return new SetupService(
+        sp.GetRequiredService<DwbHub.Core.Repositories.ISystemBootstrapLockRepository>(),
+        sp.GetRequiredService<DwbHub.Core.Repositories.ITenantRepository>(),
+        sp.GetRequiredService<DwbHub.Core.Repositories.IUserRepository>(),
+        sp.GetRequiredService<ITokenHasher>(),
+        sp.GetRequiredService<IPasswordHasher>(),
+        sp.GetRequiredService<IEmailVerificationService>(),
+        sp.GetRequiredService<IBootstrapTokenWriter>(),
+        sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SetupService>>(),
+        auditWriter);
+});
 
 var jwtKeyBytes = Convert.FromBase64String(jwtSecret);
 builder.Services
