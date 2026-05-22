@@ -47,6 +47,9 @@ var connectionString = Environment.GetEnvironmentVariable("DWBHUB_DB_CONNECTION"
 // Dapper: map snake_case columns to PascalCase record properties.
 DefaultTypeMap.MatchNamesWithUnderscores = true;
 
+// Dapper: map Npgsql's DateTime (UTC) return from TIMESTAMPTZ to DateTimeOffset.
+SqlMapper.AddTypeHandler(new DateTimeOffsetTypeHandler());
+
 builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
 builder.Services.AddScoped<IDbConnectionFactory, NpgsqlConnectionFactory>();
 builder.Services.AddScoped<ITenantRepository, TenantRepository>();
@@ -83,3 +86,20 @@ Log.Information("DwbHub.Api starting. LogFile={LogFile}", logFilePath);
 app.Run();
 
 public partial class Program;
+
+/// <summary>
+/// Converts Npgsql's UTC DateTime (returned for TIMESTAMPTZ) to DateTimeOffset
+/// so Dapper can materialize records that use DateTimeOffset for timestamp columns.
+/// </summary>
+file sealed class DateTimeOffsetTypeHandler : Dapper.SqlMapper.TypeHandler<DateTimeOffset>
+{
+    public override DateTimeOffset Parse(object value) => value switch
+    {
+        DateTimeOffset dto => dto,
+        DateTime dt => new DateTimeOffset(dt, TimeSpan.Zero),
+        _ => throw new InvalidCastException($"Cannot convert {value?.GetType().Name} to DateTimeOffset")
+    };
+
+    public override void SetValue(System.Data.IDbDataParameter parameter, DateTimeOffset value)
+        => parameter.Value = value;
+}

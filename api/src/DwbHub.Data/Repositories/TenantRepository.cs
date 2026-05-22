@@ -25,7 +25,7 @@ public sealed class TenantRepository(IDbConnectionFactory connectionFactory) : I
         const string sql = """
             SELECT id, name, slug, created_at, updated_at
             FROM tenants
-            WHERE slug = @Slug;
+            WHERE slug = @Slug::citext;
             """;
         return await conn.QuerySingleOrDefaultAsync<Tenant>(
             new CommandDefinition(sql, new { Slug = slug }, cancellationToken: ct))

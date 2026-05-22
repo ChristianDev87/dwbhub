@@ -21,6 +21,7 @@
   <ItemGroup>
     <EmbeddedResource Include="..\..\migrations\*.sql">
       <LogicalName>%(Filename)%(Extension)</LogicalName>
+      <ManifestResourceName>%(Filename)%(Extension)</ManifestResourceName>
     </EmbeddedResource>
   </ItemGroup>
 

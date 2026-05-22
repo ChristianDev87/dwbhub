@@ -32,7 +32,8 @@ public sealed class PostgresFixture : IAsyncLifetime
             .ConfigureRunner(rb => rb
                 .AddPostgres()
                 .WithGlobalConnectionString(ConnectionString)
-                .ScanIn(typeof(Migration00001_Tenants).Assembly).For.Migrations())
+                .ScanIn(typeof(Migration00001_Tenants).Assembly).For.Migrations()
+                .ScanIn(typeof(Migration00001_Tenants).Assembly).For.EmbeddedResources())
             .AddLogging(lb => lb.AddFluentMigratorConsole())
             .BuildServiceProvider(false);
 
