@@ -78,6 +78,13 @@ $mailpitContainer = "dwbhub-openapi-mp-" + ([guid]::NewGuid().ToString("N").Subs
 $originalSmtpHost = $env:DWBHUB_SMTP_HOST
 $originalSmtpPort = $env:DWBHUB_SMTP_PORT
 $originalSmtpFrom = $env:DWBHUB_SMTP_FROM
+$originalBootstrapTokenFile = $env:DWBHUB_BOOTSTRAP_TOKEN_FILE
+
+# The default bootstrap-token path (/data/dwbhub/bootstrap-token.txt) is only
+# writable in the production docker-compose stack. When `swagger tofile` boots
+# the API host directly on a developer machine or CI runner, /data does not
+# exist (or isn't writable). Redirect to a per-invocation temp file.
+$env:DWBHUB_BOOTSTRAP_TOKEN_FILE = Join-Path ([IO.Path]::GetTempPath()) "dwbhub-bootstrap-$([guid]::NewGuid().ToString('N').Substring(0,8)).txt"
 
 Write-Host "Starting temporary Mailpit ($mailpitContainer) ..." -ForegroundColor Cyan
 docker run -d --name $mailpitContainer -p 0:1025 axllent/mailpit:v1.21 | Out-Null
@@ -133,6 +140,10 @@ finally {
     $env:DWBHUB_SMTP_HOST       = $originalSmtpHost
     $env:DWBHUB_SMTP_PORT       = $originalSmtpPort
     $env:DWBHUB_SMTP_FROM       = $originalSmtpFrom
+    if ($env:DWBHUB_BOOTSTRAP_TOKEN_FILE -and (Test-Path $env:DWBHUB_BOOTSTRAP_TOKEN_FILE)) {
+        Remove-Item $env:DWBHUB_BOOTSTRAP_TOKEN_FILE -Force -ErrorAction SilentlyContinue
+    }
+    $env:DWBHUB_BOOTSTRAP_TOKEN_FILE = $originalBootstrapTokenFile
     Write-Host "Removing temporary Mailpit ($mailpitContainer) ..." -ForegroundColor DarkGray
     docker rm -f $mailpitContainer 2>&1 | Out-Null
     Write-Host "Removing temporary Postgres ($pgContainer) ..." -ForegroundColor DarkGray
