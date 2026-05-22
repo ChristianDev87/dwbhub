@@ -21,13 +21,8 @@ if (-not (Test-Path $dllRelative)) { throw "Build artifact not found: $dllRelati
 Write-Host "Dumping OpenAPI document v1 ..." -ForegroundColor Cyan
 # ASPNETCORE_ENVIRONMENT=Development is required so that AddSwaggerGen / SwaggerDoc("v1")
 # is registered; the flag is gated on IsDevelopment() in Program.cs.
-# DWBHUB_SKIP_MIGRATIONS=1 makes Program.cs accept a missing DWBHUB_DB_CONNECTION
-# and skip the boot-time MigrateUp call — both required because `swagger tofile`
-# reflects over the built DLL and triggers builder.Build() without a real DB.
-$originalEnv          = $env:ASPNETCORE_ENVIRONMENT
-$originalSkipMig      = $env:DWBHUB_SKIP_MIGRATIONS
+$originalEnv = $env:ASPNETCORE_ENVIRONMENT
 $env:ASPNETCORE_ENVIRONMENT = "Development"
-$env:DWBHUB_SKIP_MIGRATIONS = "1"
 try {
     dotnet tool run swagger tofile --yaml --output $tempSpec $dllRelative v1
     if ($LASTEXITCODE -ne 0) { throw "swagger tofile failed." }
@@ -64,6 +59,5 @@ try {
 }
 finally {
     $env:ASPNETCORE_ENVIRONMENT = $originalEnv
-    $env:DWBHUB_SKIP_MIGRATIONS = $originalSkipMig
     Remove-Item $tempSpec -ErrorAction SilentlyContinue
 }

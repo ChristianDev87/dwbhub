@@ -40,16 +40,9 @@ if (enableSwagger)
 }
 
 // --- Database wiring (Plan 0.2) ----------------------------------------
-// DWBHUB_SKIP_MIGRATIONS=1 also lets the connection string default to a dummy
-// so tooling that reflects over the built DLL (e.g. `swagger tofile`) doesn't
-// crash on a missing env var. The dummy is never used in that mode because
-// migrations are skipped and no HTTP request runs.
-var skipMigrations = Environment.GetEnvironmentVariable("DWBHUB_SKIP_MIGRATIONS") == "1";
 var connectionString = Environment.GetEnvironmentVariable("DWBHUB_DB_CONNECTION")
-    ?? (skipMigrations
-        ? "Host=localhost;Username=tooling;Password=tooling;Database=tooling"
-        : throw new InvalidOperationException(
-            "DWBHUB_DB_CONNECTION env var is required (set in compose/.env or your shell)."));
+    ?? throw new InvalidOperationException(
+        "DWBHUB_DB_CONNECTION env var is required (set in compose/.env or your shell).");
 
 // Dapper: map snake_case columns to PascalCase record properties.
 DefaultTypeMap.MatchNamesWithUnderscores = true;
@@ -73,10 +66,8 @@ builder.Services
 var app = builder.Build();
 
 // --- Apply DB migrations (Plan 0.2) ------------------------------------
-// DWBHUB_SKIP_MIGRATIONS=1 is honoured here (see top of file for full rationale).
-if (!skipMigrations)
+using (var scope = app.Services.CreateScope())
 {
-    using var scope = app.Services.CreateScope();
     var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
     runner.MigrateUp();
     Log.Information("[Migrations] Applied up to current version (VersionInfo table)");
