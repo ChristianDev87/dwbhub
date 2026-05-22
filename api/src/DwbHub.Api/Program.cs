@@ -59,7 +59,8 @@ builder.Services
     .ConfigureRunner(rb => rb
         .AddPostgres()
         .WithGlobalConnectionString(connectionString)
-        .ScanIn(typeof(Migration00001_Tenants).Assembly).For.Migrations())
+        .ScanIn(typeof(Migration00001_Tenants).Assembly).For.Migrations()
+        .ScanIn(typeof(Migration00001_Tenants).Assembly).For.EmbeddedResources())
     .AddLogging(lb => lb.AddFluentMigratorConsole());
 
 var app = builder.Build();
