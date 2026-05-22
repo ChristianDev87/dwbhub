@@ -149,9 +149,13 @@ builder.Services.AddSingleton<DwbHub.Core.Repositories.IAuditVerifyStateReposito
 builder.Services.AddScoped<DwbHub.Application.Audit.IAuditWriter,
                            DwbHub.Application.Audit.AuditWriter>();
 
-// --- Tenant resolution (Plan 0.5) ---------------------------------------
+// --- Tenant resolution (Plan 0.5 + 0.6) --------------------------------
 builder.Services.AddScoped<DwbHub.Application.Tenancy.ITenantContext,
                            DwbHub.Infrastructure.Tenancy.TenantContext>();
+builder.Services.AddScoped<DwbHub.Application.Tenancy.IGuildContext,
+                           DwbHub.Infrastructure.Tenancy.GuildContext>();
+builder.Services.AddScoped<DwbHub.Core.Repositories.IGuildRepository,
+                           DwbHub.Data.Repositories.GuildRepository>();
 builder.Services.AddScoped<DwbHub.Infrastructure.Background.AuditVerifyCore>();
 builder.Services.AddScoped<DwbHub.Application.Background.IAuditVerifyIncrementalJob,
                            DwbHub.Infrastructure.Background.AuditVerifyIncrementalJob>();

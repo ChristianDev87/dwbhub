@@ -35,4 +35,15 @@ public interface IGuildRepository
     /// Deletes a guild by public_id, tenant-scoped. Returns true iff a row was deleted.
     /// </summary>
     Task<bool> DeleteAsync(Guid publicId, long tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Resolves tenant + guild in a single Postgres round-trip via a combined CTE.
+    /// Returns:
+    ///   - (null, null) when the slug does not match any tenant.
+    ///   - (tenant, null) when the slug matches but the publicId does not exist
+    ///     in this tenant (or exists only in a different tenant — info-leak protection).
+    ///   - (tenant, guild) on full resolution.
+    /// </summary>
+    Task<(DwbHub.Core.Entities.Tenant? Tenant, DwbHub.Core.Entities.Guild? Guild)>
+        ResolveTenantAndGuildAsync(string slug, Guid guildPublicId, CancellationToken ct = default);
 }

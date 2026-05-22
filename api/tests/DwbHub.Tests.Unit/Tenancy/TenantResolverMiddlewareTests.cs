@@ -27,9 +27,11 @@ public sealed class TenantResolverMiddlewareTests
     private static TestServer BuildServer(
         Mock<ITenantRepository> tenants,
         Mock<IAuditWriter> auditWriter,
+        Mock<IGuildRepository>? guilds = null,
         long? jwtTid = null,
         long? jwtSub = null)
     {
+        guilds ??= new Mock<IGuildRepository>(MockBehavior.Loose);
         var host = new HostBuilder()
             .ConfigureWebHost(webBuilder =>
             {
@@ -37,8 +39,10 @@ public sealed class TenantResolverMiddlewareTests
                 webBuilder.ConfigureServices(services =>
                 {
                     services.AddSingleton<ITenantRepository>(tenants.Object);
+                    services.AddSingleton<IGuildRepository>(guilds.Object);
                     services.AddSingleton<IAuditWriter>(auditWriter.Object);
                     services.AddScoped<ITenantContext, TenantContext>();
+                    services.AddScoped<IGuildContext, GuildContext>();
                     services.AddAuthentication("Test")
                         .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", _ => { });
                     services.AddRouting();
@@ -51,9 +55,10 @@ public sealed class TenantResolverMiddlewareTests
                     app.Run(async ctx =>
                     {
                         var tctx = ctx.RequestServices.GetRequiredService<ITenantContext>();
+                        var gctx = ctx.RequestServices.GetRequiredService<IGuildContext>();
                         ctx.Response.StatusCode = 200;
                         await ctx.Response.WriteAsync(
-                            $"OK,resolved={tctx.IsResolved},id={tctx.Current?.Id}");
+                            $"OK,t={tctx.Current?.Id},g={gctx.Current?.PublicId}");
                     });
                 });
             })
@@ -62,6 +67,13 @@ public sealed class TenantResolverMiddlewareTests
         host.Start();
         return host.GetTestServer();
     }
+
+    private static Guild AcmeGuild(long tenantId, Guid pid) => new(
+        Id: 7, PublicId: pid, TenantId: tenantId,
+        DiscordGuildId: "1234567890123456789", DisplayName: "Production",
+        IsActive: true, RegisteredByUserId: 99,
+        RegisteredAt: DateTimeOffset.UtcNow, LastConnectedAt: null,
+        CreatedAt: DateTimeOffset.UtcNow, UpdatedAt: DateTimeOffset.UtcNow);
 
     [Fact]
     public async Task Path_without_tenant_prefix_passes_through()
@@ -73,7 +85,7 @@ public sealed class TenantResolverMiddlewareTests
 
         var res = await client.GetAsync("/api/health");
         res.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await res.Content.ReadAsStringAsync()).Should().Contain("resolved=False");
+        (await res.Content.ReadAsStringAsync()).Should().Contain("t=,g=");
         tenants.VerifyNoOtherCalls();
         audit.VerifyNoOtherCalls();
     }
@@ -91,7 +103,7 @@ public sealed class TenantResolverMiddlewareTests
 
         var res = await client.GetAsync("/api/t/acme/dashboard");
         res.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await res.Content.ReadAsStringAsync()).Should().Contain("id=42");
+        (await res.Content.ReadAsStringAsync()).Should().Contain("t=42");
     }
 
     [Fact]
@@ -140,6 +152,79 @@ public sealed class TenantResolverMiddlewareTests
                 e.EventType == "auth.unknown_tenant_access"
                 && e.TenantId == null
                 && e.Payload.ContainsKey("pathSlug")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Guild_scoped_path_with_matching_jwt_populates_both_contexts()
+    {
+        var tenant = AcmeTenant();
+        var pid = Guid.NewGuid();
+        var guild = AcmeGuild(tenant.Id, pid);
+
+        var tenants = new Mock<ITenantRepository>(MockBehavior.Loose);
+        var guilds = new Mock<IGuildRepository>(MockBehavior.Strict);
+        guilds.Setup(r => r.ResolveTenantAndGuildAsync("acme", pid, It.IsAny<CancellationToken>()))
+              .ReturnsAsync((tenant, guild));
+        var audit = new Mock<IAuditWriter>(MockBehavior.Strict);
+
+        using var server = BuildServer(tenants, audit, guilds, jwtTid: tenant.Id, jwtSub: 1);
+        var client = server.CreateClient();
+
+        var res = await client.GetAsync($"/api/t/acme/g/{pid:D}/anything");
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await res.Content.ReadAsStringAsync();
+        body.Should().Contain($"t={tenant.Id}");
+        body.Should().Contain($"g={pid}");
+    }
+
+    [Fact]
+    public async Task Guild_scoped_path_with_unknown_guild_returns_404_and_emits_audit()
+    {
+        var tenant = AcmeTenant();
+        var pid = Guid.NewGuid();
+
+        var tenants = new Mock<ITenantRepository>(MockBehavior.Loose);
+        var guilds = new Mock<IGuildRepository>(MockBehavior.Strict);
+        guilds.Setup(r => r.ResolveTenantAndGuildAsync("acme", pid, It.IsAny<CancellationToken>()))
+              .ReturnsAsync((tenant, (Guild?)null));
+        var audit = new Mock<IAuditWriter>();
+
+        using var server = BuildServer(tenants, audit, guilds, jwtTid: tenant.Id, jwtSub: 1);
+        var client = server.CreateClient();
+
+        var res = await client.GetAsync($"/api/t/acme/g/{pid:D}/anything");
+        res.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("guild_not_found");
+
+        audit.Verify(a => a.RecordAsync(
+            It.Is<AuditEvent>(e =>
+                e.EventType == "guild.unknown_access"
+                && e.TenantId == tenant.Id
+                && e.Payload.ContainsKey("attemptedPublicId")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Guild_scoped_path_for_unknown_tenant_returns_404_and_emits_tenant_audit()
+    {
+        var pid = Guid.NewGuid();
+
+        var tenants = new Mock<ITenantRepository>(MockBehavior.Loose);
+        var guilds = new Mock<IGuildRepository>(MockBehavior.Strict);
+        guilds.Setup(r => r.ResolveTenantAndGuildAsync("nope", pid, It.IsAny<CancellationToken>()))
+              .ReturnsAsync(((Tenant?)null, (Guild?)null));
+        var audit = new Mock<IAuditWriter>();
+
+        using var server = BuildServer(tenants, audit, guilds);
+        var client = server.CreateClient();
+
+        var res = await client.GetAsync($"/api/t/nope/g/{pid:D}/anything");
+        res.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("tenant_not_found");
+
+        audit.Verify(a => a.RecordAsync(
+            It.Is<AuditEvent>(e => e.EventType == "auth.unknown_tenant_access"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 }
