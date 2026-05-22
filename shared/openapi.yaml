@@ -27,6 +27,20 @@ paths:
       responses:
         '200':
           description: OK
+  /api/auth/refresh:
+    post:
+      tags:
+        - Auth
+      responses:
+        '200':
+          description: OK
+  /api/auth/logout:
+    post:
+      tags:
+        - Auth
+      responses:
+        '200':
+          description: OK
   /api/auth/me:
     get:
       tags:
