@@ -74,5 +74,10 @@
     "lockedOut": "Zu viele Fehlversuche. Versuche es in {{seconds}} Sekunden erneut.",
     "emailNotVerified": "E-Mail nicht verifiziert — leite weiter…",
     "networkError": "Verbindung zum Server fehlgeschlagen."
+  },
+  "dashboard": {
+    "welcome": "Willkommen, {{name}}",
+    "tenant": "Tenant: {{name}}",
+    "logout": "Abmelden"
   }
 }

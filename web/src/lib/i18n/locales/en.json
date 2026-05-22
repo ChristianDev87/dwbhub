@@ -74,5 +74,10 @@
     "lockedOut": "Too many failed attempts. Try again in {{seconds}} seconds.",
     "emailNotVerified": "Email not verified — redirecting…",
     "networkError": "Could not reach the server."
+  },
+  "dashboard": {
+    "welcome": "Welcome, {{name}}",
+    "tenant": "Tenant: {{name}}",
+    "logout": "Sign out"
   }
 }
