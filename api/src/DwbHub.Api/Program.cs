@@ -104,25 +104,37 @@ builder.Services.AddSingleton<IEmailSender>(_ => new DwbHub.Infrastructure.Email
 builder.Services.AddSingleton<IEmailTemplateRenderer, DwbHub.Infrastructure.Email.TemplateEmailRenderer>();
 builder.Services.AddScoped<DwbHub.Core.Repositories.IAuthTokenRepository,
                            DwbHub.Data.Repositories.AuthTokenRepository>();
-builder.Services.AddScoped<IEmailVerificationService>(sp => new EmailVerificationService(
-    sp.GetRequiredService<DwbHub.Core.Repositories.IAuthTokenRepository>(),
-    sp.GetRequiredService<DwbHub.Core.Repositories.ITenantRepository>(),
-    sp.GetRequiredService<DwbHub.Core.Repositories.IUserRepository>(),
-    sp.GetRequiredService<ITokenHasher>(),
-    sp.GetRequiredService<ITokenGenerator>(),
-    sp.GetRequiredService<IEmailTemplateRenderer>(),
-    sp.GetRequiredService<IEmailSender>(),
-    publicBaseUrl));
-builder.Services.AddScoped<IPasswordResetService>(sp => new PasswordResetService(
-    sp.GetRequiredService<DwbHub.Core.Repositories.IAuthTokenRepository>(),
-    sp.GetRequiredService<DwbHub.Core.Repositories.ITenantRepository>(),
-    sp.GetRequiredService<DwbHub.Core.Repositories.IUserRepository>(),
-    sp.GetRequiredService<ITokenHasher>(),
-    sp.GetRequiredService<ITokenGenerator>(),
-    sp.GetRequiredService<IPasswordHasher>(),
-    sp.GetRequiredService<IEmailTemplateRenderer>(),
-    sp.GetRequiredService<IEmailSender>(),
-    publicBaseUrl));
+builder.Services.AddScoped<IEmailVerificationService>(sp =>
+{
+    var auditRepo = new DwbHub.Data.Repositories.AuditLogRepository(sp.GetRequiredService<IDbConnectionFactory>());
+    var auditWriter = new DwbHub.Application.Audit.AuditWriter(auditRepo);
+    return new EmailVerificationService(
+        sp.GetRequiredService<DwbHub.Core.Repositories.IAuthTokenRepository>(),
+        sp.GetRequiredService<DwbHub.Core.Repositories.ITenantRepository>(),
+        sp.GetRequiredService<DwbHub.Core.Repositories.IUserRepository>(),
+        sp.GetRequiredService<ITokenHasher>(),
+        sp.GetRequiredService<ITokenGenerator>(),
+        sp.GetRequiredService<IEmailTemplateRenderer>(),
+        sp.GetRequiredService<IEmailSender>(),
+        publicBaseUrl,
+        auditWriter);
+});
+builder.Services.AddScoped<IPasswordResetService>(sp =>
+{
+    var auditRepo = new DwbHub.Data.Repositories.AuditLogRepository(sp.GetRequiredService<IDbConnectionFactory>());
+    var auditWriter = new DwbHub.Application.Audit.AuditWriter(auditRepo);
+    return new PasswordResetService(
+        sp.GetRequiredService<DwbHub.Core.Repositories.IAuthTokenRepository>(),
+        sp.GetRequiredService<DwbHub.Core.Repositories.ITenantRepository>(),
+        sp.GetRequiredService<DwbHub.Core.Repositories.IUserRepository>(),
+        sp.GetRequiredService<ITokenHasher>(),
+        sp.GetRequiredService<ITokenGenerator>(),
+        sp.GetRequiredService<IPasswordHasher>(),
+        sp.GetRequiredService<IEmailTemplateRenderer>(),
+        sp.GetRequiredService<IEmailSender>(),
+        publicBaseUrl,
+        auditWriter);
+});
 
 // --- Setup wizard (Plan 0.3d) ------------------------------------------
 var bootstrapTokenFile = Environment.GetEnvironmentVariable("DWBHUB_BOOTSTRAP_TOKEN_FILE")

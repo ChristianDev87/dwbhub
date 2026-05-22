@@ -51,10 +51,12 @@ public sealed class SetupServiceTests : IAsyncLifetime
         _writer = new InMemoryWriter();
         var renderer = new TemplateEmailRenderer();
         var sender = new MailKitEmailSender(_mail.SmtpHost, _mail.SmtpPort, "DwbHub <noreply@test.local>");
+        var auditRepo = new DwbHub.Data.Repositories.AuditLogRepository(factory);
+        var auditWriter = new DwbHub.Application.Audit.AuditWriter(auditRepo);
         _emailVerification = new EmailVerificationService(
             new AuthTokenRepository(factory), _tenants, _users,
             _tokenHasher, _tokenGenerator, renderer, sender,
-            publicBaseUrl: "http://localhost:5173");
+            publicBaseUrl: "http://localhost:5173", auditWriter);
         _sut = new SetupService(
             _locks, _tenants, _users,
             _tokenHasher, _passwordHasher, _emailVerification, _writer,

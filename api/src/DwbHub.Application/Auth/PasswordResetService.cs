@@ -1,4 +1,5 @@
 using System.Net;
+using DwbHub.Application.Audit;
 using DwbHub.Core.Entities;
 using DwbHub.Core.Repositories;
 
@@ -13,7 +14,8 @@ public sealed class PasswordResetService(
     IPasswordHasher passwordHasher,
     IEmailTemplateRenderer renderer,
     IEmailSender sender,
-    string publicBaseUrl) : IPasswordResetService
+    string publicBaseUrl,
+    IAuditWriter auditWriter) : IPasswordResetService
 {
     private static readonly TimeSpan Lifetime = TimeSpan.FromHours(1);
 
@@ -51,6 +53,11 @@ public sealed class PasswordResetService(
 
         var message = renderer.Render("PasswordReset", locale, email, model);
         await sender.SendAsync(message, ct).ConfigureAwait(false);
+
+        await auditWriter.RecordAsync(new AuditEvent(
+            TenantId: tenant.Id, ActorUserId: user.Id, EventType: "auth.password_reset.requested",
+            Payload: new Dictionary<string, object?> { ["tenantSlug"] = tenant.Slug },
+            IpAddress: ip, UserAgent: userAgent), ct).ConfigureAwait(false);
     }
 
     public async Task<ResetConfirmOutcome> ConfirmAsync(string tokenPlaintext, string newPassword, CancellationToken ct = default)
@@ -70,6 +77,14 @@ public sealed class PasswordResetService(
             return new ResetConfirmOutcome.Invalid();
         }
 
-        return new ResetConfirmOutcome.Success(result.SessionsRevoked);
+        var sessionsRevoked = result.SessionsRevoked;
+        await auditWriter.RecordAsync(new AuditEvent(
+            TenantId: null, ActorUserId: null, EventType: "auth.password_reset.confirmed",
+            Payload: new Dictionary<string, object?>
+            {
+                ["sessionsRevoked"] = sessionsRevoked,
+            }), ct).ConfigureAwait(false);
+
+        return new ResetConfirmOutcome.Success(sessionsRevoked);
     }
 }

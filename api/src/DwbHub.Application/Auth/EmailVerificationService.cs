@@ -1,4 +1,5 @@
 using System.Net;
+using DwbHub.Application.Audit;
 using DwbHub.Core.Entities;
 using DwbHub.Core.Repositories;
 
@@ -12,7 +13,8 @@ public sealed class EmailVerificationService(
     ITokenGenerator generator,
     IEmailTemplateRenderer renderer,
     IEmailSender sender,
-    string publicBaseUrl) : IEmailVerificationService
+    string publicBaseUrl,
+    IAuditWriter auditWriter) : IEmailVerificationService
 {
     private static readonly TimeSpan Lifetime = TimeSpan.FromHours(24);
 
@@ -50,6 +52,11 @@ public sealed class EmailVerificationService(
 
         var message = renderer.Render("VerifyEmail", locale, email, model);
         await sender.SendAsync(message, ct).ConfigureAwait(false);
+
+        await auditWriter.RecordAsync(new AuditEvent(
+            TenantId: tenant.Id, ActorUserId: user.Id, EventType: "auth.verify_email.sent",
+            Payload: new Dictionary<string, object?> { ["tenantSlug"] = tenant.Slug },
+            IpAddress: ip, UserAgent: userAgent), ct).ConfigureAwait(false);
     }
 
     public async Task<VerifyConfirmOutcome> ConfirmAsync(string tokenPlaintext, CancellationToken ct = default)
@@ -61,6 +68,11 @@ public sealed class EmailVerificationService(
         {
             return new VerifyConfirmOutcome.Invalid();
         }
+
+        await auditWriter.RecordAsync(new AuditEvent(
+            TenantId: null, ActorUserId: null, EventType: "auth.verify_email.confirmed",
+            Payload: new Dictionary<string, object?>()),
+            ct).ConfigureAwait(false);
 
         return new VerifyConfirmOutcome.Success();
     }
