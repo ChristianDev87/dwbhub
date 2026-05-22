@@ -39,10 +39,12 @@ public sealed class PasswordResetRequestTests : IAsyncLifetime
         _passwordHasher = new BCryptPasswordHasher();
         var renderer = new TemplateEmailRenderer();
         var sender = new MailKitEmailSender(_mail.SmtpHost, _mail.SmtpPort, "DwbHub <noreply@test.local>");
+        var auditRepo = new DwbHub.Data.Repositories.AuditLogRepository(factory);
+        var auditWriter = new DwbHub.Application.Audit.AuditWriter(auditRepo);
         _sut = new PasswordResetService(
             new AuthTokenRepository(factory), _tenants, _users,
             new TokenHasher(), new TokenGenerator(), _passwordHasher, renderer, sender,
-            publicBaseUrl: "http://localhost:5173");
+            publicBaseUrl: "http://localhost:5173", auditWriter);
     }
 
     public async Task InitializeAsync()
@@ -99,5 +101,18 @@ public sealed class PasswordResetRequestTests : IAsyncLifetime
 
         var messages = await _mail.GetMessagesAsync();
         messages.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task Request_emits_audit_event_with_requested_type()
+    {
+        var (tenant, user) = await SeedVerifiedAsync();
+        await _sut.RequestAsync(tenant.Slug, user.Email, "de", TestIp, "test-ua");
+
+        await using var conn = _ds.CreateConnection();
+        await conn.OpenAsync();
+        var eventType = await conn.QuerySingleAsync<string>(
+            "SELECT event_type FROM audit_log WHERE event_type LIKE 'auth.password_reset.%' ORDER BY id DESC LIMIT 1");
+        eventType.Should().Be("auth.password_reset.requested");
     }
 }

@@ -39,10 +39,12 @@ public sealed class EmailVerificationResendTests : IAsyncLifetime
         _passwordHasher = new BCryptPasswordHasher();
         var renderer = new TemplateEmailRenderer();
         var sender = new MailKitEmailSender(_mail.SmtpHost, _mail.SmtpPort, "DwbHub <noreply@test.local>");
+        var auditRepo = new DwbHub.Data.Repositories.AuditLogRepository(factory);
+        var auditWriter = new DwbHub.Application.Audit.AuditWriter(auditRepo);
         _sut = new EmailVerificationService(
             new AuthTokenRepository(factory), _tenants, _users,
             new TokenHasher(), new TokenGenerator(), renderer, sender,
-            publicBaseUrl: "http://localhost:5173");
+            publicBaseUrl: "http://localhost:5173", auditWriter);
     }
 
     public async Task InitializeAsync()
@@ -111,5 +113,18 @@ public sealed class EmailVerificationResendTests : IAsyncLifetime
 
         var messages = await _mail.GetMessagesAsync();
         messages.Should().HaveCount(3, "4th attempt within 15 minutes is rate-limited");
+    }
+
+    [Fact]
+    public async Task Resend_emits_audit_event_with_sent_type()
+    {
+        var (tenant, user) = await SeedAsync(verified: false);
+        await _sut.ResendAsync(tenant.Slug, user.Email, "de", TestIp, "test-ua");
+
+        await using var conn = _ds.CreateConnection();
+        await conn.OpenAsync();
+        var eventType = await conn.QuerySingleAsync<string>(
+            "SELECT event_type FROM audit_log WHERE event_type LIKE 'auth.verify_email.%' ORDER BY id DESC LIMIT 1");
+        eventType.Should().Be("auth.verify_email.sent");
     }
 }
