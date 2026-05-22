@@ -39,7 +39,12 @@ public sealed class LoginIntegrationTests : IAsyncLifetime
         var attempts = new LoginAttemptRepository(factory);
         _hasher = new BCryptPasswordHasher();
         var issuer = new JwtIssuer(Base64Key);
-        _sut = new LoginService(_tenants, _users, attempts, _hasher, issuer);
+        var refreshTokens = new RefreshTokenRepository(factory);
+        var tokenHasher = new TokenHasher();
+        var tokenGenerator = new TokenGenerator();
+        var refreshTokenService = new RefreshTokenService(
+            refreshTokens, _users, tokenHasher, tokenGenerator, issuer, _tenants);
+        _sut = new LoginService(_tenants, _users, attempts, _hasher, issuer, refreshTokenService);
     }
 
     public Task InitializeAsync() => _fixture.ResetAsync();
