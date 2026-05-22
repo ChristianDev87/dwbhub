@@ -42,9 +42,11 @@ public sealed class LoginIntegrationTests : IAsyncLifetime
         var refreshTokens = new RefreshTokenRepository(factory);
         var tokenHasher = new TokenHasher();
         var tokenGenerator = new TokenGenerator();
+        var auditRepo = new DwbHub.Data.Repositories.AuditLogRepository(factory);
+        var auditWriter = new DwbHub.Application.Audit.AuditWriter(auditRepo);
         var refreshTokenService = new RefreshTokenService(
-            refreshTokens, _users, tokenHasher, tokenGenerator, issuer, _tenants);
-        _sut = new LoginService(_tenants, _users, attempts, _hasher, issuer, refreshTokenService);
+            refreshTokens, _users, tokenHasher, tokenGenerator, issuer, _tenants, auditWriter);
+        _sut = new LoginService(_tenants, _users, attempts, _hasher, issuer, refreshTokenService, auditWriter);
     }
 
     public Task InitializeAsync() => _fixture.ResetAsync();
@@ -209,5 +211,33 @@ public sealed class LoginIntegrationTests : IAsyncLifetime
         }
         var sixth = await _sut.LoginAsync("acme", "unverified@acme.test", "anything", TestIp);
         sixth.Should().BeOfType<LoginOutcome.LockedOut>();
+    }
+
+    [Fact]
+    public async Task Login_success_emits_audit_event_with_tenantSlug()
+    {
+        await SeedTenantAndUserAsync();
+        await _sut.LoginAsync("acme", "alice@acme.test", "correct horse battery staple", TestIp);
+
+        await using var conn = _ds.CreateConnection();
+        await conn.OpenAsync();
+        var (eventType, payloadSlug) = await conn.QuerySingleAsync<(string EventType, string Slug)>(
+            "SELECT event_type, payload_json->>'tenantSlug' AS slug FROM audit_log ORDER BY id DESC LIMIT 1");
+        eventType.Should().Be("auth.login.success");
+        payloadSlug.Should().Be("acme");
+    }
+
+    [Fact]
+    public async Task Login_with_wrong_password_emits_failed_event_with_reason()
+    {
+        await SeedTenantAndUserAsync();
+        await _sut.LoginAsync("acme", "alice@acme.test", "wrong-password", TestIp);
+
+        await using var conn = _ds.CreateConnection();
+        await conn.OpenAsync();
+        var (eventType, reason) = await conn.QuerySingleAsync<(string EventType, string Reason)>(
+            "SELECT event_type, payload_json->>'reason' AS reason FROM audit_log ORDER BY id DESC LIMIT 1");
+        eventType.Should().Be("auth.login.failed");
+        reason.Should().Be("wrong_password");
     }
 }

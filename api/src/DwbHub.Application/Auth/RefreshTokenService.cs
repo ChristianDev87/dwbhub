@@ -1,4 +1,5 @@
 using System.Net;
+using DwbHub.Application.Audit;
 using DwbHub.Core.Entities;
 using DwbHub.Core.Repositories;
 
@@ -10,7 +11,8 @@ public sealed class RefreshTokenService(
     ITokenHasher hasher,
     ITokenGenerator generator,
     IJwtIssuer issuer,
-    ITenantRepository tenants) : IRefreshTokenService
+    ITenantRepository tenants,
+    IAuditWriter auditWriter) : IRefreshTokenService
 {
     private static readonly TimeSpan Lifetime = TimeSpan.FromDays(30);
 
@@ -47,6 +49,10 @@ public sealed class RefreshTokenService(
             {
                 await refreshTokens.RevokeChainAsync(startId, ct).ConfigureAwait(false);
             }
+            await auditWriter.RecordAsync(new AuditEvent(
+                TenantId: null, ActorUserId: null, EventType: "auth.refresh.theft_detected",
+                Payload: new Dictionary<string, object?> { ["familyRevoked"] = true },
+                IpAddress: ip, UserAgent: userAgent), ct).ConfigureAwait(false);
             return new RefreshOutcome.ChainCompromised();
         }
         if (result.NotExpired == false)
@@ -71,6 +77,10 @@ public sealed class RefreshTokenService(
         var tenant = await tenants.GetByIdAsync(result.TenantId.Value, ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Tenant vanished between rotation and JWT issue.");
         var accessToken = issuer.Issue(user, tenant);
+        await auditWriter.RecordAsync(new AuditEvent(
+            TenantId: result.TenantId, ActorUserId: result.UserId, EventType: "auth.refresh.rotated",
+            Payload: new Dictionary<string, object?>(),
+            IpAddress: ip, UserAgent: userAgent), ct).ConfigureAwait(false);
         return new RefreshOutcome.Success(accessToken, newPlaintext);
     }
 
@@ -78,5 +88,8 @@ public sealed class RefreshTokenService(
     {
         var hash = hasher.Hash(refreshTokenPlaintext);
         _ = await refreshTokens.RevokeByHashAsync(hash, ct).ConfigureAwait(false);
+        await auditWriter.RecordAsync(new AuditEvent(
+            TenantId: null, ActorUserId: null, EventType: "auth.logout",
+            Payload: new Dictionary<string, object?>()), ct).ConfigureAwait(false);
     }
 }

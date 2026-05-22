@@ -8,6 +8,8 @@ using DwbHub.Data.Repositories;
 using DwbHub.Infrastructure.Auth;
 using DwbHub.Infrastructure.Logging;
 using FluentMigrator.Runner;
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
@@ -104,25 +106,29 @@ builder.Services.AddSingleton<IEmailSender>(_ => new DwbHub.Infrastructure.Email
 builder.Services.AddSingleton<IEmailTemplateRenderer, DwbHub.Infrastructure.Email.TemplateEmailRenderer>();
 builder.Services.AddScoped<DwbHub.Core.Repositories.IAuthTokenRepository,
                            DwbHub.Data.Repositories.AuthTokenRepository>();
-builder.Services.AddScoped<IEmailVerificationService>(sp => new EmailVerificationService(
-    sp.GetRequiredService<DwbHub.Core.Repositories.IAuthTokenRepository>(),
-    sp.GetRequiredService<DwbHub.Core.Repositories.ITenantRepository>(),
-    sp.GetRequiredService<DwbHub.Core.Repositories.IUserRepository>(),
-    sp.GetRequiredService<ITokenHasher>(),
-    sp.GetRequiredService<ITokenGenerator>(),
-    sp.GetRequiredService<IEmailTemplateRenderer>(),
-    sp.GetRequiredService<IEmailSender>(),
-    publicBaseUrl));
-builder.Services.AddScoped<IPasswordResetService>(sp => new PasswordResetService(
-    sp.GetRequiredService<DwbHub.Core.Repositories.IAuthTokenRepository>(),
-    sp.GetRequiredService<DwbHub.Core.Repositories.ITenantRepository>(),
-    sp.GetRequiredService<DwbHub.Core.Repositories.IUserRepository>(),
-    sp.GetRequiredService<ITokenHasher>(),
-    sp.GetRequiredService<ITokenGenerator>(),
-    sp.GetRequiredService<IPasswordHasher>(),
-    sp.GetRequiredService<IEmailTemplateRenderer>(),
-    sp.GetRequiredService<IEmailSender>(),
-    publicBaseUrl));
+builder.Services.AddScoped<IEmailVerificationService>(sp =>
+    new EmailVerificationService(
+        sp.GetRequiredService<DwbHub.Core.Repositories.IAuthTokenRepository>(),
+        sp.GetRequiredService<DwbHub.Core.Repositories.ITenantRepository>(),
+        sp.GetRequiredService<DwbHub.Core.Repositories.IUserRepository>(),
+        sp.GetRequiredService<ITokenHasher>(),
+        sp.GetRequiredService<ITokenGenerator>(),
+        sp.GetRequiredService<IEmailTemplateRenderer>(),
+        sp.GetRequiredService<IEmailSender>(),
+        publicBaseUrl,
+        sp.GetRequiredService<DwbHub.Application.Audit.IAuditWriter>()));
+builder.Services.AddScoped<IPasswordResetService>(sp =>
+    new PasswordResetService(
+        sp.GetRequiredService<DwbHub.Core.Repositories.IAuthTokenRepository>(),
+        sp.GetRequiredService<DwbHub.Core.Repositories.ITenantRepository>(),
+        sp.GetRequiredService<DwbHub.Core.Repositories.IUserRepository>(),
+        sp.GetRequiredService<ITokenHasher>(),
+        sp.GetRequiredService<ITokenGenerator>(),
+        sp.GetRequiredService<IPasswordHasher>(),
+        sp.GetRequiredService<IEmailTemplateRenderer>(),
+        sp.GetRequiredService<IEmailSender>(),
+        publicBaseUrl,
+        sp.GetRequiredService<DwbHub.Application.Audit.IAuditWriter>()));
 
 // --- Setup wizard (Plan 0.3d) ------------------------------------------
 var bootstrapTokenFile = Environment.GetEnvironmentVariable("DWBHUB_BOOTSTRAP_TOKEN_FILE")
@@ -134,6 +140,40 @@ builder.Services.AddScoped<DwbHub.Core.Repositories.ISystemBootstrapLockReposito
                            DwbHub.Data.Repositories.SystemBootstrapLockRepository>();
 builder.Services.AddScoped<IBootstrapTokenProvisioner, BootstrapTokenProvisioner>();
 builder.Services.AddScoped<ISetupService, SetupService>();
+
+// --- Audit log + background jobs (Plan 0.4) -----------------------------
+builder.Services.AddScoped<DwbHub.Core.Repositories.IAuditLogRepository,
+                           DwbHub.Data.Repositories.AuditLogRepository>();
+builder.Services.AddSingleton<DwbHub.Core.Repositories.IAuditVerifyStateRepository,
+                              DwbHub.Data.Repositories.AuditVerifyStateRepository>();
+builder.Services.AddScoped<DwbHub.Application.Audit.IAuditWriter,
+                           DwbHub.Application.Audit.AuditWriter>();
+builder.Services.AddScoped<DwbHub.Infrastructure.Background.AuditVerifyCore>();
+builder.Services.AddScoped<DwbHub.Application.Background.IAuditVerifyIncrementalJob,
+                           DwbHub.Infrastructure.Background.AuditVerifyIncrementalJob>();
+builder.Services.AddScoped<DwbHub.Application.Background.IAuditVerifyFullJob,
+                           DwbHub.Infrastructure.Background.AuditVerifyFullJob>();
+builder.Services.AddScoped<DwbHub.Application.Background.ILoginAttemptPruneJob,
+                           DwbHub.Infrastructure.Background.LoginAttemptPruneJob>();
+builder.Services.AddScoped<DwbHub.Application.Background.IAuthTokenPruneJob,
+                           DwbHub.Infrastructure.Background.AuthTokenPruneJob>();
+
+builder.Services.AddHangfire(cfg => cfg
+    .UsePostgreSqlStorage(opts => opts.UseNpgsqlConnection(connectionString),
+        new Hangfire.PostgreSql.PostgreSqlStorageOptions
+        {
+            SchemaName = "hangfire",
+            PrepareSchemaIfNecessary = true,
+            QueuePollInterval = TimeSpan.FromSeconds(15),
+        })
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings());
+
+builder.Services.AddHangfireServer(opts =>
+{
+    opts.ServerName = $"dwbhub-api-{Environment.MachineName}";
+    opts.WorkerCount = 2;
+});
 
 var jwtKeyBytes = Convert.FromBase64String(jwtSecret);
 builder.Services
@@ -181,6 +221,33 @@ if (enableSwagger)
 app.UseSerilogRequestLogging();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// --- Hangfire dashboard (Plan 0.4) --------------------------------------
+// Mount AFTER UseAuthorization so httpContext.User is populated for our filter.
+app.UseHangfireDashboard("/api/admin/hangfire", new DashboardOptions
+{
+    Authorization = [new DwbHub.Infrastructure.Background.OwnerOnlyHangfireAuthFilter()],
+    DisplayStorageConnectionString = false,
+    IgnoreAntiforgeryToken = false,
+});
+
+Hangfire.RecurringJob.AddOrUpdate<DwbHub.Application.Background.IAuditVerifyIncrementalJob>(
+    "audit-verify-incremental",
+    job => job.RunAsync(CancellationToken.None),
+    "0 3 * * *", new Hangfire.RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+Hangfire.RecurringJob.AddOrUpdate<DwbHub.Application.Background.IAuditVerifyFullJob>(
+    "audit-verify-full-weekly",
+    job => job.RunAsync(CancellationToken.None),
+    "0 4 * * 0", new Hangfire.RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+Hangfire.RecurringJob.AddOrUpdate<DwbHub.Application.Background.ILoginAttemptPruneJob>(
+    "login-attempt-prune",
+    job => job.RunAsync(CancellationToken.None),
+    "0 3 * * 0", new Hangfire.RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+Hangfire.RecurringJob.AddOrUpdate<DwbHub.Application.Background.IAuthTokenPruneJob>(
+    "auth-token-prune",
+    job => job.RunAsync(CancellationToken.None),
+    "30 3 * * *", new Hangfire.RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
 app.MapControllers();
 
 Log.Information("DwbHub.Api starting. LogFile={LogFile}", logFilePath);

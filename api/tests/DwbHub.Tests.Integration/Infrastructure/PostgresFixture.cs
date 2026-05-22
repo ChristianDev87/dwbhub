@@ -68,6 +68,8 @@ public sealed class PostgresFixture : IAsyncLifetime
                 END LOOP;
             END
             $$;
+            -- Re-seed singleton rows removed by TRUNCATE.
+            INSERT INTO audit_verify_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
             """;
         await using var cmd = new NpgsqlCommand(sql, conn);
         await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);

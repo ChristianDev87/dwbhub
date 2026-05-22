@@ -46,9 +46,11 @@ public sealed class EmailVerificationConfirmTests : IAsyncLifetime
         _tokenGenerator = new TokenGenerator();
         var renderer = new TemplateEmailRenderer();
         var sender = new MailKitEmailSender(_mail.SmtpHost, _mail.SmtpPort, "DwbHub <noreply@test.local>");
+        var auditRepo = new DwbHub.Data.Repositories.AuditLogRepository(factory);
+        var auditWriter = new DwbHub.Application.Audit.AuditWriter(auditRepo);
         _sut = new EmailVerificationService(
             _authTokens, _tenants, _users, _tokenHasher, _tokenGenerator, renderer, sender,
-            publicBaseUrl: "http://localhost:5173");
+            publicBaseUrl: "http://localhost:5173", auditWriter);
     }
 
     public async Task InitializeAsync()
@@ -130,5 +132,20 @@ public sealed class EmailVerificationConfirmTests : IAsyncLifetime
         var second = await _sut.ConfirmAsync(token);
 
         second.Should().BeOfType<VerifyConfirmOutcome.Invalid>();
+    }
+
+    [Fact]
+    public async Task Confirm_emits_audit_event_with_confirmed_type()
+    {
+        var (tenant, user) = await SeedUnverifiedAsync();
+        var token = await IssueAndExtractTokenAsync(tenant, user);
+
+        await _sut.ConfirmAsync(token);
+
+        await using var conn = _ds.CreateConnection();
+        await conn.OpenAsync();
+        var eventType = await conn.QuerySingleAsync<string>(
+            "SELECT event_type FROM audit_log WHERE event_type LIKE 'auth.verify_email.%' ORDER BY id DESC LIMIT 1");
+        eventType.Should().Be("auth.verify_email.confirmed");
     }
 }

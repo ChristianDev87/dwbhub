@@ -43,8 +43,10 @@ public sealed class RefreshTokenIntegrationTests : IAsyncLifetime
         _tokenHasher = new TokenHasher();
         _tokenGenerator = new TokenGenerator();
         _jwtIssuer = new JwtIssuer(Base64Key);
+        var auditRepo = new DwbHub.Data.Repositories.AuditLogRepository(factory);
+        var auditWriter = new DwbHub.Application.Audit.AuditWriter(auditRepo);
         _sut = new RefreshTokenService(
-            _refreshTokens, _users, _tokenHasher, _tokenGenerator, _jwtIssuer, _tenants);
+            _refreshTokens, _users, _tokenHasher, _tokenGenerator, _jwtIssuer, _tenants, auditWriter);
     }
 
     public Task InitializeAsync() => _fixture.ResetAsync();
@@ -253,5 +255,19 @@ public sealed class RefreshTokenIntegrationTests : IAsyncLifetime
         var s1 = (RefreshOutcome.Success)await _sut.RefreshAsync(t1, TestIp, null);
         var s2 = await _sut.RefreshAsync(s1.RefreshToken, TestIp, null);
         s2.Should().BeOfType<RefreshOutcome.Success>();
+    }
+
+    [Fact]
+    public async Task Refresh_rotation_emits_rotated_event()
+    {
+        var (tenant, user) = await SeedAsync();
+        var plaintext = await IssueTokenAsync(tenant, user);
+        await _sut.RefreshAsync(plaintext, TestIp, "ua-test");
+
+        await using var conn = _ds.CreateConnection();
+        await conn.OpenAsync();
+        var et = await conn.QuerySingleAsync<string>(
+            "SELECT event_type FROM audit_log WHERE event_type LIKE 'auth.refresh.%' ORDER BY id DESC LIMIT 1");
+        et.Should().Be("auth.refresh.rotated");
     }
 }
