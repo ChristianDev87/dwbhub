@@ -58,5 +58,26 @@
     "title": "Setup complete!",
     "body": "We sent a verification link to your email address. Click it to activate your owner account.",
     "tenantHint": "Tenant: {{slug}}"
+  },
+  "loginpage": {
+    "title": "Sign in",
+    "tenantSlug": "Tenant slug",
+    "tenantSlugHint": "Lowercase letters, digits, hyphens",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "invalidSlug": "Invalid tenant slug.",
+    "invalidEmail": "Please enter a valid email address.",
+    "passwordTooShort": "Password must be at least 8 characters.",
+    "invalidCredentials": "Wrong email or password.",
+    "lockedOut": "Too many failed attempts. Try again in {{seconds}} seconds.",
+    "emailNotVerified": "Email not verified — redirecting…",
+    "networkError": "Could not reach the server."
+  },
+  "dashboard": {
+    "welcome": "Welcome, {{name}}",
+    "tenant": "Tenant: {{name}}",
+    "logout": "Sign out"
   }
 }

@@ -1,5 +1,4 @@
 using System.Net;
-using System.Security.Claims;
 using DwbHub.Application.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -130,27 +129,6 @@ public sealed class AuthController(
         }
         ClearRefreshCookie();
         return NoContent();
-    }
-
-    [HttpGet("/api/auth/me")]
-    [Authorize]
-    public IActionResult Me()
-    {
-        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        var tid = User.FindFirstValue("tid");
-        var tslug = User.FindFirstValue("tslug") ?? "";
-        var role = User.FindFirstValue("role") ?? "";
-
-        if (sub is null || tid is null)
-        {
-            return Unauthorized(new { error = "invalid_token" });
-        }
-
-        return Ok(new MeResponse(
-            UserId: long.Parse(sub),
-            TenantId: long.Parse(tid),
-            TenantSlug: tslug,
-            Role: role));
     }
 
     private string ResolveLocale()

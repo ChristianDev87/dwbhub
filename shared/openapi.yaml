@@ -113,13 +113,6 @@ paths:
       responses:
         '200':
           description: OK
-  /api/auth/me:
-    get:
-      tags:
-        - Auth
-      responses:
-        '200':
-          description: OK
   /api/health:
     get:
       tags:
@@ -149,6 +142,32 @@ paths:
           application/*+json:
             schema:
               $ref: '#/components/schemas/SetupCompleteRequest'
+      responses:
+        '200':
+          description: OK
+  '/api/t/{slug}/dashboard':
+    get:
+      tags:
+        - TenantDashboard
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  '/api/t/{slug}/me':
+    get:
+      tags:
+        - TenantMe
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           description: OK

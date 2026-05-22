@@ -148,6 +148,10 @@ builder.Services.AddSingleton<DwbHub.Core.Repositories.IAuditVerifyStateReposito
                               DwbHub.Data.Repositories.AuditVerifyStateRepository>();
 builder.Services.AddScoped<DwbHub.Application.Audit.IAuditWriter,
                            DwbHub.Application.Audit.AuditWriter>();
+
+// --- Tenant resolution (Plan 0.5) ---------------------------------------
+builder.Services.AddScoped<DwbHub.Application.Tenancy.ITenantContext,
+                           DwbHub.Infrastructure.Tenancy.TenantContext>();
 builder.Services.AddScoped<DwbHub.Infrastructure.Background.AuditVerifyCore>();
 builder.Services.AddScoped<DwbHub.Application.Background.IAuditVerifyIncrementalJob,
                            DwbHub.Infrastructure.Background.AuditVerifyIncrementalJob>();
@@ -180,6 +184,10 @@ builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        // Disable the default WS-Federation claim-name remapping so that
+        // custom claims like "tid", "tslug", and "role" are accessible under
+        // their original short names (e.g. ctx.User.FindFirst("tid")).
+        options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
@@ -220,6 +228,16 @@ if (enableSwagger)
 
 app.UseSerilogRequestLogging();
 app.UseAuthentication();
+
+// --- Tenant resolver middleware (Plan 0.5) ------------------------------
+// MUST come after UseAuthentication (so HttpContext.User has the JWT claims
+// and cross-tenant checks can read the 'tid' claim) and BEFORE
+// UseAuthorization so that unknown-tenant requests receive 404 rather than
+// 401 (authorization never runs for non-existent tenants).
+// For paths not matching /api/t/{slug}/... the middleware is a no-op
+// pass-through, so Hangfire and other routes are unaffected.
+app.UseMiddleware<DwbHub.Infrastructure.Tenancy.TenantResolverMiddleware>();
+
 app.UseAuthorization();
 
 // --- Hangfire dashboard (Plan 0.4) --------------------------------------
