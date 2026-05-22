@@ -27,6 +27,13 @@ public sealed class AuditLogRepository(IDbConnectionFactory connectionFactory) :
         // We open an explicit transaction so pg_advisory_xact_lock is held until commit.
         // QueryMultipleAsync reads both resultsets; we skip the void lock result and
         // read the INSERT RETURNING row from the second grid.
+        //
+        // The inner payload hash is computed from the STORED JSONB text (payload_json::text)
+        // so that chain verification — which reads payload_json::text back — reproduces the
+        // same hash. This keeps the hash canonical with respect to PostgreSQL's JSONB output
+        // rather than the C#-serialized compact form. The payloadHash C# argument is accepted
+        // for interface compatibility but the actual stored hash is always derived from
+        // what PostgreSQL persists.
         using var txn = conn.BeginTransaction();
         const string sql = """
             SELECT pg_advisory_xact_lock(7341);
@@ -43,7 +50,19 @@ public sealed class AuditLogRepository(IDbConnectionFactory connectionFactory) :
                        (SELECT current_hash FROM last),
                        digest(
                            COALESCE((SELECT current_hash FROM last), '\x'::bytea)
-                           || @PayloadHash, 'sha256')
+                           || digest(
+                               '{"actorUserId":'  || COALESCE(@ActorUserId::text,   'null') ||
+                               ',"eventType":'    || to_json(@EventType::text)               ||
+                               ',"ipAddress":'    || CASE WHEN @IpAddress IS NULL THEN 'null'
+                                                         ELSE to_json(host(@IpAddress::inet)) END ||
+                               ',"occurredAt":'   || to_json(to_char(@OccurredAt AT TIME ZONE 'UTC',
+                                                       'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))    ||
+                               ',"payloadJson":'  || to_json(@PayloadJson::jsonb::text)       ||
+                               ',"tenantId":'     || COALESCE(@TenantId::text,     'null') ||
+                               ',"userAgent":'    || COALESCE(to_json(@UserAgent::text), 'null') ||
+                               '}',
+                               'sha256'),
+                           'sha256')
                 RETURNING id, current_hash
             )
             SELECT id, current_hash FROM ins;
@@ -55,7 +74,6 @@ public sealed class AuditLogRepository(IDbConnectionFactory connectionFactory) :
             ActorUserId = actorUserId,
             EventType = eventType,
             PayloadJson = payloadJson,
-            PayloadHash = payloadHash,
             OccurredAt = occurredAt,
             IpAddress = ipAddress?.ToString(),
             UserAgent = userAgent,
@@ -75,7 +93,37 @@ public sealed class AuditLogRepository(IDbConnectionFactory connectionFactory) :
         return row;
     }
 
-    public IAsyncEnumerable<AuditLogEntry> StreamAscAsync(
-        long startAfterId, CancellationToken ct = default)
-        => throw new NotImplementedException("StreamAscAsync is implemented in Task 7.");
+    public async IAsyncEnumerable<AuditLogEntry> StreamAscAsync(
+        long startAfterId, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
+        var npgsqlConn = (NpgsqlConnection)conn;
+        const string sql = """
+            SELECT id, tenant_id, actor_user_id, event_type,
+                   payload_json::text AS payload_json,
+                   host(ip_address) AS ip_address, user_agent,
+                   occurred_at, prev_hash, current_hash
+            FROM audit_log
+            WHERE id > @StartAfterId
+            ORDER BY id ASC
+            """;
+        await using var cmd = new NpgsqlCommand(sql, npgsqlConn);
+        cmd.Parameters.AddWithValue("StartAfterId", startAfterId);
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            var ipStr = reader.IsDBNull(5) ? null : reader.GetString(5);
+            yield return new AuditLogEntry(
+                Id: reader.GetInt64(0),
+                TenantId: reader.IsDBNull(1) ? null : reader.GetInt64(1),
+                ActorUserId: reader.IsDBNull(2) ? null : reader.GetInt64(2),
+                EventType: reader.GetString(3),
+                PayloadJson: reader.GetString(4),
+                IpAddress: ipStr is null ? null : System.Net.IPAddress.Parse(ipStr),
+                UserAgent: reader.IsDBNull(6) ? null : reader.GetString(6),
+                OccurredAt: reader.GetFieldValue<DateTimeOffset>(7),
+                PrevHash: reader.IsDBNull(8) ? null : (byte[])reader.GetValue(8),
+                CurrentHash: (byte[])reader.GetValue(9));
+        }
+    }
 }
