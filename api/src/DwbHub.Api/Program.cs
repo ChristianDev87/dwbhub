@@ -148,6 +148,10 @@ builder.Services.AddSingleton<DwbHub.Core.Repositories.IAuditVerifyStateReposito
                               DwbHub.Data.Repositories.AuditVerifyStateRepository>();
 builder.Services.AddScoped<DwbHub.Application.Audit.IAuditWriter,
                            DwbHub.Application.Audit.AuditWriter>();
+
+// --- Tenant resolution (Plan 0.5) ---------------------------------------
+builder.Services.AddScoped<DwbHub.Application.Tenancy.ITenantContext,
+                           DwbHub.Infrastructure.Tenancy.TenantContext>();
 builder.Services.AddScoped<DwbHub.Infrastructure.Background.AuditVerifyCore>();
 builder.Services.AddScoped<DwbHub.Application.Background.IAuditVerifyIncrementalJob,
                            DwbHub.Infrastructure.Background.AuditVerifyIncrementalJob>();
@@ -221,6 +225,12 @@ if (enableSwagger)
 app.UseSerilogRequestLogging();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// --- Tenant resolver middleware (Plan 0.5) ------------------------------
+// MUST come after UseAuthentication (so HttpContext.User has the JWT claims)
+// and BEFORE UseHangfireDashboard (which has its own Owner-filter and runs
+// for /api/admin/hangfire — tenant-free, the middleware will pass through).
+app.UseMiddleware<DwbHub.Infrastructure.Tenancy.TenantResolverMiddleware>();
 
 // --- Hangfire dashboard (Plan 0.4) --------------------------------------
 // Mount AFTER UseAuthorization so httpContext.User is populated for our filter.
