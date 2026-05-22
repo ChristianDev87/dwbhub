@@ -9,7 +9,8 @@ public sealed class LoginService(
     IUserRepository users,
     ILoginAttemptRepository attempts,
     IPasswordHasher hasher,
-    IJwtIssuer issuer) : ILoginService
+    IJwtIssuer issuer,
+    IRefreshTokenService refreshTokenService) : ILoginService
 {
     private const int LockoutThreshold = 5;
     private static readonly TimeSpan LockoutWindow = TimeSpan.FromMinutes(15);
@@ -53,6 +54,7 @@ public sealed class LoginService(
         // 5. Success
         await attempts.RecordAsync(email, ipAddress, success: true, ct).ConfigureAwait(false);
         var token = issuer.Issue(user, tenant);
-        return new LoginOutcome.Success(token, user, tenant);
+        var refreshToken = await refreshTokenService.IssueForLoginAsync(user, tenant, ipAddress, userAgent: null, ct).ConfigureAwait(false);
+        return new LoginOutcome.Success(token, refreshToken, user, tenant);
     }
 }
