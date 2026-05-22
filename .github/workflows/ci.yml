@@ -7,25 +7,24 @@ name: ci
 # pwsh 7, Pester 5.5+, docker CLI + buildx + compose).
 
 # Trigger model:
-#   - PR-driven flow: every PR targeting main or develop triggers the full pipeline.
-#   - Post-merge sanity: only `main` gets a push trigger, as a final verification gate.
-#   - Feature branches and `develop` itself never trigger on push — CI runs via the PR.
-# This eliminates the push/pull_request race that would otherwise let push events
-# cancel PR runs and skip the e2e gate.
+#   - PR-driven only. Every PR targeting main or develop runs the full pipeline.
+#   - PR develop -> main runs all 7 checks including e2e (MainSecure ruleset gates merge).
+#   - PR feature -> develop runs the 6 cheap checks (DevelopSecure ruleset gates merge).
+#   - No push triggers: post-merge re-runs would re-test the exact same code state
+#     under squash-merge semantics (identical tree hash). The ruleset already enforces
+#     a green pipeline on the PR head before allowing the merge.
 on:
   pull_request:
     branches: [main, develop]
-  push:
-    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
-  # Group by the source branch (PR head or pushed ref), so a `push` to develop and the
-  # `pull_request.synchronize` it triggers land in the same group and one cancels the other.
-  # Without this normalisation, push (ref = refs/heads/develop) and PR (ref = refs/pull/N/merge)
-  # would sit in separate groups and run the full pipeline twice for every commit.
+  # Group by source branch so rapid-fire pushes on a PR cancel earlier in-flight runs
+  # for the same PR (only the latest commit matters). pull_request.head.ref is the
+  # source branch name (e.g. "feature/xyz"); github.ref_name is the fallback for any
+  # non-PR event (currently none, kept for forward compatibility).
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
