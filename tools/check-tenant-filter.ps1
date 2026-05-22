@@ -30,7 +30,7 @@ $files = foreach ($p in $Path) {
 $mutationPattern = '(?im)\b(SELECT|UPDATE|DELETE\s+FROM|INSERT\s+INTO)\b'
 $tenantPattern   = '(?i)tenant_id'
 $optOutPattern   = '(?i)DWBHUB-NO-TENANT-FILTER'
-$tableAllowlist  = @('tenants', 'system_bootstrap_lock', 'feature_flags', 'captcha_challenges', 'login_attempt_log')
+$tableAllowlist  = @('tenants', 'system_bootstrap_lock', 'feature_flags', 'captcha_challenges', 'login_attempt_log', 'audit_log', 'audit_verify_state')
 
 $failures = New-Object System.Collections.Generic.List[string]
 

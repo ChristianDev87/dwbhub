@@ -108,4 +108,24 @@ Describe "check-tenant-filter" {
             Pop-Location
         }
     }
+
+    Context "Plan 0.4 — audit_log + audit_verify_state allowlisted" {
+        It "DELETE FROM audit_log without tenant_id filter is OK" {
+            $tmp = New-TemporaryFile
+            Set-Content $tmp "DELETE FROM audit_log WHERE event_type = 'foo';"
+            $output = & pwsh -NoLogo -NoProfile -File $script:scriptPath $tmp.FullName 2>&1
+            $LASTEXITCODE | Should -Be 0
+            $output | Should -Match 'OK'
+            Remove-Item $tmp
+        }
+
+        It "UPDATE audit_verify_state without tenant_id filter is OK" {
+            $tmp = New-TemporaryFile
+            Set-Content $tmp "UPDATE audit_verify_state SET last_run_status='ok' WHERE id=1;"
+            $output = & pwsh -NoLogo -NoProfile -File $script:scriptPath $tmp.FullName 2>&1
+            $LASTEXITCODE | Should -Be 0
+            $output | Should -Match 'OK'
+            Remove-Item $tmp
+        }
+    }
 }
