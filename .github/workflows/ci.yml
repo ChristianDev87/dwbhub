@@ -171,6 +171,7 @@ jobs:
           docker run -d --name dwbhub-api-smoke -p 15080:8080 \
             -e DWBHUB_JWT_SECRET=ZGV2X2p3dF9zZWNyZXRfZG9fbm90X3VzZV9pbl9wcm9k \
             -e DWBHUB_ENCRYPTION_KEY=ZGV2X2VuY3J5cHRpb25fa2V5XzMyYnl0ZXNfdGVzdF9vbg== \
+            -e DWBHUB_SKIP_MIGRATIONS=1 \
             dwbhub-api:smoke
           for i in {1..30}; do
             if curl -fsS http://host-gateway:15080/api/health >/dev/null; then
