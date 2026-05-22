@@ -40,8 +40,8 @@ public sealed class TemplateEmailRenderer : IEmailTemplateRenderer
     {
         var norm = locale is "en" ? "en" : "de"; // fallback to de
         var subject = Substitute(GetTemplate($"{templateKey}.{norm}.subject.txt"), model).Trim();
-        var html    = Substitute(GetTemplate($"{templateKey}.{norm}.html"),        model);
-        var text    = HtmlToText(html);
+        var html = Substitute(GetTemplate($"{templateKey}.{norm}.html"), model);
+        var text = HtmlToText(html);
         return new EmailMessage(toAddress, subject, html, text);
     }
 

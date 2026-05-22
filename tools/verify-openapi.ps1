@@ -70,6 +70,28 @@ $pgHostForTools = if ($env:GITHUB_ACTIONS -eq "true") { "host-gateway" } else { 
 $env:DWBHUB_DB_CONNECTION = "Host=$pgHostForTools;Port=$pgPort;Database=dwbhub;Username=dwbhub;Password=dwbhub_openapi"
 Write-Host "Postgres reachable at ${pgHostForTools}:${pgPort}" -ForegroundColor Green
 
+# --- Mailpit sidecar (Plan 0.3c) ------------------------------------------
+# Program.cs fails-fast on missing DWBHUB_SMTP_* vars (MailKitEmailSender requires
+# a reachable SMTP endpoint at host registration time). Spin up a throw-away
+# Mailpit to satisfy the boot path; no mail is actually sent during schema dump.
+$mailpitContainer = "dwbhub-openapi-mp-" + ([guid]::NewGuid().ToString("N").Substring(0, 8))
+$originalSmtpHost = $env:DWBHUB_SMTP_HOST
+$originalSmtpPort = $env:DWBHUB_SMTP_PORT
+$originalSmtpFrom = $env:DWBHUB_SMTP_FROM
+
+Write-Host "Starting temporary Mailpit ($mailpitContainer) ..." -ForegroundColor Cyan
+docker run -d --name $mailpitContainer -p 0:1025 axllent/mailpit:v1.21 | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Failed to start Mailpit container." }
+
+# Mailpit SMTP listener comes up in <1s; brief wait suffices.
+Start-Sleep -Seconds 2
+
+$mpSmtpPort = (docker inspect $mailpitContainer --format '{{ (index (index .NetworkSettings.Ports "1025/tcp") 0).HostPort }}').Trim()
+$env:DWBHUB_SMTP_HOST = $pgHostForTools  # same host-detection logic as Postgres
+$env:DWBHUB_SMTP_PORT = $mpSmtpPort
+$env:DWBHUB_SMTP_FROM = "DwbHub <noreply@openapi.local>"
+Write-Host "Mailpit SMTP reachable at ${pgHostForTools}:${mpSmtpPort}" -ForegroundColor Green
+
 try {
     dotnet tool run swagger tofile --yaml --output $tempSpec $dllRelative v1
     if ($LASTEXITCODE -ne 0) { throw "swagger tofile failed." }
@@ -108,6 +130,11 @@ finally {
     $env:ASPNETCORE_ENVIRONMENT = $originalEnv
     $env:DWBHUB_DB_CONNECTION   = $originalConnStr
     $env:DWBHUB_JWT_SECRET      = $originalJwtSecret
+    $env:DWBHUB_SMTP_HOST       = $originalSmtpHost
+    $env:DWBHUB_SMTP_PORT       = $originalSmtpPort
+    $env:DWBHUB_SMTP_FROM       = $originalSmtpFrom
+    Write-Host "Removing temporary Mailpit ($mailpitContainer) ..." -ForegroundColor DarkGray
+    docker rm -f $mailpitContainer 2>&1 | Out-Null
     Write-Host "Removing temporary Postgres ($pgContainer) ..." -ForegroundColor DarkGray
     docker rm -f $pgContainer 2>&1 | Out-Null
     Remove-Item $tempSpec -ErrorAction SilentlyContinue

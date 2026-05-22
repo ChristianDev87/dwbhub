@@ -42,10 +42,10 @@ public sealed class PasswordResetService(
         var resetUrl = $"{publicBaseUrl.TrimEnd('/')}/t/{tenant.Slug}/password-reset?token={Uri.EscapeDataString(plaintext)}";
         var model = new Dictionary<string, string>
         {
-            ["tenantName"]       = tenant.Name,
-            ["tenantSlug"]       = tenant.Slug,
-            ["userDisplayName"]  = user.DisplayName,
-            ["resetUrl"]         = resetUrl,
+            ["tenantName"] = tenant.Name,
+            ["tenantSlug"] = tenant.Slug,
+            ["userDisplayName"] = user.DisplayName,
+            ["resetUrl"] = resetUrl,
             ["expiresInMinutes"] = ((int)Lifetime.TotalMinutes).ToString(),
         };
 

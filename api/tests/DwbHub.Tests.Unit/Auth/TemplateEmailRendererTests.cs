@@ -13,10 +13,10 @@ public sealed class TemplateEmailRendererTests
     {
         var msg = _sut.Render("VerifyEmail", "de", "alice@acme.test", new Dictionary<string, string>
         {
-            ["tenantName"]      = "Acme",
+            ["tenantName"] = "Acme",
             ["userDisplayName"] = "Alice",
-            ["verifyUrl"]       = "https://x.test/t/acme/verify-email?token=abc",
-            ["expiresInHours"]  = "24",
+            ["verifyUrl"] = "https://x.test/t/acme/verify-email?token=abc",
+            ["expiresInHours"] = "24",
         });
 
         msg.ToAddress.Should().Be("alice@acme.test");
@@ -31,8 +31,10 @@ public sealed class TemplateEmailRendererTests
     {
         var deMsg = _sut.Render("VerifyEmail", "fr", "alice@acme.test", new Dictionary<string, string>
         {
-            ["tenantName"] = "Acme", ["userDisplayName"] = "Alice",
-            ["verifyUrl"] = "https://x", ["expiresInHours"] = "24",
+            ["tenantName"] = "Acme",
+            ["userDisplayName"] = "Alice",
+            ["verifyUrl"] = "https://x",
+            ["expiresInHours"] = "24",
         });
         deMsg.Subject.Should().Contain("bestätigen", "unknown locale falls back to de");
     }
@@ -42,8 +44,10 @@ public sealed class TemplateEmailRendererTests
     {
         var msg = _sut.Render("PasswordReset", "en", "alice@acme.test", new Dictionary<string, string>
         {
-            ["tenantName"] = "Acme", ["userDisplayName"] = "Alice",
-            ["resetUrl"] = "https://x", ["expiresInMinutes"] = "60",
+            ["tenantName"] = "Acme",
+            ["userDisplayName"] = "Alice",
+            ["resetUrl"] = "https://x",
+            ["expiresInMinutes"] = "60",
         });
         msg.Subject.Should().Contain("Reset password");
         msg.HtmlBody.Should().Contain("60");

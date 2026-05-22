@@ -41,11 +41,11 @@ public sealed class EmailVerificationService(
         var verifyUrl = $"{publicBaseUrl.TrimEnd('/')}/t/{tenant.Slug}/verify-email?token={Uri.EscapeDataString(plaintext)}";
         var model = new Dictionary<string, string>
         {
-            ["tenantName"]      = tenant.Name,
-            ["tenantSlug"]      = tenant.Slug,
+            ["tenantName"] = tenant.Name,
+            ["tenantSlug"] = tenant.Slug,
             ["userDisplayName"] = user.DisplayName,
-            ["verifyUrl"]       = verifyUrl,
-            ["expiresInHours"]  = ((int)Lifetime.TotalHours).ToString(),
+            ["verifyUrl"] = verifyUrl,
+            ["expiresInHours"] = ((int)Lifetime.TotalHours).ToString(),
         };
 
         var message = renderer.Render("VerifyEmail", locale, email, model);

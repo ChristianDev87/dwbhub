@@ -130,6 +130,10 @@ jobs:
   container-smoke:
     name: container build smoke (api + web)
     runs-on: [self-hosted, linux, dotnet10]
+    env:
+      DWBHUB_SMTP_HOST: mailhog
+      DWBHUB_SMTP_PORT: "1025"
+      DWBHUB_SMTP_FROM: "DwbHub <noreply@ci.local>"
     steps:
       - uses: actions/checkout@v4
       - name: Build API image (amd64 only, no push)
@@ -167,7 +171,7 @@ jobs:
           # up a throw-away one here — no skip flags, the real boot path is exercised.
           #
           # Pre-clean orphans from a previous hard-cancelled run.
-          docker rm -f dwbhub-api-smoke dwbhub-pg-smoke 2>/dev/null || true
+          docker rm -f dwbhub-api-smoke dwbhub-pg-smoke dwbhub-mp-smoke 2>/dev/null || true
           docker network rm dwbhub-smoke-net 2>/dev/null || true
           docker network create dwbhub-smoke-net
 
@@ -183,12 +187,23 @@ jobs:
             sleep 1
           done
 
+          # Mailpit sidecar (Plan 0.3c): API fails fast on missing DWBHUB_SMTP_*
+          # at boot since MailKitEmailSender is registered unconditionally. The
+          # alias `mailhog` matches the job-level env DWBHUB_SMTP_HOST.
+          docker run -d --name dwbhub-mp-smoke --network dwbhub-smoke-net \
+            --network-alias mailhog \
+            axllent/mailpit:v1.21
+          sleep 2
+
           # API: high host port to dodge co-tenant clashes; reaches Postgres via
           # the shared docker network using its container name.
           docker run -d --name dwbhub-api-smoke --network dwbhub-smoke-net -p 15080:8080 \
             -e DWBHUB_DB_CONNECTION="Host=dwbhub-pg-smoke;Port=5432;Database=dwbhub;Username=dwbhub;Password=dwbhub_smoke" \
             -e DWBHUB_JWT_SECRET=ZGV2X2p3dF9zZWNyZXRfZG9fbm90X3VzZV9pbl9wcm9k \
             -e DWBHUB_ENCRYPTION_KEY=ZGV2X2VuY3J5cHRpb25fa2V5XzMyYnl0ZXNfdGVzdF9vbg== \
+            -e DWBHUB_SMTP_HOST="$DWBHUB_SMTP_HOST" \
+            -e DWBHUB_SMTP_PORT="$DWBHUB_SMTP_PORT" \
+            -e DWBHUB_SMTP_FROM="$DWBHUB_SMTP_FROM" \
             dwbhub-api:smoke
           for i in {1..30}; do
             if curl -fsS http://host-gateway:15080/api/health >/dev/null; then
@@ -218,7 +233,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          docker rm -f dwbhub-api-smoke dwbhub-web-smoke dwbhub-pg-smoke 2>/dev/null || true
+          docker rm -f dwbhub-api-smoke dwbhub-web-smoke dwbhub-pg-smoke dwbhub-mp-smoke 2>/dev/null || true
           docker network rm dwbhub-smoke-net 2>/dev/null || true
 
   e2e-smoke:
