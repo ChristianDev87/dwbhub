@@ -10,7 +10,9 @@ namespace DwbHub.Api.Controllers.Auth;
 [ApiController]
 public sealed class AuthController(
     ILoginService loginService,
-    IRefreshTokenService refreshTokenService) : ControllerBase
+    IRefreshTokenService refreshTokenService,
+    IEmailVerificationService emailVerificationService,
+    IPasswordResetService passwordResetService) : ControllerBase
 {
     private const string RefreshCookieName = "dwbhub_refresh";
     private const string RefreshCookiePath = "/api/auth";
@@ -26,12 +28,60 @@ public sealed class AuthController(
         return outcome switch
         {
             LoginOutcome.Success s => LoginSuccessResponse(s),
-
             LoginOutcome.LockedOut lo => LockedWithRetryAfter(lo.RetryAfterSeconds),
-
+            LoginOutcome.EmailNotVerified ev => StatusCode(StatusCodes.Status403Forbidden,
+                new { error = "email_not_verified", email = ev.Email }),
             LoginOutcome.InvalidCredentials => Unauthorized(new { error = "invalid_credentials" }),
-
             _ => Unauthorized(new { error = "invalid_credentials" }),
+        };
+    }
+
+    [HttpPost("/api/auth/verify-email/resend")]
+    [AllowAnonymous]
+    public async Task<IActionResult> VerifyEmailResend([FromBody] VerifyEmailResendRequest body, CancellationToken ct)
+    {
+        var ip = HttpContext.Connection.RemoteIpAddress;
+        var ua = Request.Headers.UserAgent.ToString();
+        var locale = ResolveLocale();
+        await emailVerificationService.ResendAsync(body.TenantSlug, body.Email, locale, ip, ua, ct);
+        return Ok(new { ok = true });
+    }
+
+    [HttpPost("/api/auth/verify-email/confirm")]
+    [AllowAnonymous]
+    public async Task<IActionResult> VerifyEmailConfirm([FromBody] VerifyEmailConfirmRequest body, CancellationToken ct)
+    {
+        var outcome = await emailVerificationService.ConfirmAsync(body.Token, ct);
+        return outcome switch
+        {
+            VerifyConfirmOutcome.Success => Ok(new { verified = true }),
+            VerifyConfirmOutcome.Invalid => BadRequest(new { error = "invalid_or_expired_token" }),
+            _ => BadRequest(new { error = "invalid_or_expired_token" }),
+        };
+    }
+
+    [HttpPost("/api/auth/password-reset/request")]
+    [AllowAnonymous]
+    public async Task<IActionResult> PasswordResetRequest([FromBody] PasswordResetRequestRequest body, CancellationToken ct)
+    {
+        var ip = HttpContext.Connection.RemoteIpAddress;
+        var ua = Request.Headers.UserAgent.ToString();
+        var locale = ResolveLocale();
+        await passwordResetService.RequestAsync(body.TenantSlug, body.Email, locale, ip, ua, ct);
+        return Ok(new { ok = true });
+    }
+
+    [HttpPost("/api/auth/password-reset/confirm")]
+    [AllowAnonymous]
+    public async Task<IActionResult> PasswordResetConfirm([FromBody] PasswordResetConfirmRequest body, CancellationToken ct)
+    {
+        var outcome = await passwordResetService.ConfirmAsync(body.Token, body.NewPassword, ct);
+        return outcome switch
+        {
+            ResetConfirmOutcome.Success s => Ok(new { reset = true, sessionsRevoked = s.SessionsRevoked }),
+            ResetConfirmOutcome.WeakPassword => BadRequest(new { error = "weak_password", min_length = PasswordStrength.MinimumLength }),
+            ResetConfirmOutcome.Invalid => BadRequest(new { error = "invalid_or_expired_token" }),
+            _ => BadRequest(new { error = "invalid_or_expired_token" }),
         };
     }
 
@@ -101,6 +151,16 @@ public sealed class AuthController(
             TenantId: long.Parse(tid),
             TenantSlug: tslug,
             Role: role));
+    }
+
+    private string ResolveLocale()
+    {
+        var header = Request.Headers.AcceptLanguage.ToString();
+        if (header.StartsWith("en", StringComparison.OrdinalIgnoreCase))
+        {
+            return "en";
+        }
+        return "de";
     }
 
     private IActionResult LoginSuccessResponse(LoginOutcome.Success s)

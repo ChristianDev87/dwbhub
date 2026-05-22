@@ -11,5 +11,21 @@
     "api_status_loading": "Querying status...",
     "api_status_ok": "OK (version {{version}}, uptime {{uptime}}s)",
     "api_status_error": "API unreachable"
+  },
+  "verifyEmail": {
+    "pending": "Confirming your email …",
+    "successTitle": "Confirmed!",
+    "successBody": "Your email is now confirmed. You can sign in.",
+    "errorTitle": "Confirmation failed",
+    "errorBody": "The link is invalid or expired. Please request a new confirmation email.",
+    "goToLogin": "Go to login →"
+  },
+  "passwordReset": {
+    "title": "Set a new password",
+    "newPasswordLabel": "New password (at least 8 characters)",
+    "submit": "Change password",
+    "missingToken": "Token missing. Please use the link from your email.",
+    "weakPassword": "Password must be at least 8 characters long.",
+    "invalidToken": "The link is invalid or expired."
   }
 }

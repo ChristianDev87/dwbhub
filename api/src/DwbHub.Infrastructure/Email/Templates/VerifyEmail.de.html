@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html lang="de"><body style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;">
+<h2>Hallo {{userDisplayName}},</h2>
+<p>jemand (hoffentlich Du) hat Deine E-Mail-Adresse für den Zugang zu <strong>{{tenantName}}</strong> bei DwbHub angegeben. Bitte bestätige sie mit einem Klick auf den folgenden Link:</p>
+<p><a href="{{verifyUrl}}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">E-Mail bestätigen</a></p>
+<p>Oder kopiere diesen Link in Deinen Browser:<br><code>{{verifyUrl}}</code></p>
+<p style="color:#6b7280;font-size:0.875em;">Der Link ist <strong>{{expiresInHours}} Stunden</strong> gültig. Falls Du diese E-Mail nicht angefordert hast, ignoriere sie einfach.</p>
+<hr style="border:none;border-top:1px solid #e5e7eb;margin:32px 0;">
+<p style="color:#9ca3af;font-size:0.75em;">DwbHub · {{tenantName}}</p>
+</body></html>

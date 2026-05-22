@@ -27,6 +27,78 @@ paths:
       responses:
         '200':
           description: OK
+  /api/auth/verify-email/resend:
+    post:
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailResendRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailResendRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailResendRequest'
+      responses:
+        '200':
+          description: OK
+  /api/auth/verify-email/confirm:
+    post:
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailConfirmRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailConfirmRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailConfirmRequest'
+      responses:
+        '200':
+          description: OK
+  /api/auth/password-reset/request:
+    post:
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequestRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequestRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequestRequest'
+      responses:
+        '200':
+          description: OK
+  /api/auth/password-reset/confirm:
+    post:
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+      responses:
+        '200':
+          description: OK
   /api/auth/refresh:
     post:
       tags:
@@ -64,6 +136,43 @@ components:
           type: string
           nullable: true
         password:
+          type: string
+          nullable: true
+      additionalProperties: false
+    PasswordResetConfirmRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          nullable: true
+        newPassword:
+          type: string
+          nullable: true
+      additionalProperties: false
+    PasswordResetRequestRequest:
+      type: object
+      properties:
+        tenantSlug:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+      additionalProperties: false
+    VerifyEmailConfirmRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          nullable: true
+      additionalProperties: false
+    VerifyEmailResendRequest:
+      type: object
+      properties:
+        tenantSlug:
+          type: string
+          nullable: true
+        email:
           type: string
           nullable: true
       additionalProperties: false

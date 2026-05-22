@@ -74,4 +74,21 @@ Describe "check-tenant-filter" {
             Pop-Location
         }
     }
+
+    It "passes on Plan-0.3c sources (005_auth_tokens.sql, AuthTokenRepository.cs, EmailVerificationService, PasswordResetService)" {
+        $repoRoot = Resolve-Path (Join-Path $PSScriptRoot ".." "..")
+        Push-Location $repoRoot
+        try {
+            $output = & pwsh -NoLogo -NoProfile -File $script:scriptPath *>&1
+            $LASTEXITCODE | Should -Be 0 -Because "Plan 0.3c sources should pass the lint; output was:`n$($output -join "`n")"
+
+            Test-Path "api/migrations/005_auth_tokens.sql" | Should -BeTrue
+            Test-Path "api/src/DwbHub.Data/Repositories/AuthTokenRepository.cs" | Should -BeTrue
+            Test-Path "api/src/DwbHub.Application/Auth/EmailVerificationService.cs" | Should -BeTrue
+            Test-Path "api/src/DwbHub.Application/Auth/PasswordResetService.cs" | Should -BeTrue
+        }
+        finally {
+            Pop-Location
+        }
+    }
 }
