@@ -21,8 +21,48 @@ if (-not (Test-Path $dllRelative)) { throw "Build artifact not found: $dllRelati
 Write-Host "Dumping OpenAPI document v1 ..." -ForegroundColor Cyan
 # ASPNETCORE_ENVIRONMENT=Development is required so that AddSwaggerGen / SwaggerDoc("v1")
 # is registered; the flag is gated on IsDevelopment() in Program.cs.
-$originalEnv = $env:ASPNETCORE_ENVIRONMENT
+#
+# `swagger tofile` loads DwbHub.Api.dll, calls builder.Build(), and runs the
+# boot-time MigrateUp. That needs a real Postgres — Plan 0.2 onwards. We spin
+# up a throw-away one here so the real boot path runs (no skip flags).
+$originalEnv     = $env:ASPNETCORE_ENVIRONMENT
+$originalConnStr = $env:DWBHUB_DB_CONNECTION
+$pgContainer     = "dwbhub-openapi-pg-" + ([guid]::NewGuid().ToString("N").Substring(0, 8))
 $env:ASPNETCORE_ENVIRONMENT = "Development"
+
+Write-Host "Starting temporary Postgres ($pgContainer) ..." -ForegroundColor Cyan
+docker run -d --name $pgContainer -p 0:5432 `
+    -e POSTGRES_DB=dwbhub `
+    -e POSTGRES_USER=dwbhub `
+    -e POSTGRES_PASSWORD=dwbhub_openapi `
+    postgres:17-alpine | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Failed to start Postgres container." }
+
+# Wait for readiness (~5-10 s on cold cache)
+$ready = $false
+for ($i = 0; $i -lt 30; $i++) {
+    docker exec $pgContainer pg_isready -U dwbhub -d dwbhub 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) { $ready = $true; break }
+    Start-Sleep -Seconds 1
+}
+if (-not $ready) {
+    docker logs $pgContainer
+    docker rm -f $pgContainer | Out-Null
+    throw "Postgres did not become ready within 30 s."
+}
+
+# Discover the random host port docker assigned
+$pgPort = (docker inspect $pgContainer --format '{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}').Trim()
+
+# Host resolution depends on where the swagger tofile process runs:
+#   - Local dev (Windows/macOS Docker Desktop, Linux host): localhost reaches host-published ports.
+#   - CI on the self-hosted runner: the runner is itself a docker container. Its loopback has
+#     nothing on $pgPort. The watcher adds `host-gateway` -> docker bridge gateway, which
+#     forwards to host-published ports — that's the address we need.
+$pgHostForTools = if ($env:GITHUB_ACTIONS -eq "true") { "host-gateway" } else { "localhost" }
+$env:DWBHUB_DB_CONNECTION = "Host=$pgHostForTools;Port=$pgPort;Database=dwbhub;Username=dwbhub;Password=dwbhub_openapi"
+Write-Host "Postgres reachable at ${pgHostForTools}:${pgPort}" -ForegroundColor Green
+
 try {
     dotnet tool run swagger tofile --yaml --output $tempSpec $dllRelative v1
     if ($LASTEXITCODE -ne 0) { throw "swagger tofile failed." }
@@ -59,5 +99,8 @@ try {
 }
 finally {
     $env:ASPNETCORE_ENVIRONMENT = $originalEnv
+    $env:DWBHUB_DB_CONNECTION   = $originalConnStr
+    Write-Host "Removing temporary Postgres ($pgContainer) ..." -ForegroundColor DarkGray
+    docker rm -f $pgContainer 2>&1 | Out-Null
     Remove-Item $tempSpec -ErrorAction SilentlyContinue
 }

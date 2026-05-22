@@ -159,16 +159,34 @@ jobs:
         env:
           DOCKER_BUILD_SUMMARY: "false"
           DOCKER_BUILD_RECORD_UPLOAD: "false"
-      - name: Smoke-run API health
+      - name: Smoke-run API health (with Postgres sidecar)
         shell: bash
         run: |
-          # Bind to a high host port to avoid clashing with co-tenant services on the runner host.
-          # The runner container is launched by the watcher with --add-host=host-gateway:host-gateway,
-          # so `host-gateway` resolves to the docker bridge gateway (reaches host-published ports).
-          # Pre-clean: a previous hard-cancelled run can leave an orphan dwbhub-api-smoke holding
-          # both the name and port 15080 — Tear-Down only runs if the job exits gracefully.
-          docker rm -f dwbhub-api-smoke 2>/dev/null || true
-          docker run -d --name dwbhub-api-smoke -p 15080:8080 \
+          # The API boots, runs FluentMigrator MigrateUp, then serves /api/health.
+          # That requires a reachable Postgres on the same docker network. We spin
+          # up a throw-away one here — no skip flags, the real boot path is exercised.
+          #
+          # Pre-clean orphans from a previous hard-cancelled run.
+          docker rm -f dwbhub-api-smoke dwbhub-pg-smoke 2>/dev/null || true
+          docker network rm dwbhub-smoke-net 2>/dev/null || true
+          docker network create dwbhub-smoke-net
+
+          docker run -d --name dwbhub-pg-smoke --network dwbhub-smoke-net \
+            -e POSTGRES_DB=dwbhub \
+            -e POSTGRES_USER=dwbhub \
+            -e POSTGRES_PASSWORD=dwbhub_smoke \
+            postgres:17-alpine
+          for i in {1..30}; do
+            if docker exec dwbhub-pg-smoke pg_isready -U dwbhub -d dwbhub >/dev/null 2>&1; then
+              echo "Postgres ready"; break
+            fi
+            sleep 1
+          done
+
+          # API: high host port to dodge co-tenant clashes; reaches Postgres via
+          # the shared docker network using its container name.
+          docker run -d --name dwbhub-api-smoke --network dwbhub-smoke-net -p 15080:8080 \
+            -e DWBHUB_DB_CONNECTION="Host=dwbhub-pg-smoke;Port=5432;Database=dwbhub;Username=dwbhub;Password=dwbhub_smoke" \
             -e DWBHUB_JWT_SECRET=ZGV2X2p3dF9zZWNyZXRfZG9fbm90X3VzZV9pbl9wcm9k \
             -e DWBHUB_ENCRYPTION_KEY=ZGV2X2VuY3J5cHRpb25fa2V5XzMyYnl0ZXNfdGVzdF9vbg== \
             dwbhub-api:smoke
@@ -178,7 +196,10 @@ jobs:
             fi
             sleep 1
           done
+          echo "--- API logs ---"
           docker logs dwbhub-api-smoke
+          echo "--- Postgres logs ---"
+          docker logs dwbhub-pg-smoke
           exit 1
       - name: Smoke-run Web index
         shell: bash
@@ -197,7 +218,8 @@ jobs:
         if: always()
         shell: bash
         run: |
-          docker rm -f dwbhub-api-smoke dwbhub-web-smoke 2>/dev/null || true
+          docker rm -f dwbhub-api-smoke dwbhub-web-smoke dwbhub-pg-smoke 2>/dev/null || true
+          docker network rm dwbhub-smoke-net 2>/dev/null || true
 
   e2e-smoke:
     # Heavy full-stack job: only runs on PRs that target main (the release branch).
