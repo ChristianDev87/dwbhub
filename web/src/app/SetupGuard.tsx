@@ -1,23 +1,26 @@
 import type React from "react";
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 
 type GuardState =
   | { kind: "checking" }
-  | { kind: "open" }
-  | { kind: "redirecting" }
+  | { kind: "completed" }
+  | { kind: "needs-setup" }
   | { kind: "error" };
 
 /**
- * Top-level wrapper that fetches /api/setup/status once on mount and redirects
- * to /setup if the wizard is not yet complete.
+ * Top-level wrapper that fetches /api/setup/status once on mount.
+ * If setup is incomplete and the user is not already on /setup, declaratively
+ * redirects via <Navigate>. Once setup is completed (or the user IS on /setup),
+ * renders children. Avoids the "stuck on redirecting state" bug from the
+ * previous imperative `navigate()` approach: after the declarative redirect
+ * the component re-renders at /setup and falls through to render children.
  */
 export function SetupGuard({
   children,
 }: {
   children: React.ReactNode;
 }): React.JSX.Element {
-  const navigate = useNavigate();
   const location = useLocation();
   const [state, setState] = useState<GuardState>({ kind: "checking" });
 
@@ -33,24 +36,16 @@ export function SetupGuard({
           return;
         }
         const body = (await res.json()) as { completed: boolean };
-        if (body.completed) {
-          setState({ kind: "open" });
-        } else if (location.pathname !== "/setup") {
-          setState({ kind: "redirecting" });
-          navigate("/setup", { replace: true });
-        } else {
-          setState({ kind: "open" });
-        }
+        setState({ kind: body.completed ? "completed" : "needs-setup" });
       } catch (err) {
         if ((err as Error).name === "AbortError") return;
         setState({ kind: "error" });
       }
     })();
     return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (state.kind === "checking" || state.kind === "redirecting") {
+  if (state.kind === "checking") {
     return (
       <div data-testid="setup-guard-checking" className="p-8">
         …
@@ -63,6 +58,9 @@ export function SetupGuard({
         Cannot reach the API. Check the server.
       </div>
     );
+  }
+  if (state.kind === "needs-setup" && location.pathname !== "/setup") {
+    return <Navigate to="/setup" replace />;
   }
   return <>{children}</>;
 }
