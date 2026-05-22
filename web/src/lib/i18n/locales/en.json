@@ -79,5 +79,28 @@
     "welcome": "Welcome, {{name}}",
     "tenant": "Tenant: {{name}}",
     "logout": "Sign out"
+  },
+  "guilds": {
+    "title": "Guilds",
+    "addSectionTitle": "Add a Guild",
+    "registeredSectionTitle": "Registered Guilds",
+    "discordGuildIdLabel": "Discord Guild ID",
+    "discordGuildIdHint": "17–20 digit Discord guild ID",
+    "discordGuildIdInvalid": "Invalid Discord guild ID.",
+    "displayNameLabel": "Display Name",
+    "displayNameInvalid": "Display name must be 1–100 characters.",
+    "addButton": "Add",
+    "addingButton": "Adding…",
+    "guildAlreadyRegistered": "This guild is already registered.",
+    "deleteButton": "Remove",
+    "deleteConfirmTitle": "Remove guild?",
+    "deleteConfirmText": "Really remove {{name}}? The bot connection will be terminated.",
+    "deleteConfirmYes": "Remove",
+    "deleteConfirmCancel": "Cancel",
+    "isActive": "Active",
+    "isInactive": "Inactive",
+    "registeredAt": "Registered on {{date}}",
+    "noGuilds": "No guilds registered yet.",
+    "networkError": "Network connection to the server failed."
   }
 }
