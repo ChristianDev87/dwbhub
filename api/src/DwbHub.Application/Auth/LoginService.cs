@@ -42,7 +42,9 @@ public sealed class LoginService(
                 TenantId: null, ActorUserId: null, EventType: "auth.login.failed",
                 Payload: new Dictionary<string, object?>
                 {
-                    ["tenantSlug"] = tenantSlug, ["email"] = email, ["reason"] = "unknown_tenant",
+                    ["tenantSlug"] = tenantSlug,
+                    ["email"] = email,
+                    ["reason"] = "unknown_tenant",
                 },
                 IpAddress: ipAddress), ct).ConfigureAwait(false);
             return new LoginOutcome.InvalidCredentials();
@@ -58,7 +60,8 @@ public sealed class LoginService(
                 TenantId: tenant.Id, ActorUserId: null, EventType: "auth.login.failed",
                 Payload: new Dictionary<string, object?>
                 {
-                    ["tenantSlug"] = tenantSlug, ["email"] = email,
+                    ["tenantSlug"] = tenantSlug,
+                    ["email"] = email,
                     ["reason"] = user is null ? "unknown_user" : "inactive_user",
                 },
                 IpAddress: ipAddress), ct).ConfigureAwait(false);
@@ -73,7 +76,8 @@ public sealed class LoginService(
                 TenantId: tenant.Id, ActorUserId: user.Id, EventType: "auth.login.email_not_verified",
                 Payload: new Dictionary<string, object?>
                 {
-                    ["tenantSlug"] = tenantSlug, ["email"] = email,
+                    ["tenantSlug"] = tenantSlug,
+                    ["email"] = email,
                 },
                 IpAddress: ipAddress), ct).ConfigureAwait(false);
             return new LoginOutcome.EmailNotVerified(user.Email);
@@ -87,7 +91,9 @@ public sealed class LoginService(
                 TenantId: tenant.Id, ActorUserId: user.Id, EventType: "auth.login.failed",
                 Payload: new Dictionary<string, object?>
                 {
-                    ["tenantSlug"] = tenantSlug, ["email"] = email, ["reason"] = "wrong_password",
+                    ["tenantSlug"] = tenantSlug,
+                    ["email"] = email,
+                    ["reason"] = "wrong_password",
                 },
                 IpAddress: ipAddress), ct).ConfigureAwait(false);
             return new LoginOutcome.InvalidCredentials();
