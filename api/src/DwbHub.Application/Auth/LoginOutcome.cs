@@ -9,6 +9,6 @@ namespace DwbHub.Application.Auth;
 public abstract record LoginOutcome
 {
     public sealed record Success(string AccessToken, User User, Tenant Tenant) : LoginOutcome;
-    public sealed record InvalidCredentials                                    : LoginOutcome;
-    public sealed record LockedOut(int RetryAfterSeconds)                      : LoginOutcome;
+    public sealed record InvalidCredentials : LoginOutcome;
+    public sealed record LockedOut(int RetryAfterSeconds) : LoginOutcome;
 }

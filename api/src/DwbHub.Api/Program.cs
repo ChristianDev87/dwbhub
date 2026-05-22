@@ -90,11 +90,11 @@ builder.Services
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey         = new SymmetricSecurityKey(jwtKeyBytes),
-            ValidateIssuer           = false,
-            ValidateAudience         = false,
-            ValidateLifetime         = true,
-            ClockSkew                = TimeSpan.FromSeconds(30),
+            IssuerSigningKey = new SymmetricSecurityKey(jwtKeyBytes),
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30),
         };
     });
 builder.Services.AddAuthorization();

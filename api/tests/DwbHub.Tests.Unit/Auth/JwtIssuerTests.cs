@@ -40,10 +40,10 @@ public sealed class JwtIssuerTests
         var handler = new JwtSecurityTokenHandler();
         var token = handler.ReadJwtToken(jwt);
 
-        token.Claims.Should().Contain(c => c.Type == "sub"   && c.Value == "42");
-        token.Claims.Should().Contain(c => c.Type == "tid"   && c.Value == "7");
+        token.Claims.Should().Contain(c => c.Type == "sub" && c.Value == "42");
+        token.Claims.Should().Contain(c => c.Type == "tid" && c.Value == "7");
         token.Claims.Should().Contain(c => c.Type == "tslug" && c.Value == "demo");
-        token.Claims.Should().Contain(c => c.Type == "role"  && c.Value == "Admin");
+        token.Claims.Should().Contain(c => c.Type == "role" && c.Value == "Admin");
         token.Claims.Should().Contain(c => c.Type == "iat");
         token.Claims.Should().Contain(c => c.Type == "exp");
         token.Claims.Should().Contain(c => c.Type == "jti");

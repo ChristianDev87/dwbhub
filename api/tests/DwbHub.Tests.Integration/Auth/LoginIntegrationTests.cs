@@ -35,7 +35,7 @@ public sealed class LoginIntegrationTests : IAsyncLifetime
         _ds = NpgsqlDataSource.Create(_fixture.ConnectionString);
         var factory = new NpgsqlConnectionFactory(_ds);
         _tenants = new TenantRepository(factory);
-        _users   = new UserRepository(factory);
+        _users = new UserRepository(factory);
         var attempts = new LoginAttemptRepository(factory);
         _hasher = new BCryptPasswordHasher();
         var issuer = new JwtIssuer(Base64Key);
@@ -163,7 +163,7 @@ public sealed class LoginIntegrationTests : IAsyncLifetime
         var token = handler.ReadJwtToken(jwt);
 
         token.Claims.Should().Contain(c => c.Type == "tslug" && c.Value == "acme");
-        token.Claims.Should().Contain(c => c.Type == "role"  && c.Value == "Owner");
+        token.Claims.Should().Contain(c => c.Type == "role" && c.Value == "Owner");
     }
 }
 

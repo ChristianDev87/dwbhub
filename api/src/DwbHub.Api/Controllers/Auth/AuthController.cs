@@ -35,10 +35,10 @@ public sealed class AuthController(ILoginService loginService) : ControllerBase
     [Authorize]
     public IActionResult Me()
     {
-        var sub   = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        var tid   = User.FindFirstValue("tid");
+        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        var tid = User.FindFirstValue("tid");
         var tslug = User.FindFirstValue("tslug") ?? "";
-        var role  = User.FindFirstValue("role")  ?? "";
+        var role = User.FindFirstValue("role") ?? "";
 
         if (sub is null || tid is null)
         {
