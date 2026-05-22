@@ -170,21 +170,44 @@ public sealed class LoginIntegrationTests : IAsyncLifetime
         token.Claims.Should().Contain(c => c.Type == "tslug" && c.Value == "acme");
         token.Claims.Should().Contain(c => c.Type == "role" && c.Value == "Owner");
     }
-}
 
-/// <summary>
-/// Converts Npgsql's UTC DateTime (returned for TIMESTAMPTZ) to DateTimeOffset
-/// so Dapper can materialize records that use DateTimeOffset for timestamp columns.
-/// </summary>
-internal sealed class DateTimeOffsetTypeHandler : SqlMapper.TypeHandler<DateTimeOffset>
-{
-    public override DateTimeOffset Parse(object value) => value switch
+    [Fact]
+    public async Task LoginAsync_returns_EmailNotVerified_when_email_verified_at_is_null()
     {
-        DateTimeOffset dto => dto,
-        DateTime dt => new DateTimeOffset(dt, TimeSpan.Zero),
-        _ => throw new InvalidCastException($"Cannot convert {value?.GetType().Name} to DateTimeOffset")
-    };
+        var tenantId = await _tenants.CreateAsync("Acme Corp", "acme");
+        await _users.CreateAsync(new User(
+            Id: 0, TenantId: tenantId,
+            Email: "unverified@acme.test",
+            EmailVerifiedAt: null,
+            PasswordHash: _hasher.Hash("correct horse battery staple"),
+            DisplayName: "Ghost", Role: UserRole.Member, IsActive: true,
+            CreatedAt: default, UpdatedAt: default));
 
-    public override void SetValue(IDbDataParameter parameter, DateTimeOffset value)
-        => parameter.Value = value;
+        var outcome = await _sut.LoginAsync(
+            "acme", "unverified@acme.test", "correct horse battery staple", TestIp);
+
+        outcome.Should().BeOfType<LoginOutcome.EmailNotVerified>();
+        var enf = (LoginOutcome.EmailNotVerified)outcome;
+        enf.Email.Should().Be("unverified@acme.test");
+    }
+
+    [Fact]
+    public async Task LoginAsync_records_failed_attempt_when_email_not_verified()
+    {
+        var tenantId = await _tenants.CreateAsync("Acme Corp", "acme");
+        await _users.CreateAsync(new User(
+            Id: 0, TenantId: tenantId,
+            Email: "unverified@acme.test",
+            EmailVerifiedAt: null,
+            PasswordHash: _hasher.Hash("correct horse battery staple"),
+            DisplayName: "Ghost", Role: UserRole.Member, IsActive: true,
+            CreatedAt: default, UpdatedAt: default));
+
+        for (int i = 0; i < 5; i++)
+        {
+            _ = await _sut.LoginAsync("acme", "unverified@acme.test", "anything", TestIp);
+        }
+        var sixth = await _sut.LoginAsync("acme", "unverified@acme.test", "anything", TestIp);
+        sixth.Should().BeOfType<LoginOutcome.LockedOut>();
+    }
 }

@@ -11,5 +11,21 @@
     "api_status_loading": "Status wird abgefragt...",
     "api_status_ok": "OK (Version {{version}}, Uptime {{uptime}}s)",
     "api_status_error": "API nicht erreichbar"
+  },
+  "verifyEmail": {
+    "pending": "E-Mail-Adresse wird bestätigt …",
+    "successTitle": "Bestätigt!",
+    "successBody": "Deine E-Mail-Adresse ist jetzt bestätigt. Du kannst Dich jetzt anmelden.",
+    "errorTitle": "Bestätigung fehlgeschlagen",
+    "errorBody": "Der Link ist ungültig oder abgelaufen. Bitte fordere einen neuen Bestätigungslink an.",
+    "goToLogin": "Zum Login →"
+  },
+  "passwordReset": {
+    "title": "Neues Passwort setzen",
+    "newPasswordLabel": "Neues Passwort (mindestens 8 Zeichen)",
+    "submit": "Passwort ändern",
+    "missingToken": "Token fehlt. Bitte verwende den Link aus der E-Mail.",
+    "weakPassword": "Das Passwort muss mindestens 8 Zeichen lang sein.",
+    "invalidToken": "Der Link ist ungültig oder abgelaufen."
   }
 }

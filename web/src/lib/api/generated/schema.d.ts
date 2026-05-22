@@ -53,6 +53,162 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/verify-email/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["VerifyEmailResendRequest"];
+                    "text/json": components["schemas"]["VerifyEmailResendRequest"];
+                    "application/*+json": components["schemas"]["VerifyEmailResendRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/verify-email/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["VerifyEmailConfirmRequest"];
+                    "text/json": components["schemas"]["VerifyEmailConfirmRequest"];
+                    "application/*+json": components["schemas"]["VerifyEmailConfirmRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password-reset/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PasswordResetRequestRequest"];
+                    "text/json": components["schemas"]["PasswordResetRequestRequest"];
+                    "application/*+json": components["schemas"]["PasswordResetRequestRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password-reset/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PasswordResetConfirmRequest"];
+                    "text/json": components["schemas"]["PasswordResetConfirmRequest"];
+                    "application/*+json": components["schemas"]["PasswordResetConfirmRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/refresh": {
         parameters: {
             query?: never;
@@ -192,6 +348,21 @@ export interface components {
         LoginRequest: {
             email?: string | null;
             password?: string | null;
+        };
+        PasswordResetConfirmRequest: {
+            token?: string | null;
+            newPassword?: string | null;
+        };
+        PasswordResetRequestRequest: {
+            tenantSlug?: string | null;
+            email?: string | null;
+        };
+        VerifyEmailConfirmRequest: {
+            token?: string | null;
+        };
+        VerifyEmailResendRequest: {
+            tenantSlug?: string | null;
+            email?: string | null;
         };
     };
     responses: never;

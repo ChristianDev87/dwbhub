@@ -89,6 +89,40 @@ builder.Services.AddScoped<DwbHub.Core.Repositories.IRefreshTokenRepository,
                            DwbHub.Data.Repositories.RefreshTokenRepository>();
 builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 
+// --- Email + verify + reset (Plan 0.3c) --------------------------------
+var smtpHost = Environment.GetEnvironmentVariable("DWBHUB_SMTP_HOST")
+    ?? throw new InvalidOperationException("DWBHUB_SMTP_HOST env var is required.");
+var smtpPort = int.Parse(Environment.GetEnvironmentVariable("DWBHUB_SMTP_PORT")
+    ?? throw new InvalidOperationException("DWBHUB_SMTP_PORT env var is required."));
+var smtpFrom = Environment.GetEnvironmentVariable("DWBHUB_SMTP_FROM")
+    ?? throw new InvalidOperationException("DWBHUB_SMTP_FROM env var is required.");
+var publicBaseUrl = Environment.GetEnvironmentVariable("DWBHUB_PUBLIC_BASE_URL")
+    ?? "http://localhost:5173";
+
+builder.Services.AddSingleton<IEmailSender>(_ => new DwbHub.Infrastructure.Email.MailKitEmailSender(smtpHost, smtpPort, smtpFrom));
+builder.Services.AddSingleton<IEmailTemplateRenderer, DwbHub.Infrastructure.Email.TemplateEmailRenderer>();
+builder.Services.AddScoped<DwbHub.Core.Repositories.IAuthTokenRepository,
+                           DwbHub.Data.Repositories.AuthTokenRepository>();
+builder.Services.AddScoped<IEmailVerificationService>(sp => new EmailVerificationService(
+    sp.GetRequiredService<DwbHub.Core.Repositories.IAuthTokenRepository>(),
+    sp.GetRequiredService<DwbHub.Core.Repositories.ITenantRepository>(),
+    sp.GetRequiredService<DwbHub.Core.Repositories.IUserRepository>(),
+    sp.GetRequiredService<ITokenHasher>(),
+    sp.GetRequiredService<ITokenGenerator>(),
+    sp.GetRequiredService<IEmailTemplateRenderer>(),
+    sp.GetRequiredService<IEmailSender>(),
+    publicBaseUrl));
+builder.Services.AddScoped<IPasswordResetService>(sp => new PasswordResetService(
+    sp.GetRequiredService<DwbHub.Core.Repositories.IAuthTokenRepository>(),
+    sp.GetRequiredService<DwbHub.Core.Repositories.ITenantRepository>(),
+    sp.GetRequiredService<DwbHub.Core.Repositories.IUserRepository>(),
+    sp.GetRequiredService<ITokenHasher>(),
+    sp.GetRequiredService<ITokenGenerator>(),
+    sp.GetRequiredService<IPasswordHasher>(),
+    sp.GetRequiredService<IEmailTemplateRenderer>(),
+    sp.GetRequiredService<IEmailSender>(),
+    publicBaseUrl));
+
 var jwtKeyBytes = Convert.FromBase64String(jwtSecret);
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

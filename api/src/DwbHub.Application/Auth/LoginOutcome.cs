@@ -11,4 +11,5 @@ public abstract record LoginOutcome
     public sealed record Success(string AccessToken, string RefreshToken, User User, Tenant Tenant) : LoginOutcome;
     public sealed record InvalidCredentials : LoginOutcome;
     public sealed record LockedOut(int RetryAfterSeconds) : LoginOutcome;
+    public sealed record EmailNotVerified(string Email) : LoginOutcome;
 }

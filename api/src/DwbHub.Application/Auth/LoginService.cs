@@ -44,14 +44,23 @@ public sealed class LoginService(
             return new LoginOutcome.InvalidCredentials();
         }
 
-        // 4. BCrypt verify
+        // 4. Email-verify gate (Plan 0.3c). Before BCrypt: don't burn CPU + don't leak
+        // timing info to a caller who'll be rejected anyway. Failed-attempt still
+        // recorded so brute-force on unverified accounts still trips lockout.
+        if (user.EmailVerifiedAt is null)
+        {
+            await attempts.RecordAsync(email, ipAddress, success: false, ct).ConfigureAwait(false);
+            return new LoginOutcome.EmailNotVerified(user.Email);
+        }
+
+        // 5. BCrypt verify
         if (!hasher.Verify(password, user.PasswordHash))
         {
             await attempts.RecordAsync(email, ipAddress, success: false, ct).ConfigureAwait(false);
             return new LoginOutcome.InvalidCredentials();
         }
 
-        // 5. Success
+        // 6. Success
         await attempts.RecordAsync(email, ipAddress, success: true, ct).ConfigureAwait(false);
         var token = issuer.Issue(user, tenant);
         var refreshToken = await refreshTokenService.IssueForLoginAsync(user, tenant, ipAddress, userAgent: null, ct).ConfigureAwait(false);
