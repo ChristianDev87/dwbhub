@@ -70,7 +70,7 @@ describe("BotTokenModal", () => {
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
     expect(onClose).toHaveBeenCalled();
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe(
       "/api/t/acme/guilds/11111111-1111-1111-1111-111111111111/bot-credentials",
     );
