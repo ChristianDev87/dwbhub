@@ -94,7 +94,8 @@ public sealed class DiscordNetBotConnectionLiveTests
         };
 
         await conn.ConnectAsync(env.Value.token, CancellationToken.None);
-        await Task.WhenAny(reachedConnected.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        var completed = await Task.WhenAny(reachedConnected.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        Assert.True(completed == reachedConnected.Task, "Did not reach Connected within 30 s");
         Assert.Equal(BotConnectionState.Connected, conn.State);
 
         await conn.DisconnectAsync(CancellationToken.None);
