@@ -222,6 +222,43 @@ public sealed class TenantRoutingIntegrationTests : IAsyncLifetime
         res.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
+    [Fact]
+    public async Task GET_guild_scoped_route_with_unknown_uuid_returns_404_and_audit_row()
+    {
+        await SeedTenantAndUserAsync("acme", "alice@acme.test");
+        var pid = Guid.NewGuid();
+        var res = await _client.GetAsync($"/api/t/acme/g/{pid:D}/anything");
+        res.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("guild_not_found");
+
+        await using var conn = _ds.CreateConnection();
+        await conn.OpenAsync();
+        var eventType = await conn.QuerySingleAsync<string>("""
+            SELECT event_type FROM audit_log
+            WHERE event_type = 'guild.unknown_access'
+            ORDER BY id DESC LIMIT 1
+        """);
+        eventType.Should().Be("guild.unknown_access");
+    }
+
+    [Fact]
+    public async Task GET_guild_scoped_route_with_unknown_tenant_returns_404_with_tenant_audit()
+    {
+        var pid = Guid.NewGuid();
+        var res = await _client.GetAsync($"/api/t/nonexistent/g/{pid:D}/anything");
+        res.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("tenant_not_found");
+
+        await using var conn = _ds.CreateConnection();
+        await conn.OpenAsync();
+        var eventType = await conn.QuerySingleAsync<string>("""
+            SELECT event_type FROM audit_log
+            WHERE event_type = 'auth.unknown_tenant_access'
+            ORDER BY id DESC LIMIT 1
+        """);
+        eventType.Should().Be("auth.unknown_tenant_access");
+    }
+
     private sealed record MeShape(long userId, long tenantId, string tenantSlug, string role);
     private sealed record DashboardShape(long tenantId, string tenantSlug, string tenantName, string locale);
 }

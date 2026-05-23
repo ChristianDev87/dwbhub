@@ -7,6 +7,7 @@ import { VerifyEmailPage } from "./VerifyEmailPage";
 import { PasswordResetPage } from "./PasswordResetPage";
 import { VerifyEmailPromptPage } from "./VerifyEmailPromptPage";
 import { DashboardPage } from "./DashboardPage";
+import { GuildsPage } from "./GuildsPage";
 import { AuthGuard } from "./AuthGuard";
 
 export function AppRouter(): React.JSX.Element {
@@ -26,6 +27,14 @@ export function AppRouter(): React.JSX.Element {
         element={
           <AuthGuard>
             <DashboardPage />
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/t/:slug/guilds"
+        element={
+          <AuthGuard>
+            <GuildsPage />
           </AuthGuard>
         }
       />
