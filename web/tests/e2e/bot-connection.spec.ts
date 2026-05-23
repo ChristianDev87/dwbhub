@@ -1,0 +1,120 @@
+import { expect, test, type APIRequestContext } from "@playwright/test";
+
+const SLUG = "acme";
+const OWNER_EMAIL = "owner@acme.test";
+const OWNER_PASSWORD = "correct horse battery staple";
+
+async function setupReady(request: APIRequestContext): Promise<boolean> {
+  const statusRes = await request.get("/api/setup/status");
+  const status = (await statusRes.json()) as { completed: boolean };
+  return status.completed;
+}
+
+async function loginAsOwner(page: import("@playwright/test").Page) {
+  await page.goto("/login");
+  await page.fill('[data-testid="input-tenantSlug"]', SLUG);
+  await page.fill('[data-testid="input-email"]', OWNER_EMAIL);
+  await page.fill('[data-testid="input-password"]', OWNER_PASSWORD);
+  await page.click('[data-testid="login-submit"]');
+  await page.waitForURL(`**/t/${SLUG}/dashboard`, { timeout: 15_000 });
+}
+
+test.describe("Plan 0.8 bot-connection UI", () => {
+  test("activate then deactivate cycle updates buttons", async ({
+    page,
+    request,
+  }) => {
+    const ok = await setupReady(request);
+    test.skip(
+      !ok,
+      "Setup not pre-completed (skip — same convention as auth.spec.ts)",
+    );
+
+    await loginAsOwner(page);
+    await page.goto(`/t/${SLUG}/guilds`);
+
+    // Use a unique Discord guild ID + display name to avoid collision across runs.
+    const uniqueDiscordId = String(
+      BigInt(Date.now()) * 1000n + BigInt(Math.floor(Math.random() * 1000)),
+    );
+    const name = `Bot-Connection E2E ${uniqueDiscordId.slice(-6)}`;
+
+    await page.fill('[data-testid="input-discord-guild-id"]', uniqueDiscordId);
+    await page.fill('[data-testid="input-guild-display-name"]', name);
+    await page.click('[data-testid="add-guild-submit"]');
+    await expect(page.getByText(name)).toBeVisible();
+
+    // Locate the li row containing this guild name.
+    const row = page.locator("li").filter({ hasText: name }).first();
+
+    // Extract publicId from the per-guild status testid.
+    const statusEl = row.locator('[data-testid^="guild-status-"]').first();
+    const statusTestId = await statusEl.getAttribute("data-testid");
+    expect(statusTestId).toBeTruthy();
+    const publicId = statusTestId!.replace("guild-status-", "");
+
+    const pauseBtn = page.getByTestId(`guild-pause-${publicId}`);
+    const resumeBtn = page.getByTestId(`guild-resume-${publicId}`);
+
+    // New guild starts active → Pause visible, Resume absent.
+    await expect(pauseBtn).toBeVisible();
+    await expect(resumeBtn).toHaveCount(0);
+
+    // Pause → modal → confirm → flips to inactive.
+    await pauseBtn.click();
+    await expect(page.getByTestId("pause-guild-modal")).toBeVisible();
+    await page.click('[data-testid="pause-modal-confirm"]');
+    await expect(page.getByTestId("pause-guild-modal")).toHaveCount(0);
+    await expect(resumeBtn).toBeVisible({ timeout: 5_000 });
+    await expect(pauseBtn).toHaveCount(0);
+
+    // Resume → flips back to active.
+    await resumeBtn.click();
+    await expect(pauseBtn).toBeVisible({ timeout: 5_000 });
+    await expect(resumeBtn).toHaveCount(0);
+
+    // Cleanup: delete-guild-button is static (no publicId suffix) — click within the row.
+    await row.locator('[data-testid="delete-guild-button"]').click();
+    await page.click('[data-testid="delete-confirm-yes"]');
+  });
+
+  test("reconnect button disabled without bot credentials", async ({
+    page,
+    request,
+  }) => {
+    const ok = await setupReady(request);
+    test.skip(!ok, "Setup not pre-completed");
+
+    await loginAsOwner(page);
+    await page.goto(`/t/${SLUG}/guilds`);
+
+    const uniqueDiscordId = String(
+      BigInt(Date.now()) * 1000n + BigInt(Math.floor(Math.random() * 1000)),
+    );
+    const name = `Bot-Connection-Reconnect E2E ${uniqueDiscordId.slice(-6)}`;
+
+    await page.fill('[data-testid="input-discord-guild-id"]', uniqueDiscordId);
+    await page.fill('[data-testid="input-guild-display-name"]', name);
+    await page.click('[data-testid="add-guild-submit"]');
+    await expect(page.getByText(name)).toBeVisible();
+
+    // Locate the li row containing this guild name.
+    const row = page.locator("li").filter({ hasText: name }).first();
+
+    // Extract publicId from the per-guild status testid.
+    const statusEl = row.locator('[data-testid^="guild-status-"]').first();
+    const publicId = (await statusEl.getAttribute("data-testid"))!.replace(
+      "guild-status-",
+      "",
+    );
+
+    const reconnectBtn = page.getByTestId(`guild-reconnect-${publicId}`);
+    await expect(reconnectBtn).toBeVisible();
+    // No bot credentials configured → reconnect is disabled.
+    await expect(reconnectBtn).toBeDisabled();
+
+    // Cleanup: delete-guild-button is static (no publicId suffix) — click within the row.
+    await row.locator('[data-testid="delete-guild-button"]').click();
+    await page.click('[data-testid="delete-confirm-yes"]');
+  });
+});
