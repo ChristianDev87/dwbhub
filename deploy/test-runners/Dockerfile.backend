@@ -1,0 +1,34 @@
+# Plan 0.8.1 — backend / openapi / sql-lint / container-smoke / discord-live test runner.
+# Base: official .NET 10 SDK on Debian (mcr.microsoft.com is fast + signed).
+FROM mcr.microsoft.com/dotnet/sdk:10.0
+
+# --- System packages ---
+# curl + gpg: prerequisite for PowerShell apt repo.
+# ca-certificates: for HTTPS to Discord + NuGet.
+# docker.io CLI (no daemon) so container-smoke can `docker build` + `docker run`
+#   against the host's daemon via mounted /var/run/docker.sock.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl gnupg ca-certificates apt-transport-https software-properties-common \
+        docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- PowerShell 7 ---
+# Microsoft's official Debian repo. We pin to 7.4 (LTS as of writing).
+RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" \
+        > /etc/apt/sources.list.d/microsoft.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends powershell \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Pester (PowerShell module for SQL-lint tests in tools/tests/) ---
+RUN pwsh -Command "Install-Module -Name Pester -RequiredVersion 5.5.0 -Force -SkipPublisherCheck -Scope AllUsers"
+
+# --- Entrypoint + jobs (copied at build time so they're available without bind-mount) ---
+COPY deploy/test-runners/entrypoint.sh /opt/test-runners/entrypoint.sh
+COPY deploy/test-runners/jobs/         /opt/test-runners/jobs/
+RUN chmod +x /opt/test-runners/entrypoint.sh /opt/test-runners/jobs/*.sh 2>/dev/null || true
+
+WORKDIR /workspace
+ENTRYPOINT ["/opt/test-runners/entrypoint.sh"]
