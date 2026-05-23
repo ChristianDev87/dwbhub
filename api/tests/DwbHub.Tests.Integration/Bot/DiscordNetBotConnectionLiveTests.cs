@@ -66,11 +66,25 @@ public sealed class DiscordNetBotConnectionLiveTests
             tenantId: 1L,
             logger: NullLogger<DiscordNetBotConnection>.Instance);
 
-        // Shape-valid but cryptographically bogus token. Discord returns 401.
+        var reachedTokenInvalid = new TaskCompletionSource();
+        conn.StateChanged += change =>
+        {
+            if (change.To == BotConnectionState.TokenInvalid) reachedTokenInvalid.TrySetResult();
+            return Task.CompletedTask;
+        };
+
+        // Shape-valid but bogus token. Discord accepts the WebSocket and then closes
+        // with code 4004 (Authentication Failed) — handled asynchronously by
+        // DiscordNetBotConnection.OnDisconnectedAsync.
         const string fakeToken = "InvalidTokenShapeSegment000000000000000.NotReal.InvalidTokenFinalSegment0000000000000000";
 
-        await Assert.ThrowsAsync<Discord.Net.HttpException>(async () =>
-            await conn.ConnectAsync(fakeToken, CancellationToken.None));
+        // ConnectAsync does NOT throw — Discord.NET's LoginAsync/StartAsync only
+        // initiate the connection. The 4004 close arrives via the Disconnected event.
+        await conn.ConnectAsync(fakeToken, CancellationToken.None);
+
+        // Wait up to 30 s for the asynchronous 4004 close → TokenInvalid transition.
+        var completed = await Task.WhenAny(reachedTokenInvalid.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        Assert.True(completed == reachedTokenInvalid.Task, "Did not reach TokenInvalid within 30 s");
 
         Assert.Equal(BotConnectionState.TokenInvalid, conn.State);
     }

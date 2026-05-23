@@ -57,6 +57,9 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
         }
         catch (Discord.Net.HttpException ex) when (ex.HttpCode == System.Net.HttpStatusCode.Unauthorized)
         {
+            // Defensive: Discord.NET 3.16 does not actually throw here for invalid tokens —
+            // the primary invalid-token path is the async 4004 close handled in OnDisconnectedAsync.
+            // Kept in case a future Discord.NET version resumes synchronous 401 behaviour.
             _logger.LogWarning("Discord rejected bot token (401 Unauthorized) for guild {GuildId} — token must be rotated", _guildId);
             TransitionTo(BotConnectionState.TokenInvalid, errorClass: "token_invalid");
             throw;
@@ -97,9 +100,20 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
 
     private Task OnDisconnectedAsync(Exception ex)
     {
-        _logger.LogInformation("Bot disconnected for guild {GuildId}: {Reason}", _guildId, ex?.Message ?? "unknown");
         // Discord.NET fires this on transient disconnects too; it will auto-reconnect.
         // We surface the state so the UI shows a yellow indicator until Ready fires again.
+        _logger.LogInformation("Bot disconnected for guild {GuildId}: {Reason}", _guildId, ex?.Message ?? "unknown");
+
+        // Discord gateway close code 4004 = AUTHENTICATION_FAILED. The token is invalid
+        // (or shape-valid but revoked / not a real bot token). Mark as TokenInvalid so
+        // the manager does NOT auto-reconnect (would burn rate limit).
+        if (ex is Discord.Net.WebSocketClosedException ws && ws.CloseCode == 4004)
+        {
+            _logger.LogWarning("Discord gateway closed connection for guild {GuildId} with code 4004 (Authentication Failed) — token must be rotated", _guildId);
+            TransitionTo(BotConnectionState.TokenInvalid, errorClass: "token_invalid");
+            return Task.CompletedTask;
+        }
+
         if (State == BotConnectionState.Connected)
         {
             TransitionTo(BotConnectionState.Connecting, errorClass: "transient_disconnect");
