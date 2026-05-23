@@ -103,6 +103,26 @@
     "noGuilds": "No guilds registered yet.",
     "networkError": "Network connection to the server failed."
   },
+  "botConnection": {
+    "status": {
+      "connected": "Connected",
+      "connecting": "Connecting…",
+      "disconnected": "Disconnected",
+      "tokenInvalid": "Token invalid",
+      "failed": "Failed",
+      "unknown": "Unknown"
+    },
+    "actions": {
+      "pause": "Pause",
+      "resume": "Resume",
+      "reconnect": "Reconnect"
+    },
+    "pauseModal": {
+      "title": "Pause bot?",
+      "body": "The bot will disconnect immediately and will not rejoin the Discord gateway until you resume it.",
+      "confirm": "Pause"
+    }
+  },
   "botCredentials": {
     "configured": "Bot token configured",
     "notConfigured": "Bot token not configured",

@@ -3,6 +3,7 @@ using DwbHub.Application.Audit;
 using DwbHub.Application.Encryption;
 using DwbHub.Application.Tenancy;
 using DwbHub.Core.Repositories;
+using DwbHub.Infrastructure.Bot;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,7 +22,8 @@ public sealed class BotCredentialsController(
     IGuildRepository guilds,
     IGuildBotCredentialRepository credentials,
     IBotTokenEncryptor encryptor,
-    IAuditWriter auditWriter) : ControllerBase
+    IAuditWriter auditWriter,
+    BotConnectionManager connectionManager) : ControllerBase
 {
     [HttpPut]
     [Authorize(Roles = "Owner")]
@@ -59,6 +61,7 @@ public sealed class BotCredentialsController(
             IpAddress: HttpContext.Connection.RemoteIpAddress,
             UserAgent: HttpContext.Request.Headers.UserAgent.ToString()), ct).ConfigureAwait(false);
 
+        _ = connectionManager.OnCredentialsChangedAsync(guild.Id, CancellationToken.None);
         return NoContent();
     }
 
@@ -90,6 +93,7 @@ public sealed class BotCredentialsController(
             IpAddress: HttpContext.Connection.RemoteIpAddress,
             UserAgent: HttpContext.Request.Headers.UserAgent.ToString()), ct).ConfigureAwait(false);
 
+        _ = connectionManager.OnCredentialsRemovedAsync(guild.Id, CancellationToken.None);
         return NoContent();
     }
 

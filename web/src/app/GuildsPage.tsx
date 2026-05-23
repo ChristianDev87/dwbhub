@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import { BotTokenModal } from "./BotTokenModal";
+import { PauseGuildModal } from "./components/PauseGuildModal";
 
 const discordIdRegex = /^\d{17,20}$/;
 const schema = z.object({
@@ -18,6 +19,14 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
+type BotConnectionState =
+  | "disconnected"
+  | "connecting"
+  | "connected"
+  | "token_invalid"
+  | "failed"
+  | null;
+
 interface Guild {
   publicId: string;
   discordGuildId: string;
@@ -25,6 +34,23 @@ interface Guild {
   isActive: boolean;
   registeredAt: string;
   botCredentialsConfigured: boolean;
+  botConnectionState: BotConnectionState;
+}
+
+function statusColor(state: BotConnectionState): string {
+  switch (state) {
+    case "connected":
+      return "text-green-600";
+    case "connecting":
+      return "text-amber-500";
+    case "token_invalid":
+    case "failed":
+      return "text-red-600";
+    case "disconnected":
+      return "text-gray-400";
+    default:
+      return "text-gray-300";
+  }
 }
 
 export function GuildsPage(): React.JSX.Element {
@@ -41,6 +67,9 @@ export function GuildsPage(): React.JSX.Element {
     mode: "configure" | "rotate";
   } | null>(null);
   const [pendingBotRemove, setPendingBotRemove] = useState<Guild | null>(null);
+  const [pauseTarget, setPauseTarget] = useState<Guild | null>(null);
+  const [actionPending, setActionPending] = useState<string | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const {
     register,
@@ -48,6 +77,23 @@ export function GuildsPage(): React.JSX.Element {
     reset,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
+
+  function statusLabel(state: BotConnectionState): string {
+    switch (state) {
+      case "connected":
+        return t("botConnection.status.connected");
+      case "connecting":
+        return t("botConnection.status.connecting");
+      case "disconnected":
+        return t("botConnection.status.disconnected");
+      case "token_invalid":
+        return t("botConnection.status.tokenInvalid");
+      case "failed":
+        return t("botConnection.status.failed");
+      default:
+        return t("botConnection.status.unknown");
+    }
+  }
 
   async function loadList() {
     try {
@@ -73,6 +119,31 @@ export function GuildsPage(): React.JSX.Element {
     void loadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
+
+  useEffect(() => {
+    const anyConnecting = guilds.some(
+      (g) => g.botConnectionState === "connecting",
+    );
+    if (anyConnecting) {
+      if (!pollingRef.current) {
+        pollingRef.current = setInterval(() => {
+          void loadList();
+        }, 3000);
+      }
+    } else {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    }
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guilds]);
 
   async function onAdd(data: FormValues, e?: React.BaseSyntheticEvent) {
     e?.preventDefault();
@@ -131,6 +202,47 @@ export function GuildsPage(): React.JSX.Element {
       }
     } catch {
       setPendingBotRemove(null);
+    }
+  }
+
+  async function handlePause(g: Guild) {
+    setPauseTarget(g);
+  }
+
+  async function confirmPause() {
+    if (!pauseTarget) return;
+    setActionPending(pauseTarget.publicId);
+    try {
+      await fetch(
+        `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${pauseTarget.publicId}/deactivate`,
+        { method: "POST", credentials: "include" },
+      );
+    } finally {
+      setActionPending(null);
+      setPauseTarget(null);
+      await loadList();
+    }
+  }
+
+  async function handleResume(g: Guild) {
+    try {
+      await fetch(
+        `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${g.publicId}/activate`,
+        { method: "POST", credentials: "include" },
+      );
+    } finally {
+      await loadList();
+    }
+  }
+
+  async function handleReconnect(g: Guild) {
+    try {
+      await fetch(
+        `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${g.publicId}/bot/reconnect`,
+        { method: "POST", credentials: "include" },
+      );
+    } finally {
+      await loadList();
     }
   }
 
@@ -234,6 +346,12 @@ export function GuildsPage(): React.JSX.Element {
                       ),
                     })}
                   </p>
+                  <p
+                    data-testid={`guild-status-${g.publicId}`}
+                    className={`text-xs mt-1 ${statusColor(g.botConnectionState)}`}
+                  >
+                    ● {statusLabel(g.botConnectionState)}
+                  </p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   {g.botCredentialsConfigured ? (
@@ -279,6 +397,36 @@ export function GuildsPage(): React.JSX.Element {
                         {t("botCredentials.removeButton")}
                       </button>
                     )}
+                    {g.isActive ? (
+                      <>
+                        <button
+                          type="button"
+                          data-testid={`guild-pause-${g.publicId}`}
+                          onClick={() => void handlePause(g)}
+                          className="px-3 py-1 bg-amber-500 text-white rounded text-sm"
+                        >
+                          {t("botConnection.actions.pause")}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid={`guild-reconnect-${g.publicId}`}
+                          disabled={!g.botCredentialsConfigured}
+                          onClick={() => void handleReconnect(g)}
+                          className="px-3 py-1 bg-blue-500 text-white rounded text-sm disabled:opacity-50"
+                        >
+                          {t("botConnection.actions.reconnect")}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        data-testid={`guild-resume-${g.publicId}`}
+                        onClick={() => void handleResume(g)}
+                        className="px-3 py-1 bg-green-600 text-white rounded text-sm"
+                      >
+                        {t("botConnection.actions.resume")}
+                      </button>
+                    )}
                     <button
                       type="button"
                       data-testid="delete-guild-button"
@@ -294,6 +442,15 @@ export function GuildsPage(): React.JSX.Element {
           </ul>
         )}
       </section>
+
+      {pauseTarget && (
+        <PauseGuildModal
+          guildName={pauseTarget.displayName}
+          isPending={actionPending === pauseTarget.publicId}
+          onCancel={() => setPauseTarget(null)}
+          onConfirm={() => void confirmPause()}
+        />
+      )}
 
       {pendingBotConfigure && (
         <BotTokenModal

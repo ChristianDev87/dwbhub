@@ -57,6 +57,7 @@ desktop.ini
 appsettings.Local.json
 appsettings.Development.json
 *.local.json
+discord.dev.env
 
 # Logs
 logs/

@@ -55,4 +55,29 @@ public interface IGuildRepository
     /// </summary>
     Task<IReadOnlyList<GuildListItem>> ListByTenantWithStatusAsync(
         long tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Loads a guild by its internal id. Returns null when the id does not exist.
+    /// Used by BotConnectionManager to re-validate guild state before connecting.
+    /// </summary>
+    Task<Guild?> GetByIdAsync(long guildId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the (guild_id, tenant_id) pairs of every guild that is active AND has
+    /// bot credentials configured. Used at API startup to bootstrap all connections.
+    /// Single round-trip via INNER JOIN guilds + guild_bot_credentials.
+    /// </summary>
+    Task<IReadOnlyList<GuildIdTenantPair>> ListActiveWithCredentialsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Sets the is_active flag for a guild. Returns true iff the row's value actually changed
+    /// (i.e. setting active=true on a guild that was already active returns false).
+    /// </summary>
+    Task<bool> SetActiveAsync(long guildId, long tenantId, bool isActive, CancellationToken ct = default);
+
+    /// <summary>
+    /// Updates the last_connected_at timestamp. Used by BotConnectionManager on every
+    /// successful state-transition to Connected. Fire-and-forget OK.
+    /// </summary>
+    Task UpdateLastConnectedAtAsync(long guildId, DateTimeOffset timestamp, CancellationToken ct = default);
 }

@@ -190,6 +190,79 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
         return result;
     }
 
+    // ── Plan 0.8 Task 5 implementations ──
+
+    public async Task<Guild?> GetByIdAsync(long guildId, CancellationToken ct = default)
+    {
+        using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
+        const string sql = """
+            -- DWBHUB-NO-TENANT-FILTER: BotConnectionManager already validated tenant in caller scope;
+            -- this lookup is keyed by internal guild_id PK only.
+            SELECT id, public_id, tenant_id, discord_guild_id, display_name, is_active,
+                   registered_by_user_id, registered_at, last_connected_at, created_at, updated_at
+            FROM guilds
+            WHERE id = @GuildId;
+            """;
+        return await conn.QuerySingleOrDefaultAsync<Guild>(
+            new CommandDefinition(sql,
+                new { GuildId = guildId },
+                cancellationToken: ct))
+            .ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<GuildIdTenantPair>> ListActiveWithCredentialsAsync(CancellationToken ct = default)
+    {
+        using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
+        const string sql = """
+            SELECT g.id AS guild_id, g.tenant_id AS tenant_id
+            FROM guilds g
+            INNER JOIN guild_bot_credentials bc ON bc.guild_id = g.id AND bc.tenant_id = g.tenant_id
+            WHERE g.is_active = true
+            ORDER BY g.id ASC;
+            """;
+        var rows = await conn.QueryAsync<GuildIdTenantPair>(
+            new CommandDefinition(sql, cancellationToken: ct))
+            .ConfigureAwait(false);
+        return rows.AsList();
+    }
+
+    public async Task<bool> SetActiveAsync(long guildId, long tenantId, bool isActive, CancellationToken ct = default)
+    {
+        using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
+        const string sql = """
+            UPDATE guilds
+               SET is_active = @IsActive,
+                   updated_at = now()
+             WHERE id = @GuildId
+               AND tenant_id = @TenantId
+               AND is_active <> @IsActive;
+            """;
+        var affected = await conn.ExecuteAsync(
+            new CommandDefinition(sql,
+                new { GuildId = guildId, TenantId = tenantId, IsActive = isActive },
+                cancellationToken: ct))
+            .ConfigureAwait(false);
+        return affected > 0;
+    }
+
+    public async Task UpdateLastConnectedAtAsync(long guildId, DateTimeOffset timestamp, CancellationToken ct = default)
+    {
+        using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
+        const string sql = """
+            -- DWBHUB-NO-TENANT-FILTER: BotConnectionManager already validated tenant in caller scope;
+            -- this update is keyed by internal guild_id PK only.
+            UPDATE guilds
+               SET last_connected_at = @Timestamp,
+                   updated_at = now()
+             WHERE id = @GuildId;
+            """;
+        await conn.ExecuteAsync(
+            new CommandDefinition(sql,
+                new { GuildId = guildId, Timestamp = timestamp },
+                cancellationToken: ct))
+            .ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Npgsql returns DateTime (UTC) for TIMESTAMPTZ when queried via a dynamic
     /// row dictionary. The Dapper SqlMapper.TypeHandler only applies to strongly-
