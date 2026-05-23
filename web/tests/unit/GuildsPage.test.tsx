@@ -17,6 +17,16 @@ function renderPage() {
   );
 }
 
+const baseGuild = {
+  publicId: "11111111-1111-1111-1111-111111111111",
+  discordGuildId: "1234567890123456789",
+  displayName: "Production",
+  isActive: true,
+  registeredAt: "2026-05-22T00:00:00Z",
+  botCredentialsConfigured: true,
+  botConnectionState: "connected",
+};
+
 describe("GuildsPage", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -102,6 +112,7 @@ describe("GuildsPage", () => {
               isActive: true,
               registeredAt: "2026-05-22T00:00:00Z",
               botCredentialsConfigured: false,
+              botConnectionState: null,
             }),
           };
         }
@@ -120,6 +131,7 @@ describe("GuildsPage", () => {
                 isActive: true,
                 registeredAt: "2026-05-22T00:00:00Z",
                 botCredentialsConfigured: false,
+                botConnectionState: null,
               },
             ],
           }),
@@ -193,6 +205,7 @@ describe("GuildsPage", () => {
                   isActive: true,
                   registeredAt: "2026-05-22T00:00:00Z",
                   botCredentialsConfigured: false,
+                  botConnectionState: null,
                 },
               ],
             }),
@@ -209,6 +222,131 @@ describe("GuildsPage", () => {
     fireEvent.click(screen.getByTestId("delete-confirm-yes"));
     await waitFor(() => {
       expect(screen.queryByText("Staging")).not.toBeInTheDocument();
+    });
+  });
+
+  // --- Plan 0.8 Task 10: bot-connection status + pause/resume/reconnect ---
+
+  it("renders a green status indicator for connected guild", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          guilds: [{ ...baseGuild, botConnectionState: "connected" }],
+        }),
+      }),
+    );
+    renderPage();
+    await waitFor(() => {
+      const indicator = screen.getByTestId("bot-connection-status");
+      expect(indicator).toBeInTheDocument();
+      expect(indicator).toHaveClass("text-green-600");
+    });
+  });
+
+  it("renders an amber indicator when guild is connecting", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          guilds: [{ ...baseGuild, botConnectionState: "connecting" }],
+        }),
+      }),
+    );
+    renderPage();
+    await waitFor(() => {
+      const indicator = screen.getByTestId("bot-connection-status");
+      expect(indicator).toBeInTheDocument();
+      expect(indicator).toHaveClass("text-amber-500");
+    });
+  });
+
+  it("opens pause modal when Pause button is clicked", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          guilds: [
+            { ...baseGuild, isActive: true, botConnectionState: "connected" },
+          ],
+        }),
+      }),
+    );
+    renderPage();
+    await waitFor(() => screen.getByTestId("pause-guild-button"));
+    fireEvent.click(screen.getByTestId("pause-guild-button"));
+    await waitFor(() => {
+      expect(screen.getByTestId("pause-guild-modal")).toBeInTheDocument();
+    });
+  });
+
+  it("calls deactivate on confirm and closes modal", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async (url: string, init?: RequestInit) => {
+        if (init?.method === "POST" && String(url).includes("/deactivate")) {
+          return { ok: true, status: 204, json: async () => ({}) };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            guilds: [
+              { ...baseGuild, isActive: true, botConnectionState: "connected" },
+            ],
+          }),
+        };
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPage();
+    await waitFor(() => screen.getByTestId("pause-guild-button"));
+    fireEvent.click(screen.getByTestId("pause-guild-button"));
+    await waitFor(() => screen.getByTestId("pause-modal-confirm"));
+    fireEvent.click(screen.getByTestId("pause-modal-confirm"));
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          (args: unknown[]) =>
+            String(args[0]).includes("/deactivate") &&
+            (args[1] as RequestInit)?.method === "POST",
+        ),
+      ).toBe(true);
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId("pause-guild-modal")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows Resume button (not Pause) when guild is inactive", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          guilds: [
+            {
+              ...baseGuild,
+              isActive: false,
+              botConnectionState: "disconnected",
+            },
+          ],
+        }),
+      }),
+    );
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByTestId("resume-guild-button")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("pause-guild-button"),
+      ).not.toBeInTheDocument();
     });
   });
 });
