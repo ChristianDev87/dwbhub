@@ -267,7 +267,12 @@ jobs:
   discord-live-tests:
     name: Discord live tests
     needs: [backend-lint-and-test]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+    # The workflow only runs on pull_request events (no push triggers exist —
+    # see the comment block at the top of the file). Fire this job on the
+    # release PR develop→main, where verifying against the real Discord
+    # gateway is most valuable as a pre-merge gate. The job still skips
+    # cleanly when the GitHub Secrets are absent (e.g., repo forks).
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ubuntu-latest
     concurrency:
       group: discord-live
