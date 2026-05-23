@@ -1,0 +1,111 @@
+# Plan 0.8.1 — Local CI runner orchestration.
+# Invocation pattern (locally + in CI):
+#   docker compose -f deploy/compose/docker-compose.test.yml run --rm <service>
+#
+# Service list (filled in across Tasks 7-10):
+#   backend-tests        (Task 7) — .NET unit + integration + security
+#   frontend-tests       (Task 7) — eslint + prettier + tsc + vitest + build
+#   openapi-drift        (Task 8) — added later
+#   sql-tenant-filter    (Task 8) — added later
+#   security             (Task 8) — added later
+#   container-smoke      (Task 8) — added later
+#   e2e-tests            (Task 8) — added later
+#   discord-live-tests   (Task 10) — added later
+
+services:
+  backend-tests:
+    build:
+      context: ../..
+      dockerfile: deploy/test-runners/Dockerfile.backend
+      tags: [dwbhub-test-runner-backend:dev]
+    volumes:
+      - ../..:/workspace:ro
+      - ../../test-results:/results
+      - /var/run/docker.sock:/var/run/docker.sock
+    tmpfs:
+      # dotnet build writes to obj/ and bin/. tmpfs mounts at these subpaths
+      # shadow the :ro parent bind, preserving the read-only workspace guarantee
+      # while still allowing dotnet to build. Discover the project paths via
+      # `find api/src -maxdepth 2 -type d -name '<csproj-parent>'` — list them all.
+      # The user-environment scan will show what's needed.
+      - /workspace/api/src/DwbHub.Api/obj
+      - /workspace/api/src/DwbHub.Api/bin
+      - /workspace/api/src/DwbHub.Application/obj
+      - /workspace/api/src/DwbHub.Application/bin
+      - /workspace/api/src/DwbHub.Bot/obj
+      - /workspace/api/src/DwbHub.Bot/bin
+      - /workspace/api/src/DwbHub.Core/obj
+      - /workspace/api/src/DwbHub.Core/bin
+      - /workspace/api/src/DwbHub.Data/obj
+      - /workspace/api/src/DwbHub.Data/bin
+      - /workspace/api/src/DwbHub.Infrastructure/obj
+      - /workspace/api/src/DwbHub.Infrastructure/bin
+      - /workspace/api/tests/DwbHub.Tests.Unit/obj
+      - /workspace/api/tests/DwbHub.Tests.Unit/bin
+      - /workspace/api/tests/DwbHub.Tests.Integration/obj
+      - /workspace/api/tests/DwbHub.Tests.Integration/bin
+      - /workspace/api/tests/DwbHub.Tests.Security/obj
+      - /workspace/api/tests/DwbHub.Tests.Security/bin
+    extra_hosts:
+      # Docker's official DinD pattern: maps host.docker.internal to whatever
+      # `host-gateway` resolves to on the current platform. Works on Docker
+      # Desktop (Windows/macOS) and Linux baremetal alike. On CI's runner-in-
+      # container, the runner is launched with --add-host=host-gateway:host-gateway
+      # (existing setup) so this chain continues to resolve correctly.
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Testcontainers reads this to construct connection strings for spawned
+      # sibling containers (Postgres, Mailpit). The default works on Docker Desktop
+      # and via extra_hosts above on Linux. CI can override via env at the
+      # `docker compose run` call site if needed.
+      TESTCONTAINERS_HOST_OVERRIDE: ${TESTCONTAINERS_HOST_OVERRIDE:-host.docker.internal}
+      # Ryuk is Testcontainers' cleanup daemon. It flakes in DinD scenarios where
+      # the test container exits via `--rm` (Ryuk loses its parent). We disable
+      # it; sibling cleanup happens when the test container's --rm fires.
+      TESTCONTAINERS_RYUK_DISABLED: "true"
+    networks: [test-net]
+    command: ["backend"]
+
+  frontend-tests:
+    build:
+      context: ../..
+      dockerfile: deploy/test-runners/Dockerfile.frontend
+      tags: [dwbhub-test-runner-frontend:dev]
+    volumes:
+      - ../..:/workspace:ro
+      - ../../test-results:/results
+      # Named volumes overlay the :ro workspace at the three writable paths.
+      # Named volumes (unlike tmpfs) are mounted exec by Docker Desktop / Linux,
+      # so node binary postinstall scripts (esbuild, rollup, etc.) can run.
+      - frontend-nm-root:/workspace/node_modules
+      - frontend-nm-web:/workspace/web/node_modules
+      - frontend-dist:/workspace/web/dist
+    environment:
+      # Suppress pnpm's interactive "module purge?" prompt; treat as non-TTY CI.
+      CI: "true"
+      # Redirect pnpm's content-addressable store out of /workspace (which is :ro).
+      # Without this, pnpm's storePathRelativeToHome() writes a _tmp_ probe file
+      # directly into /workspace/ to discover the best hardlink-capable mount point,
+      # which fails with EROFS. Setting an absolute path bypasses that probe entirely.
+      # The store lives only for the duration of the container run; packages are
+      # re-fetched from the registry on each cold run but cached in the named volumes
+      # after the first install, so subsequent `pnpm install` calls are nearly instant.
+      pnpm_config_store_dir: /tmp/pnpm-store
+    networks: [test-net]
+    command: ["frontend"]
+
+networks:
+  test-net:
+    driver: bridge
+
+volumes:
+  # Overlay volumes for frontend-tests: writable, exec-capable named volumes that
+  # shadow the :ro workspace bind at the three paths pnpm/vite need to write into.
+  frontend-nm-root:
+  frontend-nm-web:
+  frontend-dist:
+
+# Secrets block — populated in Task 10 when discord-live-tests is added.
+# secrets:
+#   discord_token:
+#     file: ./discord.dev.env
