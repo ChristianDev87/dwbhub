@@ -14,20 +14,38 @@ mkdir -p "$RESULTS"
 
 cd /workspace
 
+# Run a command, capture output to a temp file, print it, save to a named log,
+# preserve the command's exit code (POSIX-portable; tee always exits 0 in dash/busybox).
+run_step() {
+    LOG_NAME="$1"
+    shift
+    TMP="$RESULTS/.${LOG_NAME}.tmp"
+    set +e
+    "$@" > "$TMP" 2>&1
+    EXIT=$?
+    set -e
+    cat "$TMP" | tee "$RESULTS/${LOG_NAME}.log"
+    rm -f "$TMP"
+    if [ "$EXIT" -ne 0 ]; then
+        echo "=== frontend.sh: ${LOG_NAME} FAILED with exit ${EXIT} ==="
+        exit "$EXIT"
+    fi
+}
+
 echo "=== frontend.sh: pnpm install --frozen-lockfile ==="
 pnpm install --frozen-lockfile
 
 echo "=== frontend.sh: pnpm lint (eslint) ==="
-pnpm --filter dwbhub-web lint 2>&1 | tee "$RESULTS/eslint.log"
+run_step eslint pnpm --filter dwbhub-web lint
 
 echo "=== frontend.sh: prettier --check ==="
-pnpm --filter dwbhub-web format:check 2>&1 | tee "$RESULTS/prettier.log"
+run_step prettier pnpm --filter dwbhub-web format:check
 
 echo "=== frontend.sh: tsc --noEmit ==="
-pnpm --filter dwbhub-web typecheck 2>&1 | tee "$RESULTS/tsc.log"
+run_step tsc pnpm --filter dwbhub-web typecheck
 
 echo "=== frontend.sh: vitest --run --reporter=json ==="
-# Vitest's --reporter=json emits to stdout; redirect into a file alongside the human log.
+# Vitest's --reporter=json with --outputFile bypasses stdout; no tee needed.
 pnpm --filter dwbhub-web exec vitest run --reporter=json --outputFile="$RESULTS/vitest.json"
 
 echo "=== frontend.sh: vite build (production bundle) ==="
