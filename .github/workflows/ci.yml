@@ -263,3 +263,39 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Run E2E
         run: pwsh ./scripts/e2e-up.ps1
+
+  discord-live-tests:
+    name: Discord live tests
+    needs: [backend-lint-and-test]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: discord-live
+      cancel-in-progress: false
+    env:
+      DISCORD_DEV_BOT_TOKEN: ${{ secrets.DISCORD_DEV_BOT_TOKEN }}
+      DISCORD_DEV_GUILD_ID:  ${{ secrets.DISCORD_DEV_GUILD_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Skip if secret absent
+        id: gate
+        run: |
+          if [ -z "$DISCORD_DEV_BOT_TOKEN" ] || [ -z "$DISCORD_DEV_GUILD_ID" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "::notice::Discord live tests skipped — DISCORD_DEV_BOT_TOKEN / DISCORD_DEV_GUILD_ID not set in repo secrets"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Restore + build
+        if: steps.gate.outputs.skip != 'true'
+        run: dotnet build api/DwbHub.sln -c Release --nologo
+      - name: Run Discord live tests
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          dotnet test api/tests/DwbHub.Tests.Integration/DwbHub.Tests.Integration.csproj \
+            --filter "Category=DiscordLive" \
+            --no-build -c Release \
+            --logger "console;verbosity=normal"
