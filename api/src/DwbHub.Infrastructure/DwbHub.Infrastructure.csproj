@@ -10,6 +10,7 @@
     <PackageReference Include="Serilog.Sinks.Console" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
     <PackageReference Include="MailKit" />
+    <PackageReference Include="Discord.Net" />
   </ItemGroup>
 
   <ItemGroup>
