@@ -94,6 +94,119 @@ services:
     networks: [test-net]
     command: ["frontend"]
 
+  openapi-drift:
+    build:
+      context: ../..
+      dockerfile: deploy/test-runners/Dockerfile.backend
+      tags: [dwbhub-test-runner-backend:dev]
+    volumes:
+      - ../..:/workspace:ro
+      - ../../test-results:/results
+      - /var/run/docker.sock:/var/run/docker.sock
+    tmpfs:
+      # openapi-drift runs dotnet build inside verify-openapi.ps1 — same obj/bin tmpfs as backend-tests
+      - /workspace/api/src/DwbHub.Api/obj
+      - /workspace/api/src/DwbHub.Api/bin
+      - /workspace/api/src/DwbHub.Application/obj
+      - /workspace/api/src/DwbHub.Application/bin
+      - /workspace/api/src/DwbHub.Bot/obj
+      - /workspace/api/src/DwbHub.Bot/bin
+      - /workspace/api/src/DwbHub.Core/obj
+      - /workspace/api/src/DwbHub.Core/bin
+      - /workspace/api/src/DwbHub.Data/obj
+      - /workspace/api/src/DwbHub.Data/bin
+      - /workspace/api/src/DwbHub.Infrastructure/obj
+      - /workspace/api/src/DwbHub.Infrastructure/bin
+      # swagger tofile boots DwbHub.Api which calls PerStartFileLogger.Initialize; it
+      # writes a per-start log file into /workspace/logs/ at boot. tmpfs shadows the
+      # :ro bind so the API can create the file without an EROFS error.
+      - /workspace/logs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      # verify-openapi.ps1 line 72 uses "host-gateway" as a literal hostname when
+      # GITHUB_ACTIONS=true. Inside a container, Docker only resolves "host-gateway"
+      # as a special keyword in extra_hosts — it cannot be used as a DNS name.
+      # Add it explicitly here so it resolves to the same Docker host IP as
+      # host.docker.internal, allowing Npgsql/MailKit to reach host-published ports.
+      - "host-gateway:host-gateway"
+    environment:
+      TESTCONTAINERS_HOST_OVERRIDE: ${TESTCONTAINERS_HOST_OVERRIDE:-host.docker.internal}
+      TESTCONTAINERS_RYUK_DISABLED: "true"
+      # verify-openapi.ps1 uses `$env:GITHUB_ACTIONS` to choose between "host-gateway"
+      # (CI / DinD) and "localhost" (local dev) as the host for temp pg/mailpit containers.
+      # Inside this test container, "localhost" won't reach Docker-published ports — we
+      # need "host-gateway" (which resolves via extra_hosts above to the Docker host IP).
+      # Setting GITHUB_ACTIONS=true activates the DinD code path without any ps1 changes.
+      GITHUB_ACTIONS: "true"
+    networks: [test-net]
+    command: ["openapi"]
+
+  sql-tenant-filter:
+    build:
+      context: ../..
+      dockerfile: deploy/test-runners/Dockerfile.backend
+      tags: [dwbhub-test-runner-backend:dev]
+    volumes:
+      - ../..:/workspace:ro
+      - ../../test-results:/results
+    networks: [test-net]
+    command: ["sql-tenant-filter"]
+
+  security:
+    build:
+      context: ../..
+      dockerfile: deploy/test-runners/Dockerfile.security
+      tags: [dwbhub-test-runner-security:dev]
+    volumes:
+      - ../..:/workspace:ro
+      - ../../test-results:/results
+    environment:
+      CI: "true"
+      pnpm_config_store_dir: /tmp/pnpm-store
+    networks: [test-net]
+    command: ["security"]
+
+  container-smoke:
+    build:
+      context: ../..
+      dockerfile: deploy/test-runners/Dockerfile.backend
+      tags: [dwbhub-test-runner-backend:dev]
+    volumes:
+      - ../..:/workspace:ro
+      - ../../test-results:/results
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [test-net]
+    command: ["container-smoke"]
+
+  e2e-tests:
+    build:
+      context: ../..
+      dockerfile: deploy/test-runners/Dockerfile.e2e
+      tags: [dwbhub-test-runner-e2e:dev]
+    volumes:
+      - ../..:/workspace:ro
+      - ../../test-results:/results
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Named volumes overlay the :ro workspace at the two writable paths pnpm needs.
+      # Named volumes (unlike tmpfs) are mounted exec by Docker Desktop / Linux,
+      # so node binary postinstall scripts (esbuild, rollup, etc.) can run.
+      - e2e-nm-root:/workspace/node_modules
+      - e2e-nm-web:/workspace/web/node_modules
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      CI: "true"
+      pnpm_config_store_dir: /tmp/pnpm-store
+      # HOST_REPO_ROOT: absolute path on the HOST docker daemon where the repo lives.
+      # Required by jobs/e2e.sh to translate dev-stack bind-mount paths from compose-
+      # CLI-relative (which would be /workspace inside this container — invisible to
+      # the host daemon) to host-absolute. Defaults to $PWD which works when the user
+      # runs `docker compose -f deploy/compose/docker-compose.test.yml run ...` from
+      # the repo root. CI sets it explicitly via GITHUB_WORKSPACE (Task 11).
+      HOST_REPO_ROOT: ${HOST_REPO_ROOT:-${PWD}}
+    networks: [test-net]
+    command: ["e2e"]
+
 networks:
   test-net:
     driver: bridge
@@ -104,6 +217,10 @@ volumes:
   frontend-nm-root:
   frontend-nm-web:
   frontend-dist:
+  # Overlay volumes for e2e-tests: writable, exec-capable named volumes that
+  # shadow the :ro workspace bind at the two paths pnpm needs to write into.
+  e2e-nm-root:
+  e2e-nm-web:
 
 # Secrets block — populated in Task 10 when discord-live-tests is added.
 # secrets:
