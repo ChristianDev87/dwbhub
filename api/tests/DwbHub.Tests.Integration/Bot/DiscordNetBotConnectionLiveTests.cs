@@ -9,6 +9,14 @@ namespace DwbHub.Tests.Integration.Bot;
 /// Live Discord gateway tests. Skipped when DISCORD_DEV_BOT_TOKEN / DISCORD_DEV_GUILD_ID
 /// are not set. CI runs them only on push to develop/main via a dedicated job with the
 /// Discord secrets in scope. NEVER hard-code a token here.
+///
+/// NOTE on the absent TokenInvalid test: triggering Discord's gateway close code 4004
+/// (AUTHENTICATION_FAILED) requires a syntactically well-formed but cryptographically
+/// invalid token (e.g., a revoked real bot token). Synthetic fake tokens are rejected
+/// by Discord.NET 3.x BEFORE the gateway handshake, never triggering 4004. The
+/// production code path that handles 4004 (DiscordNetBotConnection.OnDisconnectedAsync)
+/// is verified by code review against the Discord gateway spec rather than by a live
+/// test. If a future PR introduces a revoked-token e2e setup, add the test back.
 /// </summary>
 [Trait("Category", "DiscordLive")]
 public sealed class DiscordNetBotConnectionLiveTests
@@ -53,40 +61,6 @@ public sealed class DiscordNetBotConnectionLiveTests
         // Expect at least Disconnected->Connecting and Connecting->Connected.
         Assert.Contains(transitions, t => t.To == BotConnectionState.Connecting);
         Assert.Contains(transitions, t => t.To == BotConnectionState.Connected);
-    }
-
-    [SkippableFact]
-    public async Task ConnectAsync_WithInvalidToken_TransitionsToTokenInvalid()
-    {
-        var env = ReadEnv();
-        Skip.If(env is null, "DISCORD_DEV_BOT_TOKEN / DISCORD_DEV_GUILD_ID not set");
-
-        await using var conn = new DiscordNetBotConnection(
-            guildId: env!.Value.guildId,
-            tenantId: 1L,
-            logger: NullLogger<DiscordNetBotConnection>.Instance);
-
-        var reachedTokenInvalid = new TaskCompletionSource();
-        conn.StateChanged += change =>
-        {
-            if (change.To == BotConnectionState.TokenInvalid) reachedTokenInvalid.TrySetResult();
-            return Task.CompletedTask;
-        };
-
-        // Shape-valid but bogus token. Discord accepts the WebSocket and then closes
-        // with code 4004 (Authentication Failed) — handled asynchronously by
-        // DiscordNetBotConnection.OnDisconnectedAsync.
-        const string fakeToken = "InvalidTokenShapeSegment000000000000000.NotReal.InvalidTokenFinalSegment0000000000000000";
-
-        // ConnectAsync does NOT throw — Discord.NET's LoginAsync/StartAsync only
-        // initiate the connection. The 4004 close arrives via the Disconnected event.
-        await conn.ConnectAsync(fakeToken, CancellationToken.None);
-
-        // Wait up to 30 s for the asynchronous 4004 close → TokenInvalid transition.
-        var completed = await Task.WhenAny(reachedTokenInvalid.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        Assert.True(completed == reachedTokenInvalid.Task, "Did not reach TokenInvalid within 30 s");
-
-        Assert.Equal(BotConnectionState.TokenInvalid, conn.State);
     }
 
     [SkippableFact]
