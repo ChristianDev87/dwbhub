@@ -1,0 +1,36 @@
+# Plan 0.8.1 — security audit runner.
+# Base: .NET 10 SDK (needed for `dotnet list package --vulnerable`). We layer
+# Node + pnpm + trivy on top.
+FROM mcr.microsoft.com/dotnet/sdk:10.0
+
+# System packages: ca-certificates for HTTPS, curl + gnupg for apt repos,
+# wget for trivy install fallback.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl gnupg ca-certificates apt-transport-https wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Node 22 (via NodeSource APT repo for the .deb path) ---
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pin pnpm to the same version (single source: root package.json packageManager).
+RUN npm install -g pnpm@11.1.3
+
+# --- Trivy (Aqua Security's CVE scanner) ---
+# Pinned to v0.58.x (latest stable as of writing). Aqua's official install script
+# is the recommended distribution path.
+RUN wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor -o /usr/share/keyrings/trivy.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(. /etc/os-release && echo "$VERSION_CODENAME") main" \
+        > /etc/apt/sources.list.d/trivy.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends trivy \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY deploy/test-runners/entrypoint.sh /opt/test-runners/entrypoint.sh
+COPY deploy/test-runners/jobs/         /opt/test-runners/jobs/
+RUN chmod +x /opt/test-runners/entrypoint.sh /opt/test-runners/jobs/*.sh 2>/dev/null || true
+
+WORKDIR /workspace
+ENTRYPOINT ["/opt/test-runners/entrypoint.sh"]
