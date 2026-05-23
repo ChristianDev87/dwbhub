@@ -16,9 +16,14 @@ public interface IBotConnection : IAsyncDisposable
     DateTimeOffset? LastConnectedAt { get; }
 
     /// <summary>
-    /// Connects with the given plaintext bot token. Returns when state is one
-    /// of {Connected, TokenInvalid, Failed}. Throws OperationCanceledException
-    /// if ct cancels mid-connect.
+    /// Connects with the given plaintext bot token. Initiates the gateway login
+    /// and returns when the underlying client has started the connection task —
+    /// typically while state is still <see cref="BotConnectionState.Connecting"/>.
+    /// The transition to <see cref="BotConnectionState.Connected"/> happens
+    /// asynchronously when the gateway READY event fires; subscribe to
+    /// <see cref="StateChanged"/> to observe.
+    /// Throws (and transitions to <see cref="BotConnectionState.TokenInvalid"/>
+    /// or <see cref="BotConnectionState.Failed"/>) on connect-time errors.
     /// </summary>
     Task ConnectAsync(string plaintextToken, CancellationToken ct);
 

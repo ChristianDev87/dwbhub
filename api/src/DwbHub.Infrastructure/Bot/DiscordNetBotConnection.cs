@@ -18,7 +18,7 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
     private readonly object _stateLock = new();
     private BotConnectionState _state = BotConnectionState.Disconnected;
     private DateTimeOffset? _lastConnectedAt;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     public DiscordNetBotConnection(long guildId, long tenantId, ILogger<DiscordNetBotConnection> logger)
     {
@@ -57,6 +57,7 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
         }
         catch (Discord.Net.HttpException ex) when (ex.HttpCode == System.Net.HttpStatusCode.Unauthorized)
         {
+            _logger.LogWarning("Discord rejected bot token (401 Unauthorized) for guild {GuildId} — token must be rotated", _guildId);
             TransitionTo(BotConnectionState.TokenInvalid, errorClass: "token_invalid");
             throw;
         }
@@ -71,6 +72,11 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
     public async Task DisconnectAsync(CancellationToken ct)
     {
         if (_disposed) return;
+        await DisconnectCoreAsync();
+    }
+
+    private async Task DisconnectCoreAsync()
+    {
         try
         {
             await _client.LogoutAsync();
@@ -92,6 +98,8 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
     private Task OnDisconnectedAsync(Exception ex)
     {
         _logger.LogInformation("Bot disconnected for guild {GuildId}: {Reason}", _guildId, ex?.Message ?? "unknown");
+        // Discord.NET fires this on transient disconnects too; it will auto-reconnect.
+        // We surface the state so the UI shows a yellow indicator until Ready fires again.
         if (State == BotConnectionState.Connected)
         {
             TransitionTo(BotConnectionState.Connecting, errorClass: "transient_disconnect");
@@ -115,6 +123,10 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
             _state = newState;
         }
         var change = new BotConnectionStateChange(oldState, newState, DateTimeOffset.UtcNow, errorClass);
+        // Snapshot the handler list outside the lock — standard C# pattern to avoid
+        // holding the lock while invoking subscribers. Concurrent unsubscribe is safe
+        // because the captured delegate list is immutable; concurrent dispose is safe
+        // because Task.Run wraps invocation with try/catch.
         var handler = StateChanged;
         if (handler is null) return;
         // Fire-and-forget the async handlers; manager catches its own exceptions.
@@ -134,8 +146,16 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        try { await DisconnectAsync(CancellationToken.None); }
-        catch { /* best-effort */ }
+
+        // Unsubscribe Discord.NET events explicitly so a late-fired event won't
+        // attempt to TransitionTo on a disposed instance (also helps reviewers see
+        // the symmetric subscribe/unsubscribe pattern).
+        _client.Ready          -= OnReadyAsync;
+        _client.Disconnected   -= OnDisconnectedAsync;
+        _client.LoggedOut      -= OnLoggedOutAsync;
+
+        try { await DisconnectCoreAsync(); }
+        catch { /* best-effort during dispose */ }
         await _client.DisposeAsync();
     }
 }
