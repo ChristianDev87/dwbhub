@@ -51,8 +51,8 @@ public sealed class BotConnectionManager(
         var snapshot = _connections.Values.ToList();
         await Task.WhenAll(snapshot.Select(c =>
             SwallowAsync(() => c.DisconnectAsync(cts.Token)))).ConfigureAwait(false);
-        foreach (var c in snapshot)
-            await SwallowAsync(() => c.DisposeAsync().AsTask()).ConfigureAwait(false);
+        await Task.WhenAll(snapshot.Select(c =>
+            SwallowAsync(() => c.DisposeAsync().AsTask()))).ConfigureAwait(false);
         _connections.Clear();
     }
 
@@ -104,9 +104,20 @@ public sealed class BotConnectionManager(
     private async Task WithLockAsync(long guildId, Func<Task> action, CancellationToken ct)
     {
         var sem = _locks.GetOrAdd(guildId, _ => new SemaphoreSlim(1, 1));
+        bool shouldCleanupLock = false;
         await sem.WaitAsync(ct).ConfigureAwait(false);
-        try { await action().ConfigureAwait(false); }
-        finally { sem.Release(); }
+        try
+        {
+            await action().ConfigureAwait(false);
+            // If the action removed the connection, the lock is no longer needed.
+            shouldCleanupLock = !_connections.ContainsKey(guildId);
+        }
+        finally
+        {
+            sem.Release();
+            if (shouldCleanupLock && _locks.TryRemove(guildId, out var removed))
+                removed.Dispose();
+        }
     }
 
     private async Task ReconnectOneAsync(long guildId, CancellationToken ct)
@@ -139,7 +150,20 @@ public sealed class BotConnectionManager(
         conn.StateChanged += change => OnStateChangedAsync(guild, change);
         _connections[guildId] = conn;
 
-        await conn.ConnectAsync(plaintext, ct).ConfigureAwait(false);
+        try
+        {
+            await conn.ConnectAsync(plaintext, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            // ConnectAsync threw (vs. normal state-transition outcome). Remove the
+            // half-initialised connection so a subsequent reconnect doesn't see stale state.
+            if (_connections.TryRemove(guildId, out var bad))
+            {
+                await SwallowAsync(() => bad.DisposeAsync().AsTask()).ConfigureAwait(false);
+            }
+            throw;
+        }
         // plaintext is now eligible for GC.
     }
 
