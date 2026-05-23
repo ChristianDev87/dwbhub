@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using DwbHub.Application.Audit;
+using DwbHub.Application.Bot;
 using DwbHub.Application.Tenancy;
 using DwbHub.Core.Repositories;
 using DwbHub.Infrastructure.Bot;
@@ -66,7 +67,8 @@ public sealed class GuildsController(
                 DisplayName: body.DisplayName.Trim(),
                 IsActive: true,
                 RegisteredAt: DateTimeOffset.UtcNow,
-                BotCredentialsConfigured: false));
+                BotCredentialsConfigured: false,
+                BotConnectionState: null));
         }
         catch (PostgresException e) when (e.SqlState == "23505")
         {
@@ -83,13 +85,30 @@ public sealed class GuildsController(
             ?? throw new InvalidOperationException("TenantContext not populated despite /api/t/ route.");
 
         var items = await guilds.ListByTenantWithStatusAsync(tenant.Id, ct).ConfigureAwait(false);
-        var responses = items.Select(i => new GuildResponse(
-            PublicId: i.Guild.PublicId,
-            DiscordGuildId: i.Guild.DiscordGuildId,
-            DisplayName: i.Guild.DisplayName,
-            IsActive: i.Guild.IsActive,
-            RegisteredAt: i.Guild.RegisteredAt,
-            BotCredentialsConfigured: i.BotCredentialsConfigured)).ToList();
+        var responses = items.Select(i =>
+        {
+            string? botState = null;
+            if (i.BotCredentialsConfigured)
+            {
+                botState = connectionManager.GetState(i.Guild.Id) switch
+                {
+                    BotConnectionState.Disconnected => "disconnected",
+                    BotConnectionState.Connecting   => "connecting",
+                    BotConnectionState.Connected    => "connected",
+                    BotConnectionState.TokenInvalid => "token_invalid",
+                    BotConnectionState.Failed       => "failed",
+                    _                               => null,
+                };
+            }
+            return new GuildResponse(
+                PublicId: i.Guild.PublicId,
+                DiscordGuildId: i.Guild.DiscordGuildId,
+                DisplayName: i.Guild.DisplayName,
+                IsActive: i.Guild.IsActive,
+                RegisteredAt: i.Guild.RegisteredAt,
+                BotCredentialsConfigured: i.BotCredentialsConfigured,
+                BotConnectionState: botState);
+        }).ToList();
 
         return Ok(new GuildListResponse(responses));
     }

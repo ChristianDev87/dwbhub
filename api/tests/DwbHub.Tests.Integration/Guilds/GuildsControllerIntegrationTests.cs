@@ -2,13 +2,20 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Dapper;
+using DwbHub.Application.Bot;
+using DwbHub.Application.Encryption;
+using DwbHub.Core.Encryption;
 using DwbHub.Core.Entities;
 using DwbHub.Data.Connections;
 using DwbHub.Data.Repositories;
 using DwbHub.Infrastructure.Auth;
+using DwbHub.Tests.Integration.Bot;
 using DwbHub.Tests.Integration.Infrastructure;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 using Xunit;
 
@@ -23,6 +30,8 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
     private readonly NpgsqlDataSource _ds;
     private readonly TenantRepository _tenants;
     private readonly UserRepository _users;
+    private readonly GuildRepository _guilds;
+    private readonly GuildBotCredentialRepository _credentials;
     private readonly BCryptPasswordHasher _hasher;
     private readonly JwtIssuer _issuer;
 
@@ -38,6 +47,8 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         var factory = new NpgsqlConnectionFactory(_ds);
         _tenants = new TenantRepository(factory);
         _users = new UserRepository(factory);
+        _guilds = new GuildRepository(factory);
+        _credentials = new GuildBotCredentialRepository(factory);
         _hasher = new BCryptPasswordHasher();
         _issuer = new JwtIssuer(Base64Key);
     }
@@ -172,6 +183,66 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         del.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
-    private sealed record GuildShape(Guid publicId, string discordGuildId, string displayName, bool isActive, DateTimeOffset registeredAt, bool botCredentialsConfigured);
+    [Fact]
+    public async Task List_IncludesBotConnectionState_FromManager()
+    {
+        // Arrange: seed a tenant + owner + guild WITH credentials.
+        var tid = await _tenants.CreateAsync(name: "BotState Tenant", slug: "botstate");
+        var uid = await _users.CreateAsync(new User(
+            Id: 0, TenantId: tid, Email: "owner@botstate.test",
+            EmailVerifiedAt: DateTimeOffset.UtcNow,
+            PasswordHash: _hasher.Hash("correct horse battery staple"),
+            DisplayName: "Owner", Role: UserRole.Owner, IsActive: true,
+            CreatedAt: default, UpdatedAt: default));
+        var ownerUser = new User(uid, tid, "owner@botstate.test",
+            DateTimeOffset.UtcNow, "", "Owner", UserRole.Owner, true, default, default);
+        var tenant = new Tenant(tid, "BotState Tenant", "botstate", "de", default, default);
+        var jwt = _issuer.Issue(ownerUser, tenant);
+
+        var (gid, _) = await _guilds.CreateAsync(
+            tenantId: tid,
+            discordGuildId: "9876543210987654321",
+            displayName: "BotStateGuild",
+            registeredByUserId: uid);
+
+        // Insert fake credentials so BotCredentialsConfigured = true.
+        await _credentials.UpsertAsync(gid, tid, new CipherEnvelope(
+            Nonce: Enumerable.Repeat((byte)0x11, 12).ToArray(),
+            Ciphertext: Enumerable.Repeat((byte)0x22, 80).ToArray(),
+            Tag: Enumerable.Repeat((byte)0x33, 16).ToArray()));
+
+        // Override factory + encryptor so the manager can boot without real Discord.
+        // Give this factory its own log directory so the log file doesn't conflict with
+        // the class-level factory that InitializeAsync already started.
+        var uniqueLogDir = Path.Combine(
+            Path.GetTempPath(), "dwbhub-test-logs", Guid.NewGuid().ToString("N"));
+        Environment.SetEnvironmentVariable("DWBHUB_LOG_DIR", uniqueLogDir);
+
+        var fakeFactory = new FakeBotConnectionFactory();
+        using var scopedFactory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(b => b.ConfigureTestServices(svc =>
+            {
+                svc.RemoveAll<IBotConnectionFactory>();
+                svc.AddSingleton<IBotConnectionFactory>(fakeFactory);
+                svc.RemoveAll<IBotTokenEncryptor>();
+                svc.AddSingleton<IBotTokenEncryptor>(new FakeBotTokenEncryptor());
+            }));
+        var http = scopedFactory.CreateClient();
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
+
+        // Wait for BotConnectionManager.StartAsync sweep to connect the guild.
+        var conn = await fakeFactory.WaitForConnectAsync(gid, TimeSpan.FromSeconds(5));
+        conn.State.Should().Be(BotConnectionState.Connected);
+
+        // Act
+        var resp = await http.GetFromJsonAsync<GuildListShape>($"/api/t/botstate/guilds");
+
+        // Assert
+        resp.Should().NotBeNull();
+        var row = resp!.guilds.Should().ContainSingle().Subject;
+        row.botConnectionState.Should().Be("connected");
+    }
+
+    private sealed record GuildShape(Guid publicId, string discordGuildId, string displayName, bool isActive, DateTimeOffset registeredAt, bool botCredentialsConfigured, string? botConnectionState);
     private sealed record GuildListShape(IReadOnlyList<GuildShape> guilds);
 }

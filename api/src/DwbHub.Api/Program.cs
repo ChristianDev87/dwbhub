@@ -1,11 +1,13 @@
 using Dapper;
 using DwbHub.Application.Auth;
+using DwbHub.Application.Bot;
 using DwbHub.Application.Setup;
 using DwbHub.Core.Repositories;
 using DwbHub.Data.Connections;
 using DwbHub.Data.Migrations;
 using DwbHub.Data.Repositories;
 using DwbHub.Infrastructure.Auth;
+using DwbHub.Infrastructure.Bot;
 using DwbHub.Infrastructure.Logging;
 using FluentMigrator.Runner;
 using Hangfire;
@@ -168,17 +170,12 @@ builder.Services.AddScoped<DwbHub.Core.Repositories.IGuildBotCredentialRepositor
                            DwbHub.Data.Repositories.GuildBotCredentialRepository>();
 
 // --- BotConnectionManager (Plan 0.8) ------------------------------------
-// Registered as Singleton so controllers can fire-and-forget lifecycle hooks.
-// IHostedService wires StartAsync (boot-load all active guilds) + StopAsync
-// (graceful disconnect).
-// IBotConnectionFactory: a no-op placeholder is registered here so the DI
-// graph resolves. Tests override it with FakeBotConnectionFactory via
-// ConfigureTestServices. Task 8 will replace this with DiscordNetBotConnectionFactory.
-builder.Services.AddSingleton<DwbHub.Application.Bot.IBotConnectionFactory,
-                               NullBotConnectionFactory>();
-builder.Services.AddSingleton<DwbHub.Infrastructure.Bot.BotConnectionManager>();
+// Bot connection management (Plan 0.8). The manager owns one IBotConnection per
+// active guild; the Discord.NET factory creates real Discord gateway clients.
+builder.Services.AddSingleton<IBotConnectionFactory, DiscordNetBotConnectionFactory>();
+builder.Services.AddSingleton<BotConnectionManager>();
 builder.Services.AddHostedService(sp =>
-    sp.GetRequiredService<DwbHub.Infrastructure.Bot.BotConnectionManager>());
+    sp.GetRequiredService<BotConnectionManager>());
 
 builder.Services.AddScoped<DwbHub.Infrastructure.Background.AuditVerifyCore>();
 builder.Services.AddScoped<DwbHub.Application.Background.IAuditVerifyIncrementalJob,
@@ -305,20 +302,6 @@ Log.Information("DwbHub.Api starting. LogFile={LogFile}", logFilePath);
 app.Run();
 
 public partial class Program;
-
-/// <summary>
-/// Placeholder IBotConnectionFactory registered at startup.
-/// Throws NotSupportedException if actually invoked — only reached if
-/// BotConnectionManager tries to connect with no production factory configured.
-/// Task 8 will replace this registration with DiscordNetBotConnectionFactory.
-/// </summary>
-file sealed class NullBotConnectionFactory : DwbHub.Application.Bot.IBotConnectionFactory
-{
-    public DwbHub.Application.Bot.IBotConnection Create(long guildId, long tenantId)
-        => throw new NotSupportedException(
-            "No IBotConnectionFactory implementation is registered. " +
-            "Register DiscordNetBotConnectionFactory in production (Plan 0.8 Task 8).");
-}
 
 /// <summary>
 /// Converts Npgsql's UTC DateTime (returned for TIMESTAMPTZ) to DateTimeOffset
