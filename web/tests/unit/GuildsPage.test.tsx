@@ -101,6 +101,7 @@ describe("GuildsPage", () => {
               displayName: "Production",
               isActive: true,
               registeredAt: "2026-05-22T00:00:00Z",
+              botCredentialsConfigured: false,
             }),
           };
         }
@@ -118,6 +119,7 @@ describe("GuildsPage", () => {
                 displayName: "Production",
                 isActive: true,
                 registeredAt: "2026-05-22T00:00:00Z",
+                botCredentialsConfigured: false,
               },
             ],
           }),
@@ -190,6 +192,7 @@ describe("GuildsPage", () => {
                   displayName: "Staging",
                   isActive: true,
                   registeredAt: "2026-05-22T00:00:00Z",
+                  botCredentialsConfigured: false,
                 },
               ],
             }),

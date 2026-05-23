@@ -102,5 +102,26 @@
     "registeredAt": "Registered on {{date}}",
     "noGuilds": "No guilds registered yet.",
     "networkError": "Network connection to the server failed."
+  },
+  "botCredentials": {
+    "configured": "Bot token configured",
+    "notConfigured": "Bot token not configured",
+    "configureButton": "Configure bot token",
+    "rotateButton": "Rotate bot token",
+    "removeButton": "Remove bot token",
+    "modalTitleConfigure": "Configure bot token",
+    "modalTitleRotate": "Rotate bot token",
+    "tokenLabel": "Discord bot token",
+    "tokenHint": "Stored encrypted; not shown again after saving.",
+    "invalidFormat": "Invalid bot token format.",
+    "saveButton": "Save",
+    "savingButton": "Saving…",
+    "cancelButton": "Cancel",
+    "removeConfirmTitle": "Remove bot token?",
+    "removeConfirmText": "Remove bot token for {{name}}? The bot connection will be terminated as soon as Plan 0.8 is active.",
+    "removeConfirmYes": "Remove",
+    "removeConfirmCancel": "Cancel",
+    "networkError": "Network connection to the server failed.",
+    "ownerRoleRequired": "Owner role required."
   }
 }
