@@ -113,6 +113,54 @@ paths:
       responses:
         '200':
           description: OK
+  '/api/t/{slug}/guilds/{guildPublicId}/bot-credentials':
+    put:
+      tags:
+        - BotCredentials
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: guildPublicId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutBotCredentialsRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/PutBotCredentialsRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/PutBotCredentialsRequest'
+      responses:
+        '200':
+          description: OK
+    delete:
+      tags:
+        - BotCredentials
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: guildPublicId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
   '/api/t/{slug}/guilds':
     post:
       tags:
@@ -272,6 +320,16 @@ components:
         email:
           type: string
           nullable: true
+      additionalProperties: false
+    PutBotCredentialsRequest:
+      required:
+        - token
+      type: object
+      properties:
+        token:
+          minLength: 1
+          pattern: '^[A-Za-z0-9._-]{50,200}$'
+          type: string
       additionalProperties: false
     SetupCompleteRequest:
       type: object
