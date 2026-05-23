@@ -9,12 +9,13 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0
 #   against the host's daemon via mounted /var/run/docker.sock.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        curl gnupg ca-certificates apt-transport-https software-properties-common \
+        curl gnupg ca-certificates apt-transport-https \
         docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 # --- PowerShell 7 ---
-# Microsoft's official Debian repo. We pin to 7.4 (LTS as of writing).
+# Microsoft's official Debian repo. Latest 7.x from the repo (Pester compatibility
+# is what matters; Pester is pinned to 5.5.0 below).
 RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg \
     && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" \
         > /etc/apt/sources.list.d/microsoft.list \
