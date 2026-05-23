@@ -57,13 +57,17 @@ public sealed class BotConnectionManager(
     }
 
     /// <summary>
-    /// Returns the current in-memory state of a guild's bot connection.
-    /// Returns Disconnected for unknown guildIds.
+    /// Returns the current state of the per-guild bot connection, or <c>null</c> if
+    /// the manager has no entry for this guildId (e.g., during the brief startup
+    /// window before <see cref="StartAsync"/>'s initial sweep has booted the guild,
+    /// or after the guild was deactivated/credentials removed).
+    /// <c>null</c> is semantically distinct from <see cref="BotConnectionState.Disconnected"/>:
+    /// the former means "no info", the latter means "actively disconnected".
     /// </summary>
-    public BotConnectionState GetState(long guildId)
+    public BotConnectionState? GetState(long guildId)
         => _connections.TryGetValue(guildId, out var conn)
             ? conn.State
-            : BotConnectionState.Disconnected;
+            : null;
 
     /// <summary>Called by BotCredentialsController on PUT — disconnect + reconnect with new token.</summary>
     public Task OnCredentialsChangedAsync(long guildId, CancellationToken ct)

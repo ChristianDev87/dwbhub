@@ -97,6 +97,9 @@ public sealed class GuildsController(
                     BotConnectionState.Connected    => "connected",
                     BotConnectionState.TokenInvalid => "token_invalid",
                     BotConnectionState.Failed       => "failed",
+                    // Exhaustive: add new cases here if BotConnectionState gains members.
+                    // null is the "manager hasn't seen this guild yet" case — leave botState as null.
+                    null                            => null,
                     _                               => null,
                 };
             }

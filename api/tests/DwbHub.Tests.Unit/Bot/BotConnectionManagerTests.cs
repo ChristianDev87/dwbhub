@@ -148,7 +148,7 @@ public sealed class BotConnectionManagerTests
         await mgr.OnCredentialsChangedAsync(60, CancellationToken.None);
         await mgr.OnCredentialsRemovedAsync(60, CancellationToken.None);
 
-        mgr.GetState(60).Should().Be(BotConnectionState.Disconnected);
+        mgr.GetState(60).Should().BeNull();  // removed from dict on credentials-removed
         factory.Created[60].DisconnectCalls.Should().BeGreaterThan(0);
     }
 
@@ -164,7 +164,7 @@ public sealed class BotConnectionManagerTests
         await mgr.OnCredentialsChangedAsync(70, CancellationToken.None);
         await mgr.OnGuildDeactivatedAsync(70, CancellationToken.None);
 
-        mgr.GetState(70).Should().Be(BotConnectionState.Disconnected);
+        mgr.GetState(70).Should().BeNull();  // removed from dict on deactivation
     }
 
     [Fact]
