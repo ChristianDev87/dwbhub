@@ -27,15 +27,18 @@ Write-Host "Dumping OpenAPI document v1 ..." -ForegroundColor Cyan
 # up a throw-away one here so the real boot path runs (no skip flags).
 $originalEnv        = $env:ASPNETCORE_ENVIRONMENT
 $originalConnStr    = $env:DWBHUB_DB_CONNECTION
-$originalJwtSecret  = $env:DWBHUB_JWT_SECRET
+$originalJwtSecret     = $env:DWBHUB_JWT_SECRET
+$originalEncryptionKey = $env:DWBHUB_ENCRYPTION_KEY
 $pgContainer        = "dwbhub-openapi-pg-" + ([guid]::NewGuid().ToString("N").Substring(0, 8))
 $env:ASPNETCORE_ENVIRONMENT = "Development"
 
 # DWBHUB_JWT_SECRET is required by Program.cs since Plan 0.3a (auth wiring).
-# `swagger tofile` boots the API host, so the env var must be set; the actual
-# value doesn't matter for schema extraction (no JWTs are minted here).
+# DWBHUB_ENCRYPTION_KEY is required since Plan 0.7 (bot-token-at-rest encryption).
+# `swagger tofile` boots the API host, so both env vars must be set; the actual
+# values don't matter for schema extraction (no JWTs or tokens are minted here).
 # 32 zero bytes Base64-encoded — never reused in production.
 $env:DWBHUB_JWT_SECRET = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+$env:DWBHUB_ENCRYPTION_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
 Write-Host "Starting temporary Postgres ($pgContainer) ..." -ForegroundColor Cyan
 docker run -d --name $pgContainer -p 0:5432 `
@@ -137,6 +140,7 @@ finally {
     $env:ASPNETCORE_ENVIRONMENT = $originalEnv
     $env:DWBHUB_DB_CONNECTION   = $originalConnStr
     $env:DWBHUB_JWT_SECRET      = $originalJwtSecret
+    $env:DWBHUB_ENCRYPTION_KEY  = $originalEncryptionKey
     $env:DWBHUB_SMTP_HOST       = $originalSmtpHost
     $env:DWBHUB_SMTP_PORT       = $originalSmtpPort
     $env:DWBHUB_SMTP_FROM       = $originalSmtpFrom

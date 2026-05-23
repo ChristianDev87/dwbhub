@@ -201,7 +201,7 @@ jobs:
           docker run -d --name dwbhub-api-smoke --network dwbhub-smoke-net -p 15080:8080 \
             -e DWBHUB_DB_CONNECTION="Host=dwbhub-pg-smoke;Port=5432;Database=dwbhub;Username=dwbhub;Password=dwbhub_smoke" \
             -e DWBHUB_JWT_SECRET=ZGV2X2p3dF9zZWNyZXRfZG9fbm90X3VzZV9pbl9wcm9k \
-            -e DWBHUB_ENCRYPTION_KEY=ZGV2X2VuY3J5cHRpb25fa2V5XzMyYnl0ZXNfdGVzdF9vbg== \
+            -e DWBHUB_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
             -e DWBHUB_SMTP_HOST="$DWBHUB_SMTP_HOST" \
             -e DWBHUB_SMTP_PORT="$DWBHUB_SMTP_PORT" \
             -e DWBHUB_SMTP_FROM="$DWBHUB_SMTP_FROM" \

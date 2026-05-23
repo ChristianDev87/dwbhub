@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
+import { BotTokenModal } from "./BotTokenModal";
 
 const discordIdRegex = /^\d{17,20}$/;
 const schema = z.object({
@@ -23,6 +24,7 @@ interface Guild {
   displayName: string;
   isActive: boolean;
   registeredAt: string;
+  botCredentialsConfigured: boolean;
 }
 
 export function GuildsPage(): React.JSX.Element {
@@ -34,6 +36,11 @@ export function GuildsPage(): React.JSX.Element {
   );
   const [addError, setAddError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Guild | null>(null);
+  const [pendingBotConfigure, setPendingBotConfigure] = useState<{
+    guild: Guild;
+    mode: "configure" | "rotate";
+  } | null>(null);
+  const [pendingBotRemove, setPendingBotRemove] = useState<Guild | null>(null);
 
   const {
     register,
@@ -108,6 +115,22 @@ export function GuildsPage(): React.JSX.Element {
       }
     } catch {
       setPendingDelete(null);
+    }
+  }
+
+  async function confirmBotRemove() {
+    if (!pendingBotRemove) return;
+    try {
+      const res = await fetch(
+        `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${pendingBotRemove.publicId}/bot-credentials`,
+        { method: "DELETE", credentials: "include" },
+      );
+      if (res.status === 204) {
+        setPendingBotRemove(null);
+        await loadList();
+      }
+    } catch {
+      setPendingBotRemove(null);
     }
   }
 
@@ -212,19 +235,113 @@ export function GuildsPage(): React.JSX.Element {
                     })}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  data-testid="delete-guild-button"
-                  onClick={() => setPendingDelete(g)}
-                  className="px-3 py-1 bg-red-600 text-white rounded"
-                >
-                  {t("guilds.deleteButton")}
-                </button>
+                <div className="flex flex-col items-end gap-2">
+                  {g.botCredentialsConfigured ? (
+                    <span
+                      data-testid="bot-credentials-configured"
+                      className="text-green-600 text-xs"
+                    >
+                      ✓ {t("botCredentials.configured")}
+                    </span>
+                  ) : (
+                    <span
+                      data-testid="bot-credentials-missing"
+                      className="text-amber-600 text-xs"
+                    >
+                      ⚠ {t("botCredentials.notConfigured")}
+                    </span>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      data-testid="configure-bot-token-button"
+                      onClick={() =>
+                        setPendingBotConfigure({
+                          guild: g,
+                          mode: g.botCredentialsConfigured
+                            ? "rotate"
+                            : "configure",
+                        })
+                      }
+                      className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
+                    >
+                      {g.botCredentialsConfigured
+                        ? t("botCredentials.rotateButton")
+                        : t("botCredentials.configureButton")}
+                    </button>
+                    {g.botCredentialsConfigured && (
+                      <button
+                        type="button"
+                        data-testid="remove-bot-token-button"
+                        onClick={() => setPendingBotRemove(g)}
+                        className="px-3 py-1 border border-red-600 text-red-600 rounded text-sm"
+                      >
+                        {t("botCredentials.removeButton")}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      data-testid="delete-guild-button"
+                      onClick={() => setPendingDelete(g)}
+                      className="px-3 py-1 bg-red-600 text-white rounded text-sm"
+                    >
+                      {t("guilds.deleteButton")}
+                    </button>
+                  </div>
+                </div>
               </li>
             ))}
           </ul>
         )}
       </section>
+
+      {pendingBotConfigure && (
+        <BotTokenModal
+          slug={slug ?? ""}
+          guildPublicId={pendingBotConfigure.guild.publicId}
+          guildDisplayName={pendingBotConfigure.guild.displayName}
+          mode={pendingBotConfigure.mode}
+          onClose={() => setPendingBotConfigure(null)}
+          onSuccess={() => void loadList()}
+        />
+      )}
+
+      {pendingBotRemove && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4"
+        >
+          <div className="bg-white rounded p-6 max-w-sm">
+            <h3 className="text-lg font-semibold">
+              {t("botCredentials.removeConfirmTitle")}
+            </h3>
+            <p className="mt-2 text-sm">
+              {t("botCredentials.removeConfirmText", {
+                name: pendingBotRemove.displayName,
+              })}
+            </p>
+            <div className="mt-4 flex gap-3 justify-end">
+              <button
+                type="button"
+                data-testid="bot-remove-confirm-cancel"
+                onClick={() => setPendingBotRemove(null)}
+                className="px-3 py-1 border rounded"
+              >
+                {t("botCredentials.removeConfirmCancel")}
+              </button>
+              <button
+                type="button"
+                data-testid="bot-remove-confirm-yes"
+                onClick={() => void confirmBotRemove()}
+                className="px-3 py-1 bg-red-600 text-white rounded"
+              >
+                {t("botCredentials.removeConfirmYes")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pendingDelete && (
         <div

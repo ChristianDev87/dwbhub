@@ -63,7 +63,8 @@ public sealed class GuildsController(
                 DiscordGuildId: body.DiscordGuildId,
                 DisplayName: body.DisplayName.Trim(),
                 IsActive: true,
-                RegisteredAt: DateTimeOffset.UtcNow));
+                RegisteredAt: DateTimeOffset.UtcNow,
+                BotCredentialsConfigured: false));
         }
         catch (PostgresException e) when (e.SqlState == "23505")
         {
@@ -79,13 +80,14 @@ public sealed class GuildsController(
         var tenant = tenantContext.Current
             ?? throw new InvalidOperationException("TenantContext not populated despite /api/t/ route.");
 
-        var rows = await guilds.ListByTenantAsync(tenant.Id, ct).ConfigureAwait(false);
-        var responses = rows.Select(g => new GuildResponse(
-            PublicId: g.PublicId,
-            DiscordGuildId: g.DiscordGuildId,
-            DisplayName: g.DisplayName,
-            IsActive: g.IsActive,
-            RegisteredAt: g.RegisteredAt)).ToList();
+        var items = await guilds.ListByTenantWithStatusAsync(tenant.Id, ct).ConfigureAwait(false);
+        var responses = items.Select(i => new GuildResponse(
+            PublicId: i.Guild.PublicId,
+            DiscordGuildId: i.Guild.DiscordGuildId,
+            DisplayName: i.Guild.DisplayName,
+            IsActive: i.Guild.IsActive,
+            RegisteredAt: i.Guild.RegisteredAt,
+            BotCredentialsConfigured: i.BotCredentialsConfigured)).ToList();
 
         return Ok(new GuildListResponse(responses));
     }
