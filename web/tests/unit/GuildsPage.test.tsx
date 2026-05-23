@@ -40,13 +40,11 @@ describe("GuildsPage", () => {
   it("validates discord guild id format", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue({
-          ok: true,
-          status: 200,
-          json: async () => ({ guilds: [] }),
-        }),
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ guilds: [] }),
+      }),
     );
     renderPage();
     await waitFor(() => screen.getByTestId("input-discord-guild-id"));
@@ -65,13 +63,11 @@ describe("GuildsPage", () => {
   it("validates display name is non-empty", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue({
-          ok: true,
-          status: 200,
-          json: async () => ({ guilds: [] }),
-        }),
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ guilds: [] }),
+      }),
     );
     renderPage();
     await waitFor(() => screen.getByTestId("input-discord-guild-id"));
