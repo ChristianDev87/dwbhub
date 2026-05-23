@@ -190,6 +190,20 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
         return result;
     }
 
+    // ── Plan 0.8 Task 4 stubs — full implementations added in Plan 0.8 Task 5 ──
+
+    public Task<Guild?> GetByIdAsync(long guildId, CancellationToken ct = default)
+        => throw new NotImplementedException("Implemented in Plan 0.8 Task 5");
+
+    public Task<IReadOnlyList<GuildIdTenantPair>> ListActiveWithCredentialsAsync(CancellationToken ct = default)
+        => throw new NotImplementedException("Implemented in Plan 0.8 Task 5");
+
+    public Task<bool> SetActiveAsync(long guildId, long tenantId, bool isActive, CancellationToken ct = default)
+        => throw new NotImplementedException("Implemented in Plan 0.8 Task 5");
+
+    public Task UpdateLastConnectedAtAsync(long guildId, DateTimeOffset timestamp, CancellationToken ct = default)
+        => throw new NotImplementedException("Implemented in Plan 0.8 Task 5");
+
     /// <summary>
     /// Npgsql returns DateTime (UTC) for TIMESTAMPTZ when queried via a dynamic
     /// row dictionary. The Dapper SqlMapper.TypeHandler only applies to strongly-
