@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using DwbHub.Application.Audit;
+using DwbHub.Application.Bot;
 using DwbHub.Application.Tenancy;
 using DwbHub.Core.Repositories;
+using DwbHub.Infrastructure.Bot;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
@@ -18,7 +20,8 @@ namespace DwbHub.Api.Controllers.Tenant;
 public sealed class GuildsController(
     ITenantContext tenantContext,
     IGuildRepository guilds,
-    IAuditWriter auditWriter) : ControllerBase
+    IAuditWriter auditWriter,
+    BotConnectionManager connectionManager) : ControllerBase
 {
     [HttpPost]
     [Authorize(Roles = "Owner")]
@@ -64,7 +67,8 @@ public sealed class GuildsController(
                 DisplayName: body.DisplayName.Trim(),
                 IsActive: true,
                 RegisteredAt: DateTimeOffset.UtcNow,
-                BotCredentialsConfigured: false));
+                BotCredentialsConfigured: false,
+                BotConnectionState: null));
         }
         catch (PostgresException e) when (e.SqlState == "23505")
         {
@@ -81,13 +85,33 @@ public sealed class GuildsController(
             ?? throw new InvalidOperationException("TenantContext not populated despite /api/t/ route.");
 
         var items = await guilds.ListByTenantWithStatusAsync(tenant.Id, ct).ConfigureAwait(false);
-        var responses = items.Select(i => new GuildResponse(
-            PublicId: i.Guild.PublicId,
-            DiscordGuildId: i.Guild.DiscordGuildId,
-            DisplayName: i.Guild.DisplayName,
-            IsActive: i.Guild.IsActive,
-            RegisteredAt: i.Guild.RegisteredAt,
-            BotCredentialsConfigured: i.BotCredentialsConfigured)).ToList();
+        var responses = items.Select(i =>
+        {
+            string? botState = null;
+            if (i.BotCredentialsConfigured)
+            {
+                botState = connectionManager.GetState(i.Guild.Id) switch
+                {
+                    BotConnectionState.Disconnected => "disconnected",
+                    BotConnectionState.Connecting => "connecting",
+                    BotConnectionState.Connected => "connected",
+                    BotConnectionState.TokenInvalid => "token_invalid",
+                    BotConnectionState.Failed => "failed",
+                    // Exhaustive: add new cases here if BotConnectionState gains members.
+                    // null is the "manager hasn't seen this guild yet" case — leave botState as null.
+                    null => null,
+                    _ => null,
+                };
+            }
+            return new GuildResponse(
+                PublicId: i.Guild.PublicId,
+                DiscordGuildId: i.Guild.DiscordGuildId,
+                DisplayName: i.Guild.DisplayName,
+                IsActive: i.Guild.IsActive,
+                RegisteredAt: i.Guild.RegisteredAt,
+                BotCredentialsConfigured: i.BotCredentialsConfigured,
+                BotConnectionState: botState);
+        }).ToList();
 
         return Ok(new GuildListResponse(responses));
     }
@@ -121,6 +145,107 @@ public sealed class GuildsController(
             UserAgent: HttpContext.Request.Headers.UserAgent.ToString()),
             ct).ConfigureAwait(false);
 
+        return NoContent();
+    }
+
+    [HttpPost("{publicId:guid}/activate")]
+    [Authorize(Roles = "Owner")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Activate(string slug, Guid publicId, CancellationToken ct)
+    {
+        _ = slug;
+        var tenant = tenantContext.Current
+            ?? throw new InvalidOperationException("TenantContext not populated despite /api/t/ route.");
+        var actorUserId = ExtractUserId();
+
+        var guild = await guilds.GetByPublicIdAsync(publicId, tenant.Id, ct).ConfigureAwait(false);
+        if (guild is null) return NotFound(new { error = "guild_not_found" });
+
+        var changed = await guilds.SetActiveAsync(guild.Id, tenant.Id, isActive: true, ct).ConfigureAwait(false);
+        if (!changed) return NoContent(); // idempotent no-op
+
+        await auditWriter.RecordAsync(new AuditEvent(
+            TenantId: tenant.Id,
+            ActorUserId: actorUserId,
+            EventType: AuditEventTypes.GuildActivated,
+            Payload: new Dictionary<string, object?>
+            {
+                ["guildPublicId"] = guild.PublicId.ToString("D"),
+                ["tenantSlug"] = tenant.Slug,
+            },
+            IpAddress: HttpContext.Connection.RemoteIpAddress,
+            UserAgent: HttpContext.Request.Headers.UserAgent.ToString()),
+            ct).ConfigureAwait(false);
+
+        _ = connectionManager.OnGuildActivatedAsync(guild.Id, CancellationToken.None);
+        return NoContent();
+    }
+
+    [HttpPost("{publicId:guid}/deactivate")]
+    [Authorize(Roles = "Owner")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Deactivate(string slug, Guid publicId, CancellationToken ct)
+    {
+        _ = slug;
+        var tenant = tenantContext.Current
+            ?? throw new InvalidOperationException("TenantContext not populated despite /api/t/ route.");
+        var actorUserId = ExtractUserId();
+
+        var guild = await guilds.GetByPublicIdAsync(publicId, tenant.Id, ct).ConfigureAwait(false);
+        if (guild is null) return NotFound(new { error = "guild_not_found" });
+
+        var changed = await guilds.SetActiveAsync(guild.Id, tenant.Id, isActive: false, ct).ConfigureAwait(false);
+        if (!changed) return NoContent(); // idempotent no-op
+
+        await auditWriter.RecordAsync(new AuditEvent(
+            TenantId: tenant.Id,
+            ActorUserId: actorUserId,
+            EventType: AuditEventTypes.GuildDeactivated,
+            Payload: new Dictionary<string, object?>
+            {
+                ["guildPublicId"] = guild.PublicId.ToString("D"),
+                ["tenantSlug"] = tenant.Slug,
+            },
+            IpAddress: HttpContext.Connection.RemoteIpAddress,
+            UserAgent: HttpContext.Request.Headers.UserAgent.ToString()),
+            ct).ConfigureAwait(false);
+
+        _ = connectionManager.OnGuildDeactivatedAsync(guild.Id, CancellationToken.None);
+        return NoContent();
+    }
+
+    [HttpPost("{publicId:guid}/bot/reconnect")]
+    [Authorize(Roles = "Owner")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Reconnect(string slug, Guid publicId, CancellationToken ct)
+    {
+        _ = slug;
+        var tenant = tenantContext.Current
+            ?? throw new InvalidOperationException("TenantContext not populated despite /api/t/ route.");
+        var actorUserId = ExtractUserId();
+
+        var guild = await guilds.GetByPublicIdAsync(publicId, tenant.Id, ct).ConfigureAwait(false);
+        if (guild is null) return NotFound(new { error = "guild_not_found" });
+        if (!guild.IsActive) return BadRequest(new { error = "Guild is paused; activate first." });
+
+        await auditWriter.RecordAsync(new AuditEvent(
+            TenantId: tenant.Id,
+            ActorUserId: actorUserId,
+            EventType: AuditEventTypes.BotManualReconnect,
+            Payload: new Dictionary<string, object?>
+            {
+                ["guildPublicId"] = guild.PublicId.ToString("D"),
+                ["tenantSlug"] = tenant.Slug,
+            },
+            IpAddress: HttpContext.Connection.RemoteIpAddress,
+            UserAgent: HttpContext.Request.Headers.UserAgent.ToString()),
+            ct).ConfigureAwait(false);
+
+        _ = connectionManager.OnManualReconnectAsync(guild.Id, actorUserId ?? 0, CancellationToken.None);
         return NoContent();
     }
 

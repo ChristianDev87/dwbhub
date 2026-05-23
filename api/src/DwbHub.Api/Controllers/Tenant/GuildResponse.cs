@@ -6,4 +6,5 @@ public sealed record GuildResponse(
     string DisplayName,
     bool IsActive,
     DateTimeOffset RegisteredAt,
-    bool BotCredentialsConfigured);
+    bool BotCredentialsConfigured,
+    string? BotConnectionState);

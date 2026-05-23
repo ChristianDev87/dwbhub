@@ -103,6 +103,26 @@
     "noGuilds": "Noch keine Server registriert.",
     "networkError": "Verbindung zum Server fehlgeschlagen."
   },
+  "botConnection": {
+    "status": {
+      "connected": "Verbunden",
+      "connecting": "Verbindet…",
+      "disconnected": "Getrennt",
+      "tokenInvalid": "Token ungültig",
+      "failed": "Fehlgeschlagen",
+      "unknown": "Unbekannt"
+    },
+    "actions": {
+      "pause": "Pausieren",
+      "resume": "Fortsetzen",
+      "reconnect": "Neu verbinden"
+    },
+    "pauseModal": {
+      "title": "Bot pausieren?",
+      "body": "Der Bot trennt die Verbindung sofort und nimmt erst nach 'Fortsetzen' wieder am Discord-Gateway teil.",
+      "confirm": "Pausieren"
+    }
+  },
   "botCredentials": {
     "configured": "Bot-Token konfiguriert",
     "notConfigured": "Bot-Token nicht konfiguriert",

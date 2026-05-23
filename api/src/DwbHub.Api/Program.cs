@@ -1,11 +1,13 @@
 using Dapper;
 using DwbHub.Application.Auth;
+using DwbHub.Application.Bot;
 using DwbHub.Application.Setup;
 using DwbHub.Core.Repositories;
 using DwbHub.Data.Connections;
 using DwbHub.Data.Migrations;
 using DwbHub.Data.Repositories;
 using DwbHub.Infrastructure.Auth;
+using DwbHub.Infrastructure.Bot;
 using DwbHub.Infrastructure.Logging;
 using FluentMigrator.Runner;
 using Hangfire;
@@ -166,6 +168,14 @@ builder.Services.AddSingleton<DwbHub.Application.Encryption.IBotTokenEncryptor>(
     new DwbHub.Infrastructure.Encryption.AesGcmBotTokenEncryptor(encryptionKey));
 builder.Services.AddScoped<DwbHub.Core.Repositories.IGuildBotCredentialRepository,
                            DwbHub.Data.Repositories.GuildBotCredentialRepository>();
+
+// --- BotConnectionManager (Plan 0.8) ------------------------------------
+// Bot connection management (Plan 0.8). The manager owns one IBotConnection per
+// active guild; the Discord.NET factory creates real Discord gateway clients.
+builder.Services.AddSingleton<IBotConnectionFactory, DiscordNetBotConnectionFactory>();
+builder.Services.AddSingleton<BotConnectionManager>();
+builder.Services.AddHostedService(sp =>
+    sp.GetRequiredService<BotConnectionManager>());
 
 builder.Services.AddScoped<DwbHub.Infrastructure.Background.AuditVerifyCore>();
 builder.Services.AddScoped<DwbHub.Application.Background.IAuditVerifyIncrementalJob,
