@@ -207,6 +207,40 @@ services:
     networks: [test-net]
     command: ["e2e"]
 
+  discord-live-tests:
+    build:
+      context: ../..
+      dockerfile: deploy/test-runners/Dockerfile.backend
+      tags: [dwbhub-test-runner-backend:dev]
+    volumes:
+      - ../..:/workspace:ro
+      - ../../test-results:/results
+    tmpfs:
+      # dotnet test compiles DwbHub.Tests.Integration and its transitive deps.
+      # tmpfs shadows the :ro workspace bind at obj/bin so dotnet can write.
+      - /workspace/api/src/DwbHub.Api/obj
+      - /workspace/api/src/DwbHub.Api/bin
+      - /workspace/api/src/DwbHub.Application/obj
+      - /workspace/api/src/DwbHub.Application/bin
+      - /workspace/api/src/DwbHub.Bot/obj
+      - /workspace/api/src/DwbHub.Bot/bin
+      - /workspace/api/src/DwbHub.Core/obj
+      - /workspace/api/src/DwbHub.Core/bin
+      - /workspace/api/src/DwbHub.Data/obj
+      - /workspace/api/src/DwbHub.Data/bin
+      - /workspace/api/src/DwbHub.Infrastructure/obj
+      - /workspace/api/src/DwbHub.Infrastructure/bin
+      - /workspace/api/tests/DwbHub.Tests.Integration/obj
+      - /workspace/api/tests/DwbHub.Tests.Integration/bin
+    extra_hosts:
+      # Discord.Net resolves wss://gateway.discord.gg via public DNS; extra_hosts
+      # doesn't interfere with that, and mirrors the pattern used by backend-tests.
+      - "host.docker.internal:host-gateway"
+    secrets:
+      - discord_token
+    networks: [test-net]
+    command: ["discord-live"]
+
 networks:
   test-net:
     driver: bridge
@@ -222,7 +256,9 @@ volumes:
   e2e-nm-root:
   e2e-nm-web:
 
-# Secrets block — populated in Task 10 when discord-live-tests is added.
-# secrets:
-#   discord_token:
-#     file: ./discord.dev.env
+secrets:
+  discord_token:
+    # deploy/compose/discord.dev.env — gitignored, never committed.
+    # Two lines:  DISCORD_DEV_BOT_TOKEN=<value>  /  DISCORD_DEV_GUILD_ID=<value>
+    # If the file is absent, discord-live-tests exits 0 (SKIPPED) automatically.
+    file: ./discord.dev.env
