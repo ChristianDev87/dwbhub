@@ -2,8 +2,10 @@
 # Base: official Node 22 LTS on Alpine (small, fast cold-start).
 FROM node:22-alpine
 
-# Alpine doesn't ship bash by default — we need it for the entrypoint pipeline (set -e, PIPESTATUS).
-# git + ca-certificates needed for any package fetches over https.
+# bash is not required by entrypoint.sh (POSIX-portable) but is retained for
+# ad-hoc interactive debugging inside the container. ~5 MB cost. Drop if size matters.
+# git: useful for any pnpm fetches that reference github: protocol (none currently used).
+# ca-certificates: included by node:22-alpine base; explicit add is a no-op safety net.
 RUN apk add --no-cache bash git ca-certificates
 
 # Pin pnpm to the same version the repo uses (package.json packageManager field).
