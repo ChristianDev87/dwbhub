@@ -135,7 +135,7 @@ public sealed class BotConnectionManager(
 
         using var scope = scopeFactory.CreateScope();
         var guildRepo = scope.ServiceProvider.GetRequiredService<IGuildRepository>();
-        var credRepo  = scope.ServiceProvider.GetRequiredService<IGuildBotCredentialRepository>();
+        var credRepo = scope.ServiceProvider.GetRequiredService<IGuildBotCredentialRepository>();
         var encryptor = scope.ServiceProvider.GetRequiredService<IBotTokenEncryptor>();
 
         // 2. Re-query — caller may have raced; only connect if still active+credentialed.
@@ -212,11 +212,11 @@ public sealed class BotConnectionManager(
 
             var payload = new Dictionary<string, object?>
             {
-                ["tenantSlug"]     = tenantSlug,
-                ["guildPublicId"]  = guild.PublicId.ToString("D"),
-                ["connectedAt"]    = change.To == BotConnectionState.Connected ? change.ChangedAt : null,
-                ["reason"]         = change.To == BotConnectionState.Disconnected ? "graceful" : null,
-                ["errorClass"]     = change.ErrorClass,
+                ["tenantSlug"] = tenantSlug,
+                ["guildPublicId"] = guild.PublicId.ToString("D"),
+                ["connectedAt"] = change.To == BotConnectionState.Connected ? change.ChangedAt : null,
+                ["reason"] = change.To == BotConnectionState.Disconnected ? "graceful" : null,
+                ["errorClass"] = change.ErrorClass,
             };
 
             await audit.RecordAsync(new AuditEvent(

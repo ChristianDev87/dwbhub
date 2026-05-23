@@ -33,9 +33,9 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
             AlwaysDownloadUsers = false,
             ConnectionTimeout = 30_000,
         });
-        _client.Ready        += OnReadyAsync;
+        _client.Ready += OnReadyAsync;
         _client.Disconnected += OnDisconnectedAsync;
-        _client.LoggedOut    += OnLoggedOutAsync;
+        _client.LoggedOut += OnLoggedOutAsync;
     }
 
     public long GuildId => _guildId;
@@ -164,9 +164,9 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
         // Unsubscribe Discord.NET events explicitly so a late-fired event won't
         // attempt to TransitionTo on a disposed instance (also helps reviewers see
         // the symmetric subscribe/unsubscribe pattern).
-        _client.Ready          -= OnReadyAsync;
-        _client.Disconnected   -= OnDisconnectedAsync;
-        _client.LoggedOut      -= OnLoggedOutAsync;
+        _client.Ready -= OnReadyAsync;
+        _client.Disconnected -= OnDisconnectedAsync;
+        _client.LoggedOut -= OnLoggedOutAsync;
 
         try { await DisconnectCoreAsync(); }
         catch { /* best-effort during dispose */ }

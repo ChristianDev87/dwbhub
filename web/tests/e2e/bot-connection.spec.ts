@@ -1,4 +1,9 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 
 const SLUG = "acme";
 const OWNER_EMAIL = "owner@acme.test";
@@ -10,7 +15,7 @@ async function setupReady(request: APIRequestContext): Promise<boolean> {
   return status.completed;
 }
 
-async function loginAsOwner(page: import("@playwright/test").Page) {
+async function loginAsOwner(page: Page) {
   await page.goto("/login");
   await page.fill('[data-testid="input-tenantSlug"]', SLUG);
   await page.fill('[data-testid="input-email"]', OWNER_EMAIL);

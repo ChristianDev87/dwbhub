@@ -93,14 +93,14 @@ public sealed class GuildsController(
                 botState = connectionManager.GetState(i.Guild.Id) switch
                 {
                     BotConnectionState.Disconnected => "disconnected",
-                    BotConnectionState.Connecting   => "connecting",
-                    BotConnectionState.Connected    => "connected",
+                    BotConnectionState.Connecting => "connecting",
+                    BotConnectionState.Connected => "connected",
                     BotConnectionState.TokenInvalid => "token_invalid",
-                    BotConnectionState.Failed       => "failed",
+                    BotConnectionState.Failed => "failed",
                     // Exhaustive: add new cases here if BotConnectionState gains members.
                     // null is the "manager hasn't seen this guild yet" case — leave botState as null.
-                    null                            => null,
-                    _                               => null,
+                    null => null,
+                    _ => null,
                 };
             }
             return new GuildResponse(
