@@ -240,29 +240,47 @@ describe("GuildsPage", () => {
     );
     renderPage();
     await waitFor(() => {
-      const indicator = screen.getByTestId("bot-connection-status");
+      const indicator = screen.getByTestId(
+        `guild-status-${baseGuild.publicId}`,
+      );
       expect(indicator).toBeInTheDocument();
       expect(indicator).toHaveClass("text-green-600");
     });
   });
 
-  it("renders an amber indicator when guild is connecting", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          guilds: [{ ...baseGuild, botConnectionState: "connecting" }],
-        }),
+  it("renders an amber indicator and starts polling when guild is connecting", async () => {
+    // Use fake timers with shouldAdvanceTime so waitFor's internal polling works
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        guilds: [{ ...baseGuild, botConnectionState: "connecting" }],
       }),
-    );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
     renderPage();
+
+    // Wait for the amber indicator
     await waitFor(() => {
-      const indicator = screen.getByTestId("bot-connection-status");
+      const indicator = screen.getByTestId(
+        `guild-status-${baseGuild.publicId}`,
+      );
       expect(indicator).toBeInTheDocument();
       expect(indicator).toHaveClass("text-amber-500");
     });
+
+    const callsBefore = fetchMock.mock.calls.length;
+
+    // Advance fake time past the 3s polling interval
+    vi.advanceTimersByTime(3100);
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
+
+    vi.useRealTimers();
   });
 
   it("opens pause modal when Pause button is clicked", async () => {
@@ -279,8 +297,10 @@ describe("GuildsPage", () => {
       }),
     );
     renderPage();
-    await waitFor(() => screen.getByTestId("pause-guild-button"));
-    fireEvent.click(screen.getByTestId("pause-guild-button"));
+    await waitFor(() =>
+      screen.getByTestId(`guild-pause-${baseGuild.publicId}`),
+    );
+    fireEvent.click(screen.getByTestId(`guild-pause-${baseGuild.publicId}`));
     await waitFor(() => {
       expect(screen.getByTestId("pause-guild-modal")).toBeInTheDocument();
     });
@@ -306,8 +326,10 @@ describe("GuildsPage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     renderPage();
-    await waitFor(() => screen.getByTestId("pause-guild-button"));
-    fireEvent.click(screen.getByTestId("pause-guild-button"));
+    await waitFor(() =>
+      screen.getByTestId(`guild-pause-${baseGuild.publicId}`),
+    );
+    fireEvent.click(screen.getByTestId(`guild-pause-${baseGuild.publicId}`));
     await waitFor(() => screen.getByTestId("pause-modal-confirm"));
     fireEvent.click(screen.getByTestId("pause-modal-confirm"));
     await waitFor(() => {
@@ -343,9 +365,11 @@ describe("GuildsPage", () => {
     );
     renderPage();
     await waitFor(() => {
-      expect(screen.getByTestId("resume-guild-button")).toBeInTheDocument();
       expect(
-        screen.queryByTestId("pause-guild-button"),
+        screen.getByTestId(`guild-resume-${baseGuild.publicId}`),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId(`guild-pause-${baseGuild.publicId}`),
       ).not.toBeInTheDocument();
     });
   });

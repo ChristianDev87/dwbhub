@@ -68,6 +68,7 @@ export function GuildsPage(): React.JSX.Element {
   } | null>(null);
   const [pendingBotRemove, setPendingBotRemove] = useState<Guild | null>(null);
   const [pauseTarget, setPauseTarget] = useState<Guild | null>(null);
+  const [actionPending, setActionPending] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const {
@@ -210,12 +211,14 @@ export function GuildsPage(): React.JSX.Element {
 
   async function confirmPause() {
     if (!pauseTarget) return;
+    setActionPending(pauseTarget.publicId);
     try {
       await fetch(
         `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${pauseTarget.publicId}/deactivate`,
         { method: "POST", credentials: "include" },
       );
     } finally {
+      setActionPending(null);
       setPauseTarget(null);
       await loadList();
     }
@@ -344,7 +347,7 @@ export function GuildsPage(): React.JSX.Element {
                     })}
                   </p>
                   <p
-                    data-testid="bot-connection-status"
+                    data-testid={`guild-status-${g.publicId}`}
                     className={`text-xs mt-1 ${statusColor(g.botConnectionState)}`}
                   >
                     ● {statusLabel(g.botConnectionState)}
@@ -398,7 +401,7 @@ export function GuildsPage(): React.JSX.Element {
                       <>
                         <button
                           type="button"
-                          data-testid="pause-guild-button"
+                          data-testid={`guild-pause-${g.publicId}`}
                           onClick={() => void handlePause(g)}
                           className="px-3 py-1 bg-amber-500 text-white rounded text-sm"
                         >
@@ -406,7 +409,7 @@ export function GuildsPage(): React.JSX.Element {
                         </button>
                         <button
                           type="button"
-                          data-testid="reconnect-guild-button"
+                          data-testid={`guild-reconnect-${g.publicId}`}
                           disabled={!g.botCredentialsConfigured}
                           onClick={() => void handleReconnect(g)}
                           className="px-3 py-1 bg-blue-500 text-white rounded text-sm disabled:opacity-50"
@@ -417,7 +420,7 @@ export function GuildsPage(): React.JSX.Element {
                     ) : (
                       <button
                         type="button"
-                        data-testid="resume-guild-button"
+                        data-testid={`guild-resume-${g.publicId}`}
                         onClick={() => void handleResume(g)}
                         className="px-3 py-1 bg-green-600 text-white rounded text-sm"
                       >
@@ -442,7 +445,8 @@ export function GuildsPage(): React.JSX.Element {
 
       {pauseTarget && (
         <PauseGuildModal
-          guildDisplayName={pauseTarget.displayName}
+          guildName={pauseTarget.displayName}
+          isPending={actionPending === pauseTarget.publicId}
           onCancel={() => setPauseTarget(null)}
           onConfirm={() => void confirmPause()}
         />
