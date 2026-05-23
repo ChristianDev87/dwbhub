@@ -102,5 +102,26 @@
     "registeredAt": "Registriert am {{date}}",
     "noGuilds": "Noch keine Server registriert.",
     "networkError": "Verbindung zum Server fehlgeschlagen."
+  },
+  "botCredentials": {
+    "configured": "Bot-Token konfiguriert",
+    "notConfigured": "Bot-Token nicht konfiguriert",
+    "configureButton": "Bot-Token konfigurieren",
+    "rotateButton": "Bot-Token rotieren",
+    "removeButton": "Bot-Token entfernen",
+    "modalTitleConfigure": "Bot-Token konfigurieren",
+    "modalTitleRotate": "Bot-Token rotieren",
+    "tokenLabel": "Discord-Bot-Token",
+    "tokenHint": "Wird verschlüsselt gespeichert und nach Speichern nicht mehr angezeigt.",
+    "invalidFormat": "Ungültiges Bot-Token-Format.",
+    "saveButton": "Speichern",
+    "savingButton": "Wird gespeichert…",
+    "cancelButton": "Abbrechen",
+    "removeConfirmTitle": "Bot-Token entfernen?",
+    "removeConfirmText": "Bot-Token für {{name}} entfernen? Bot-Verbindung wird sofort getrennt sobald Plan 0.8 aktiv ist.",
+    "removeConfirmYes": "Entfernen",
+    "removeConfirmCancel": "Abbrechen",
+    "networkError": "Verbindung zum Server fehlgeschlagen.",
+    "ownerRoleRequired": "Owner-Rolle erforderlich."
   }
 }

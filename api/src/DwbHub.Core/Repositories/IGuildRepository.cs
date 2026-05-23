@@ -46,4 +46,13 @@ public interface IGuildRepository
     /// </summary>
     Task<(DwbHub.Core.Entities.Tenant? Tenant, DwbHub.Core.Entities.Guild? Guild)>
         ResolveTenantAndGuildAsync(string slug, Guid guildPublicId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Same as <see cref="ListByTenantAsync"/> but additionally reports whether
+    /// each guild has bot credentials configured. Single query via LEFT JOIN — 0
+    /// additional round-trips vs. <see cref="ListByTenantAsync"/>. Used by the
+    /// frontend GuildsPage to render status badges.
+    /// </summary>
+    Task<IReadOnlyList<GuildListItem>> ListByTenantWithStatusAsync(
+        long tenantId, CancellationToken ct = default);
 }

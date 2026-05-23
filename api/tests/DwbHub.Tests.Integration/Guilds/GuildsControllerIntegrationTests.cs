@@ -49,6 +49,7 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         Environment.SetEnvironmentVariable("DWBHUB_LOG_DIR", uniqueLogDir);
         Environment.SetEnvironmentVariable("DWBHUB_DB_CONNECTION", _fixture.ConnectionString);
         Environment.SetEnvironmentVariable("DWBHUB_JWT_SECRET", Base64Key);
+        Environment.SetEnvironmentVariable("DWBHUB_ENCRYPTION_KEY", Base64Key);
         Environment.SetEnvironmentVariable("DWBHUB_SMTP_HOST", "localhost");
         Environment.SetEnvironmentVariable("DWBHUB_SMTP_PORT", "11025");
         Environment.SetEnvironmentVariable("DWBHUB_SMTP_FROM", "noreply@test.local");
@@ -171,6 +172,6 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         del.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
-    private sealed record GuildShape(Guid publicId, string discordGuildId, string displayName, bool isActive, DateTimeOffset registeredAt);
+    private sealed record GuildShape(Guid publicId, string discordGuildId, string displayName, bool isActive, DateTimeOffset registeredAt, bool botCredentialsConfigured);
     private sealed record GuildListShape(IReadOnlyList<GuildShape> guilds);
 }

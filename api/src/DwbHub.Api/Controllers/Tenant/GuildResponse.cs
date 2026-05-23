@@ -5,4 +5,5 @@ public sealed record GuildResponse(
     string DiscordGuildId,
     string DisplayName,
     bool IsActive,
-    DateTimeOffset RegisteredAt);
+    DateTimeOffset RegisteredAt,
+    bool BotCredentialsConfigured);

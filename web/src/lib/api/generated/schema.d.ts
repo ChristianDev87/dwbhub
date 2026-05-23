@@ -275,6 +275,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/t/{slug}/guilds/{guildPublicId}/bot-credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                    guildPublicId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PutBotCredentialsRequest"];
+                    "text/json": components["schemas"]["PutBotCredentialsRequest"];
+                    "application/*+json": components["schemas"]["PutBotCredentialsRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                    guildPublicId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/t/{slug}/guilds": {
         parameters: {
             query?: never;
@@ -565,6 +627,9 @@ export interface components {
         PasswordResetRequestRequest: {
             tenantSlug?: string | null;
             email?: string | null;
+        };
+        PutBotCredentialsRequest: {
+            token: string;
         };
         SetupCompleteRequest: {
             bootstrapToken?: string | null;

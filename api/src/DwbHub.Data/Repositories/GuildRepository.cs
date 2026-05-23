@@ -148,6 +148,48 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
         return (tenant, guild);
     }
 
+    public async Task<IReadOnlyList<GuildListItem>> ListByTenantWithStatusAsync(
+        long tenantId, CancellationToken ct = default)
+    {
+        using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
+        const string sql = """
+            SELECT g.id, g.public_id, g.tenant_id, g.discord_guild_id, g.display_name,
+                   g.is_active, g.registered_by_user_id, g.registered_at,
+                   g.last_connected_at, g.created_at, g.updated_at,
+                   (bc.id IS NOT NULL) AS bot_credentials_configured
+            FROM guilds g
+            LEFT JOIN guild_bot_credentials bc ON bc.guild_id = g.id
+            WHERE g.tenant_id = @TenantId
+            ORDER BY g.display_name ASC, g.id ASC;
+            """;
+
+        var rows = (await conn.QueryAsync<dynamic>(
+            new CommandDefinition(sql, new { TenantId = tenantId }, cancellationToken: ct))
+            .ConfigureAwait(false)).Cast<IDictionary<string, object?>>().ToList();
+
+        var result = new List<GuildListItem>(rows.Count);
+        foreach (var row in rows)
+        {
+            var guild = new Guild(
+                Id: (long)row["id"]!,
+                PublicId: (Guid)row["public_id"]!,
+                TenantId: (long)row["tenant_id"]!,
+                DiscordGuildId: (string)row["discord_guild_id"]!,
+                DisplayName: (string)row["display_name"]!,
+                IsActive: (bool)row["is_active"]!,
+                RegisteredByUserId: (long)row["registered_by_user_id"]!,
+                RegisteredAt: ToDateTimeOffset(row["registered_at"]!),
+                LastConnectedAt: row["last_connected_at"] is null
+                    ? null
+                    : ToDateTimeOffset(row["last_connected_at"]!),
+                CreatedAt: ToDateTimeOffset(row["created_at"]!),
+                UpdatedAt: ToDateTimeOffset(row["updated_at"]!));
+            var configured = (bool)row["bot_credentials_configured"]!;
+            result.Add(new GuildListItem(guild, configured));
+        }
+        return result;
+    }
+
     /// <summary>
     /// Npgsql returns DateTime (UTC) for TIMESTAMPTZ when queried via a dynamic
     /// row dictionary. The Dapper SqlMapper.TypeHandler only applies to strongly-

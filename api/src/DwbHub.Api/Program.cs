@@ -156,6 +156,17 @@ builder.Services.AddScoped<DwbHub.Application.Tenancy.IGuildContext,
                            DwbHub.Infrastructure.Tenancy.GuildContext>();
 builder.Services.AddScoped<DwbHub.Core.Repositories.IGuildRepository,
                            DwbHub.Data.Repositories.GuildRepository>();
+
+// --- Bot token encryption (Plan 0.7) ------------------------------------
+var encryptionKey = Environment.GetEnvironmentVariable("DWBHUB_ENCRYPTION_KEY")
+    ?? throw new InvalidOperationException(
+        "DWBHUB_ENCRYPTION_KEY env var is required (Base64-encoded 32 bytes).");
+
+builder.Services.AddSingleton<DwbHub.Application.Encryption.IBotTokenEncryptor>(
+    new DwbHub.Infrastructure.Encryption.AesGcmBotTokenEncryptor(encryptionKey));
+builder.Services.AddScoped<DwbHub.Core.Repositories.IGuildBotCredentialRepository,
+                           DwbHub.Data.Repositories.GuildBotCredentialRepository>();
+
 builder.Services.AddScoped<DwbHub.Infrastructure.Background.AuditVerifyCore>();
 builder.Services.AddScoped<DwbHub.Application.Background.IAuditVerifyIncrementalJob,
                            DwbHub.Infrastructure.Background.AuditVerifyIncrementalJob>();
