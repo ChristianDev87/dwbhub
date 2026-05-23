@@ -36,11 +36,15 @@ if [ ! -x "$JOB_SCRIPT" ]; then
     EXIT=2
 else
     # Run the job; capture combined output to the log via tee.
-    # PIPESTATUS preserves the script's exit code despite the tee in the pipeline.
+    # POSIX-portable: capture exit code directly via a temp file
+    # (PIPESTATUS is a bash extension; dash on Debian fallback would mask failures).
+    JOB_OUT="${RESULTS_DIR}/.job-output.tmp"
     set +e
-    "$JOB_SCRIPT" "$@" 2>&1 | tee -a "$LOG"
-    EXIT=${PIPESTATUS:-$?}
+    "$JOB_SCRIPT" "$@" > "$JOB_OUT" 2>&1
+    EXIT=$?
     set -e
+    cat "$JOB_OUT" | tee -a "$LOG"
+    rm -f "$JOB_OUT"
 fi
 
 DURATION=$(( $(date +%s) - START_EPOCH ))
