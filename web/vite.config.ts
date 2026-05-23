@@ -1,4 +1,5 @@
-import { defineConfig } from "vitest/config";
+/// <reference types="vitest" />
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath, URL } from "node:url";
@@ -16,10 +17,22 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5173,
+    // Vite v6 blocks requests where the Host header is not in `allowedHosts`
+    // (default: only localhost / 127.0.0.1). In containerised dev/e2e scenarios,
+    // the test runner reaches the dev server via host.docker.internal:<port>,
+    // which Vite would otherwise reject with HTTP 403. Allowing all hosts is
+    // safe here — this is the DEV server only; production uses the nginx
+    // Dockerfile.web image with its own host config.
+    allowedHosts: ["host.docker.internal", ".localhost", ".local"],
+    // Proxy target: defaults to localhost:5080 (host-side `pnpm dev` against a
+    // host-published API on :5080). When Vite runs inside the dev-stack `web`
+    // container, the API is reachable as http://api:8080 on the compose network
+    // and `localhost:5080` resolves back to the web container itself. The dev
+    // compose file sets DWBHUB_PROXY_API_TARGET so the proxy hits the right host.
     proxy: {
-      "/api": "http://localhost:5080",
+      "/api": process.env.DWBHUB_PROXY_API_TARGET || "http://localhost:5080",
       "/hub": {
-        target: "http://localhost:5080",
+        target: process.env.DWBHUB_PROXY_API_TARGET || "http://localhost:5080",
         ws: true,
       },
     },
