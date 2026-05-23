@@ -79,5 +79,28 @@
     "welcome": "Willkommen, {{name}}",
     "tenant": "Tenant: {{name}}",
     "logout": "Abmelden"
+  },
+  "guilds": {
+    "title": "Server",
+    "addSectionTitle": "Server hinzufügen",
+    "registeredSectionTitle": "Registrierte Server",
+    "discordGuildIdLabel": "Discord Server-ID",
+    "discordGuildIdHint": "17–20-stellige Discord-Server-ID",
+    "discordGuildIdInvalid": "Ungültige Discord-Server-ID.",
+    "displayNameLabel": "Anzeigename",
+    "displayNameInvalid": "Anzeigename muss 1–100 Zeichen lang sein.",
+    "addButton": "Hinzufügen",
+    "addingButton": "Wird hinzugefügt…",
+    "guildAlreadyRegistered": "Dieser Server ist bereits registriert.",
+    "deleteButton": "Entfernen",
+    "deleteConfirmTitle": "Server entfernen?",
+    "deleteConfirmText": "Soll {{name}} wirklich entfernt werden? Bot-Verbindung wird beendet.",
+    "deleteConfirmYes": "Entfernen",
+    "deleteConfirmCancel": "Abbrechen",
+    "isActive": "Aktiv",
+    "isInactive": "Inaktiv",
+    "registeredAt": "Registriert am {{date}}",
+    "noGuilds": "Noch keine Server registriert.",
+    "networkError": "Verbindung zum Server fehlgeschlagen."
   }
 }

@@ -113,6 +113,61 @@ paths:
       responses:
         '200':
           description: OK
+  '/api/t/{slug}/guilds':
+    post:
+      tags:
+        - Guilds
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddGuildRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/AddGuildRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/AddGuildRequest'
+      responses:
+        '200':
+          description: OK
+    get:
+      tags:
+        - Guilds
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  '/api/t/{slug}/guilds/{publicId}':
+    delete:
+      tags:
+        - Guilds
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: publicId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
   /api/health:
     get:
       tags:
@@ -173,6 +228,21 @@ paths:
           description: OK
 components:
   schemas:
+    AddGuildRequest:
+      required:
+        - discordGuildId
+        - displayName
+      type: object
+      properties:
+        discordGuildId:
+          minLength: 1
+          pattern: '^\d{17,20}$'
+          type: string
+        displayName:
+          maxLength: 100
+          minLength: 1
+          type: string
+      additionalProperties: false
     LoginRequest:
       type: object
       properties:
