@@ -200,13 +200,9 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
             new[] { "token", "ciphertext", "nonce", "tag" },
             "audit payload must never include credential material");
 
-        // Wait for fire-and-forget connect to complete (FakeBotConnection is fast but async).
-        await Task.Delay(500);
-
-        // Manager should have created a connection for this guild.
-        _fakeFactory.Created.TryGetValue(guildId, out var conn).Should().BeTrue(
-            "BotConnectionManager should have created a FakeBotConnection after Activate");
-        conn!.ConnectCallsWithTokens.Should().HaveCount(1,
+        // Wait for fire-and-forget connect to complete (bounded poll instead of wall-clock delay).
+        var conn = await _fakeFactory.WaitForConnectAsync(guildId, TimeSpan.FromSeconds(5));
+        conn.ConnectCallsWithTokens.Should().HaveCount(1,
             "ConnectAsync should have been called exactly once");
     }
 
@@ -223,6 +219,10 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
         // No audit event should have been written (idempotent no-op)
         var count = await CountAuditEventsAsync("guild.activated");
         count.Should().Be(0, "idempotent activate should not write an audit event");
+
+        // The idempotent no-op path must NOT trigger the connection manager either —
+        // otherwise we'd redundantly cycle the connection on every duplicate activate.
+        _fakeFactory.Created.Should().BeEmpty("idempotent activate should not trigger connection manager");
     }
 
     [Fact]
@@ -269,12 +269,9 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
             new[] { "token", "ciphertext", "nonce", "tag" },
             "audit payload must never include credential material");
 
-        // Wait for fire-and-forget reconnect to complete.
-        await Task.Delay(500);
-
-        _fakeFactory.Created.TryGetValue(guildId, out var conn).Should().BeTrue(
-            "BotConnectionManager should have created a FakeBotConnection after Reconnect");
-        conn!.ConnectCallsWithTokens.Should().HaveCount(1,
+        // Wait for fire-and-forget reconnect to complete (bounded poll instead of wall-clock delay).
+        var conn = await _fakeFactory.WaitForConnectAsync(guildId, TimeSpan.FromSeconds(5));
+        conn.ConnectCallsWithTokens.Should().HaveCount(1,
             "ConnectAsync should have been called exactly once");
     }
 
