@@ -10,10 +10,15 @@ namespace DwbHub.Tests.Integration.Infrastructure;
 /// </summary>
 public sealed class MailpitFixture : IAsyncLifetime
 {
+    // Plan 0.8.1: explicit host port bindings so that docker-in-docker runners on custom
+    // bridge networks (test-net) can reach this container via the docker0 gateway
+    // (172.17.0.1). Docker Desktop for Windows only routes explicitly-mapped ports
+    // through the bridge iptables rules; random ephemeral ports are not reachable
+    // cross-bridge.
     private readonly IContainer _container = new ContainerBuilder()
         .WithImage("axllent/mailpit:v1.21")
-        .WithPortBinding(1025, assignRandomHostPort: true)
-        .WithPortBinding(8025, assignRandomHostPort: true)
+        .WithPortBinding(11025, 1025)
+        .WithPortBinding(18025, 8025)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(8025))
         .Build();
 

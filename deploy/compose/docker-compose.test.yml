@@ -1,0 +1,63 @@
+# Plan 0.8.1 — Local CI runner orchestration.
+#
+# Invocation pattern (locally + in CI):
+#   docker compose -f deploy/compose/docker-compose.test.yml run --rm <service>
+#
+# Service list (filled in across Tasks 7-10):
+#   backend-tests        (Task 7) — .NET unit + integration + security
+#   frontend-tests       (Task 7) — eslint + prettier + tsc + vitest + build
+#   openapi-drift        (Task 8) — swagger tofile + diff against shared/openapi.yaml
+#   sql-tenant-filter    (Task 8) — pwsh tools/check-tenant-filter.ps1 + Pester
+#   security             (Task 8) — pnpm audit + dotnet vulnerable + trivy
+#   container-smoke      (Task 8) — build Dockerfile.api + .web + healthcheck
+#   e2e-tests            (Task 8) — docker compose dev stack + playwright
+#   discord-live-tests   (Task 10) — dotnet test --filter Category=DiscordLive
+
+services:
+  backend-tests:
+    build:
+      context: ../..
+      dockerfile: deploy/test-runners/Dockerfile.backend
+      tags: [dwbhub-test-runner-backend:dev]
+    volumes:
+      - ../..:/workspace
+      - ../../test-results:/results
+      - /var/run/docker.sock:/var/run/docker.sock      # for Testcontainers
+    environment:
+      # Tells Testcontainers what hostname/IP to advertise for spawned sibling containers.
+      # On Docker Desktop (Windows/macOS/Linux VM), containers on custom bridge networks
+      # cannot reach host-mapped ports via host.docker.internal (192.168.65.254).
+      # The default bridge gateway (172.17.0.1) IS reachable and routes to host-mapped
+      # ports from any custom bridge network.
+      # Linux bare-metal CI: override to the actual host IP or "host-gateway" at the
+      # docker compose run call site (see CI workflow in Task 11).
+      TESTCONTAINERS_HOST_OVERRIDE: ${TESTCONTAINERS_HOST_OVERRIDE:-172.17.0.1}
+      # Ryuk is Testcontainers' cleanup daemon; it flakes in DinD. We disable it and
+      # rely on --rm for container cleanup.
+      TESTCONTAINERS_RYUK_DISABLED: "true"
+    networks:
+      - test-net
+    command: ["backend"]
+
+  frontend-tests:
+    build:
+      context: ../..
+      dockerfile: deploy/test-runners/Dockerfile.frontend
+      tags: [dwbhub-test-runner-frontend:dev]
+    volumes:
+      - ../..:/workspace
+      - ../../test-results:/results
+    environment:
+      CI: "true"
+    networks:
+      - test-net
+    command: ["frontend"]
+
+networks:
+  test-net:
+    driver: bridge
+
+# Secrets block — populated in Task 10 when discord-live-tests is added.
+# secrets:
+#   discord_token:
+#     file: ./discord.dev.env
