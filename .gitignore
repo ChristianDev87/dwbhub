@@ -32,7 +32,7 @@ out/
 .turbo/
 storybook-static/
 playwright-report/
-test-results/
+test-results/*
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -61,6 +61,11 @@ discord.dev.env
 
 # Logs
 logs/
+
+# Test result outputs (Plan 0.8.1 — local CI runner)
+# We commit only the .gitkeep marker so the directory exists for first-time clones.
+test-results/*
+!test-results/.gitkeep
 
 # Temp / scratch
 *.tmp
