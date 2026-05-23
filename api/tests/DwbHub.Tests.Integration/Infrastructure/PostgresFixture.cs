@@ -8,79 +8,43 @@ using Xunit;
 namespace DwbHub.Tests.Integration.Infrastructure;
 
 /// <summary>
-/// One Postgres container per test session shared across all xUnit collection fixtures.
-/// Schema is migrated once on first InitializeAsync.
+/// One Postgres container per test session.
+/// Schema is migrated once in InitializeAsync.
 /// Tests call ResetAsync in their constructor for a clean DB.
 /// </summary>
-/// <remarks>
-/// Plan 0.8.1: xUnit v2 creates a separate PostgresFixture instance per collection
-/// (DatabaseCollection + EmailCollection). Both instances share one static container.
-///
-/// Key constraint: Testcontainers v4 DockerContainer.DisposeAsync() disposes internal
-/// synchronisation primitives (SemaphoreSlim). If the first collection disposes the
-/// shared container, the second collection's StartAsync call throws
-/// ObjectDisposedException. To avoid this, DisposeAsync is a no-op — the container is
-/// alive for the lifetime of the test process and is cleaned up by the backend.sh
-/// post-run docker rm (or by process exit / --rm on the outer compose service).
-/// </remarks>
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    // Plan 0.8.1: explicit host port binding (15432 → 5432) so that
-    // docker-in-docker runners on custom bridge networks (test-net) can reach this
-    // container via the docker0 gateway (172.17.0.1:15432).
-    // Docker Desktop for Windows only routes explicitly-mapped ports through the
-    // bridge iptables rules; random ephemeral ports are not reachable cross-bridge.
-    private static readonly PostgreSqlContainer _sharedContainer = new PostgreSqlBuilder()
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
         .WithImage("postgres:17-alpine")
         .WithDatabase("dwbhub_test")
         .WithUsername("dwbhub")
         .WithPassword("dwbhub_test_pw")
-        .WithPortBinding(15432, 5432)
         .Build();
 
-    private static bool _started;
-    private static bool _migrated;
-    private static readonly SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
-
-    public string ConnectionString => _sharedContainer.GetConnectionString();
+    public string ConnectionString => _container.GetConnectionString();
 
     public async Task InitializeAsync()
     {
-        await _lock.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            if (!_started)
-            {
-                await _sharedContainer.StartAsync().ConfigureAwait(false);
-                _started = true;
-            }
+        await _container.StartAsync().ConfigureAwait(false);
 
-            if (!_migrated)
-            {
-                var services = new ServiceCollection()
-                    .AddFluentMigratorCore()
-                    .ConfigureRunner(rb => rb
-                        .AddPostgres()
-                        .WithGlobalConnectionString(ConnectionString)
-                        .ScanIn(typeof(Migration00001_Tenants).Assembly).For.Migrations()
-                        .ScanIn(typeof(Migration00001_Tenants).Assembly).For.EmbeddedResources())
-                    .AddLogging(lb => lb.AddFluentMigratorConsole())
-                    .BuildServiceProvider(false);
+        var services = new ServiceCollection()
+            .AddFluentMigratorCore()
+            .ConfigureRunner(rb => rb
+                .AddPostgres()
+                .WithGlobalConnectionString(ConnectionString)
+                .ScanIn(typeof(Migration00001_Tenants).Assembly).For.Migrations()
+                .ScanIn(typeof(Migration00001_Tenants).Assembly).For.EmbeddedResources())
+            .AddLogging(lb => lb.AddFluentMigratorConsole())
+            .BuildServiceProvider(false);
 
-                using var scope = services.CreateScope();
-                scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateUp();
-                _migrated = true;
-            }
-        }
-        finally
-        {
-            _lock.Release();
-        }
+        using var scope = services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<IMigrationRunner>().MigrateUp();
     }
 
-    // No-op: the shared container must not be disposed between collections.
-    // It is cleaned up by the backend.sh post-run docker rm step or process exit.
-    public Task DisposeAsync() => Task.CompletedTask;
+    public async Task DisposeAsync()
+    {
+        await _container.DisposeAsync().ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Truncate every user table (skipping FluentMigrator's VersionInfo)
