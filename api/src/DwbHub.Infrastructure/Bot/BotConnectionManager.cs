@@ -212,11 +212,11 @@ public sealed class BotConnectionManager(
 
             var payload = new Dictionary<string, object?>
             {
-                ["tenant_slug"]     = tenantSlug,
-                ["guild_public_id"] = guild.PublicId.ToString("D"),
-                ["connected_at"]    = change.To == BotConnectionState.Connected ? change.ChangedAt : null,
-                ["reason"]          = change.To == BotConnectionState.Disconnected ? "graceful" : null,
-                ["error_class"]     = change.ErrorClass,
+                ["tenantSlug"]     = tenantSlug,
+                ["guildPublicId"]  = guild.PublicId.ToString("D"),
+                ["connectedAt"]    = change.To == BotConnectionState.Connected ? change.ChangedAt : null,
+                ["reason"]         = change.To == BotConnectionState.Disconnected ? "graceful" : null,
+                ["errorClass"]     = change.ErrorClass,
             };
 
             await audit.RecordAsync(new AuditEvent(
