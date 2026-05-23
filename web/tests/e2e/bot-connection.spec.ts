@@ -20,6 +20,31 @@ async function loginAsOwner(page: import("@playwright/test").Page) {
 }
 
 test.describe("Plan 0.8 bot-connection UI", () => {
+  let createdGuildPublicId: string | null = null;
+
+  test.afterEach(async ({ page }) => {
+    if (createdGuildPublicId === null) return;
+    const publicIdToDelete = createdGuildPublicId;
+    createdGuildPublicId = null;
+    // Best-effort cleanup via UI delete button. If the UI flow is broken, this will
+    // silently fail — preventing afterEach itself from crashing.
+    try {
+      await page.goto(`/t/${SLUG}/guilds`).catch(() => {});
+      const deleteBtn = page
+        .locator("li")
+        .filter({ has: page.getByTestId(`guild-status-${publicIdToDelete}`) })
+        .locator('[data-testid="delete-guild-button"]');
+      if ((await deleteBtn.count()) > 0) {
+        await deleteBtn.click({ timeout: 5_000 });
+        await page.click('[data-testid="delete-confirm-yes"]', {
+          timeout: 5_000,
+        });
+      }
+    } catch {
+      // crash-safe: never let cleanup fail the test
+    }
+  });
+
   test("activate then deactivate cycle updates buttons", async ({
     page,
     request,
@@ -53,6 +78,9 @@ test.describe("Plan 0.8 bot-connection UI", () => {
     expect(statusTestId).toBeTruthy();
     const publicId = statusTestId!.replace("guild-status-", "");
 
+    // Track for afterEach safety net.
+    createdGuildPublicId = publicId;
+
     const pauseBtn = page.getByTestId(`guild-pause-${publicId}`);
     const resumeBtn = page.getByTestId(`guild-resume-${publicId}`);
 
@@ -73,9 +101,11 @@ test.describe("Plan 0.8 bot-connection UI", () => {
     await expect(pauseBtn).toBeVisible({ timeout: 5_000 });
     await expect(resumeBtn).toHaveCount(0);
 
-    // Cleanup: delete-guild-button is static (no publicId suffix) — click within the row.
-    await row.locator('[data-testid="delete-guild-button"]').click();
-    await page.click('[data-testid="delete-confirm-yes"]');
+    // Status indicator remains gray (no credentials, no connection attempted).
+    // Without credentials, manager.GetState returns null → UI shows "unknown".
+    await expect(page.getByTestId(`guild-status-${publicId}`)).toContainText(
+      /unknown|disconnected/i,
+    );
   });
 
   test("reconnect button disabled without bot credentials", async ({
@@ -108,13 +138,12 @@ test.describe("Plan 0.8 bot-connection UI", () => {
       "",
     );
 
+    // Track for afterEach safety net.
+    createdGuildPublicId = publicId;
+
     const reconnectBtn = page.getByTestId(`guild-reconnect-${publicId}`);
     await expect(reconnectBtn).toBeVisible();
     // No bot credentials configured → reconnect is disabled.
     await expect(reconnectBtn).toBeDisabled();
-
-    // Cleanup: delete-guild-button is static (no publicId suffix) — click within the row.
-    await row.locator('[data-testid="delete-guild-button"]').click();
-    await page.click('[data-testid="delete-confirm-yes"]');
   });
 });
