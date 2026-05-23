@@ -171,6 +171,6 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         del.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
-    private sealed record GuildShape(Guid publicId, string discordGuildId, string displayName, bool isActive, DateTimeOffset registeredAt);
+    private sealed record GuildShape(Guid publicId, string discordGuildId, string displayName, bool isActive, DateTimeOffset registeredAt, bool botCredentialsConfigured);
     private sealed record GuildListShape(IReadOnlyList<GuildShape> guilds);
 }
