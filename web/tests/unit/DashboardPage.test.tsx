@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { AuthProvider, useAuth } from "../../src/app/AuthContext";
+import { AuthProvider } from "../../src/app/AuthContext";
+import { useAuth } from "../../src/app/auth-context";
 import { DashboardPage } from "../../src/app/DashboardPage";
 import "../../src/lib/i18n";
 

@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "./AuthContext";
+import { useAuth } from "./auth-context";
 
 const slugRegex = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 
