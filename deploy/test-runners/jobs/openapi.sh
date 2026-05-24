@@ -47,6 +47,6 @@ if ! command -v pnpm >/dev/null 2>&1; then
     npm install -g pnpm@11.1.3 >/dev/null 2>&1
     echo "pnpm installed: $(pnpm --version)"
 fi
-run_step gen-client pwsh scripts/gen-openapi-client.ps1 -Check
+run_step gen-client pwsh tools/gen-openapi-client.ps1 -Check
 
 echo "=== openapi.sh: complete ==="
