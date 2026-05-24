@@ -64,8 +64,10 @@ appsettings.Development.json
 *.local.json
 discord.dev.env
 
-# Logs
-logs/
+# Logs — keep the directory marker so test-runner tmpfs mounts have an existing
+# mountpoint inside the :ro workspace bind, but exclude the per-start log files.
+logs/*
+!logs/.gitkeep
 
 # Test result outputs (Plan 0.8.1 — local CI runner)
 # We commit only the .gitkeep marker so the directory exists for first-time clones.

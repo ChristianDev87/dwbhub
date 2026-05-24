@@ -35,7 +35,7 @@ echo "=== openapi.sh: dotnet tool restore (installs swagger CLI) ==="
 dotnet tool restore
 
 echo "=== openapi.sh: verify-openapi.ps1 (boots temp pg+mailpit, dumps spec, diffs) ==="
-run_step verify-openapi pwsh tools/verify-openapi.ps1
+run_step verify-openapi pwsh -NoLogo -NonInteractive -File tools/verify-openapi.ps1
 
 echo "=== openapi.sh: gen-openapi-client.ps1 -Check (TS client drift) ==="
 # gen-openapi-client.ps1 requires pnpm. Dockerfile.backend ships .NET+pwsh but not Node.
@@ -47,6 +47,6 @@ if ! command -v pnpm >/dev/null 2>&1; then
     npm install -g pnpm@11.1.3 >/dev/null 2>&1
     echo "pnpm installed: $(pnpm --version)"
 fi
-run_step gen-client pwsh tools/gen-openapi-client.ps1 -Check
+run_step gen-client pwsh -NoLogo -NonInteractive -File tools/gen-openapi-client.ps1 -Check
 
 echo "=== openapi.sh: complete ==="

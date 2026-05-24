@@ -33,7 +33,7 @@ run_step() {
 }
 
 echo "=== sql-tenant-filter.sh: check-tenant-filter.ps1 ==="
-run_step check-lint pwsh tools/check-tenant-filter.ps1
+run_step check-lint pwsh -NoLogo -NonInteractive -File tools/check-tenant-filter.ps1
 
 echo "=== sql-tenant-filter.sh: Pester tests ==="
 # Pester via pwsh: run with -Output Detailed for human-readable progress to stderr,
