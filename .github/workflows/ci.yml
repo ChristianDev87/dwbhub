@@ -38,6 +38,12 @@ jobs:
       - uses: actions/checkout@v5
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
+      - name: Prepare shared-results dir
+        run: |
+          SHARED="$(realpath ${{ github.workspace }}/..)/shared-results/${{ github.run_id }}"
+          mkdir -p "$SHARED/backend"
+          echo "TEST_RESULTS_DIR=$SHARED" >> $GITHUB_ENV
+          echo "shared-results dir: $SHARED"
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm backend-tests
       - name: Publish backend test results
@@ -45,20 +51,12 @@ jobs:
         uses: dorny/test-reporter@v3
         with:
           name: backend tests
-          path: test-results/backend/*.trx
+          path: ${{ env.TEST_RESULTS_DIR }}/backend/*.trx
           reporter: dotnet-trx
           # The docker compose step already fails the job on test failure;
           # this step is annotation-only. fail-on-error: false prevents
           # double-failure noise.
           fail-on-error: false
-      - name: Upload test-results
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: backend-tests-results
-          path: test-results/backend/
-          retention-days: 7
-          if-no-files-found: warn
 
   frontend-tests:
     name: frontend (lint + typecheck + vitest + build)
@@ -69,6 +67,12 @@ jobs:
       - uses: actions/checkout@v5
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
+      - name: Prepare shared-results dir
+        run: |
+          SHARED="$(realpath ${{ github.workspace }}/..)/shared-results/${{ github.run_id }}"
+          mkdir -p "$SHARED/frontend"
+          echo "TEST_RESULTS_DIR=$SHARED" >> $GITHUB_ENV
+          echo "shared-results dir: $SHARED"
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm frontend-tests
       - name: Publish frontend test results
@@ -76,17 +80,9 @@ jobs:
         uses: dorny/test-reporter@v3
         with:
           name: frontend tests
-          path: test-results/frontend/vitest.xml
+          path: ${{ env.TEST_RESULTS_DIR }}/frontend/vitest.xml
           reporter: jest-junit
           fail-on-error: false
-      - name: Upload test-results
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: frontend-tests-results
-          path: test-results/frontend/
-          retention-days: 7
-          if-no-files-found: warn
 
   openapi-drift:
     name: OpenAPI + generated client drift
@@ -97,16 +93,14 @@ jobs:
       - uses: actions/checkout@v5
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
+      - name: Prepare shared-results dir
+        run: |
+          SHARED="$(realpath ${{ github.workspace }}/..)/shared-results/${{ github.run_id }}"
+          mkdir -p "$SHARED/openapi"
+          echo "TEST_RESULTS_DIR=$SHARED" >> $GITHUB_ENV
+          echo "shared-results dir: $SHARED"
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm openapi-drift
-      - name: Upload test-results
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: openapi-drift-results
-          path: test-results/openapi/
-          retention-days: 7
-          if-no-files-found: warn
 
   sql-tenant-filter:
     name: SQL tenant_id lint
@@ -117,16 +111,14 @@ jobs:
       - uses: actions/checkout@v5
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
+      - name: Prepare shared-results dir
+        run: |
+          SHARED="$(realpath ${{ github.workspace }}/..)/shared-results/${{ github.run_id }}"
+          mkdir -p "$SHARED/sql-tenant-filter"
+          echo "TEST_RESULTS_DIR=$SHARED" >> $GITHUB_ENV
+          echo "shared-results dir: $SHARED"
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm sql-tenant-filter
-      - name: Upload test-results
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: sql-tenant-filter-results
-          path: test-results/sql-tenant-filter/
-          retention-days: 7
-          if-no-files-found: warn
 
   security:
     name: security (pnpm audit + dotnet vulnerable + trivy)
@@ -136,22 +128,20 @@ jobs:
       - uses: actions/checkout@v5
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
+      - name: Prepare shared-results dir
+        run: |
+          SHARED="$(realpath ${{ github.workspace }}/..)/shared-results/${{ github.run_id }}"
+          mkdir -p "$SHARED/security"
+          echo "TEST_RESULTS_DIR=$SHARED" >> $GITHUB_ENV
+          echo "shared-results dir: $SHARED"
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm security
       - name: Upload Trivy SARIF to Code Scanning
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: test-results/security/trivy.sarif
+          sarif_file: ${{ env.TEST_RESULTS_DIR }}/security/trivy.sarif
           category: trivy
-      - name: Upload test-results
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: security-results
-          path: test-results/security/
-          retention-days: 7
-          if-no-files-found: warn
 
   container-smoke:
     name: container build smoke (api + web)
@@ -162,16 +152,14 @@ jobs:
       - uses: actions/checkout@v5
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
+      - name: Prepare shared-results dir
+        run: |
+          SHARED="$(realpath ${{ github.workspace }}/..)/shared-results/${{ github.run_id }}"
+          mkdir -p "$SHARED/container-smoke"
+          echo "TEST_RESULTS_DIR=$SHARED" >> $GITHUB_ENV
+          echo "shared-results dir: $SHARED"
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm container-smoke
-      - name: Upload test-results
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: container-smoke-results
-          path: test-results/container-smoke/
-          retention-days: 7
-          if-no-files-found: warn
 
   e2e-tests:
     name: e2e smoke (Playwright via compose)
@@ -183,18 +171,16 @@ jobs:
       - uses: actions/checkout@v5
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
+      - name: Prepare shared-results dir
+        run: |
+          SHARED="$(realpath ${{ github.workspace }}/..)/shared-results/${{ github.run_id }}"
+          mkdir -p "$SHARED/e2e"
+          echo "TEST_RESULTS_DIR=$SHARED" >> $GITHUB_ENV
+          echo "shared-results dir: $SHARED"
       - name: Run via docker compose
         env:
           HOST_REPO_ROOT: ${{ github.workspace }}
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm e2e-tests
-      - name: Upload test-results
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: e2e-tests-results
-          path: test-results/e2e/
-          retention-days: 7
-          if-no-files-found: warn
 
   discord-live-tests:
     name: Discord live tests
@@ -220,20 +206,18 @@ jobs:
           printf '%s=%s\n%s=%s\n' DISCORD_DEV_BOT_TOKEN "$TOKEN" DISCORD_DEV_GUILD_ID "$GUILD_ID" > deploy/compose/discord.dev.env
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
+      - name: Prepare shared-results dir
+        run: |
+          SHARED="$(realpath ${{ github.workspace }}/..)/shared-results/${{ github.run_id }}"
+          mkdir -p "$SHARED/discord-live"
+          echo "TEST_RESULTS_DIR=$SHARED" >> $GITHUB_ENV
+          echo "shared-results dir: $SHARED"
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm discord-live-tests
       - name: Cleanup discord.dev.env
         if: always()
         shell: bash
         run: rm -f deploy/compose/discord.dev.env
-      - name: Upload test-results
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: discord-live-tests-results
-          path: test-results/discord-live/
-          retention-days: 7
-          if-no-files-found: warn
 
   summary:
     name: PR test summary
@@ -256,34 +240,68 @@ jobs:
     runs-on: [self-hosted, linux, dotnet10]
     timeout-minutes: 5
     steps:
-      - uses: actions/download-artifact@v7
-        with:
-          # All upload-artifact calls in the other jobs use names ending in
-          # -results (backend-tests-results, frontend-tests-results, etc).
-          # The `pattern: '*-results'` form downloads every artifact whose
-          # name matches the glob; merge-multiple: false keeps each artifact
-          # in its own subdirectory under ./test-results/<name>/.
-          path: test-results/
-          pattern: '*-results'
-          merge-multiple: false
+      - name: Stage shared results into workspace
+        run: |
+          # Plan 0.8.5: read test results from the host-shared path each
+          # test-producing job wrote to. No download-artifact — nothing was uploaded.
+          #
+          # EnricoMi runs INSIDE a docker container with only ${{ github.workspace }}
+          # bind-mounted at /github/workspace. The host shared-results path lives
+          # OUTSIDE the workspace and is not visible to that container — so we
+          # copy the files into ${{ github.workspace }}/.staged-results/ and point
+          # EnricoMi at the relative path. The staged copy lives only for the
+          # duration of this job and is removed by the cleanup step below.
+          SHARED="$(realpath ${{ github.workspace }}/..)/shared-results/${{ github.run_id }}"
+          STAGED="${{ github.workspace }}/.staged-results"
+          mkdir -p "$STAGED"
+          if [ -d "$SHARED" ] && [ -n "$(ls -A "$SHARED" 2>/dev/null)" ]; then
+              cp -r "$SHARED"/* "$STAGED/"
+              echo "staged-results contents:"
+              find "$STAGED" -maxdepth 2 -type f \( -name '*.trx' -o -name '*.xml' \) | head -30
+          else
+              echo "(no shared-results dir or empty — all upstream jobs may have failed/skipped before writing)"
+          fi
       - name: Publish consolidated test summary
+        if: always()
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          # File patterns by source job:
+          # File patterns are RELATIVE to ${{ github.workspace }} so EnricoMi's
+          # docker container (which only sees /github/workspace) can resolve them.
+          # By source job:
           #   *.trx          backend-tests (unit/integration/security)
           #                  + discord-live-tests (when it runs on PR->main)
           #   vitest.xml     frontend-tests (Vitest JUnit reporter)
           #   playwright.xml e2e-tests (Playwright JUnit reporter, PR->main)
-          # EnricoMi auto-detects the format per file. Artifacts that aren't
-          # present (e.g. e2e/discord on PR->develop where those jobs skip)
-          # are silently ignored, so the same glob covers both PR targets.
+          # Jobs that didn't write results (e.g. e2e/discord on PR->develop
+          # where those jobs skip) are silently ignored.
           files: |
-            test-results/**/*.trx
-            test-results/**/vitest.xml
-            test-results/**/playwright.xml
+            .staged-results/**/*.trx
+            .staged-results/**/vitest.xml
+            .staged-results/**/playwright.xml
           check_name: "Test Results"
           # 'always' creates the sticky comment on first run and UPDATES it
           # on every subsequent run of the same PR — one comment per PR,
           # never spam.
           comment_mode: always
           report_individual_runs: true
+      - name: Cleanup shared-results host path + staged copy
+        if: always()
+        run: |
+          # Remove the run-scoped shared-results dir on the host (was sourced by Stage).
+          SHARED="$(realpath ${{ github.workspace }}/..)/shared-results/${{ github.run_id }}"
+          if [ -d "$SHARED" ]; then
+              rm -rf "$SHARED"
+              echo "Cleaned up host shared-results: $SHARED"
+          fi
+          # Remove the staged copy from the workspace.
+          STAGED="${{ github.workspace }}/.staged-results"
+          if [ -d "$STAGED" ]; then
+              rm -rf "$STAGED"
+              echo "Cleaned up workspace staged-results: $STAGED"
+          fi
+          # Opportunistically clean any orphan shared-results dirs older than
+          # 24 hours (catches workflows that aborted before reaching summary).
+          PARENT="$(realpath ${{ github.workspace }}/..)/shared-results"
+          if [ -d "$PARENT" ]; then
+              find "$PARENT" -mindepth 1 -maxdepth 1 -type d -mtime +1 -exec rm -rf {} \; 2>/dev/null || true
+          fi
