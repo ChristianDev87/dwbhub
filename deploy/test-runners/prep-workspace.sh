@@ -42,3 +42,37 @@ mkdir -p node_modules web/node_modules web/dist
 
 # Per-start log dir for the API (openapi-drift's verify-openapi.ps1 boots DwbHub.Api)
 mkdir -p logs
+
+# --- Plan 0.8.4: stale .js/.d.ts shadow guard ---
+# Recurring issue: tsc -b emits .js next to .tsx sources, which Vite/Playwright
+# resolve first. This guard fails CI when any non-allowlisted .js or .d.ts file
+# is found beside a .ts(x) sibling in web/src or web/tests.
+shadow_violations=$(
+    cd web && find src tests \
+        \( -name '*.js' -o -name '*.d.ts' \) \
+        -not -path '*/node_modules/*' \
+        -not -path '*/dist/*' \
+        -not -path '*/coverage/*' \
+        -not -path '*/playwright-report/*' \
+        -not -path '*/test-results/*' \
+        -not -name 'vite-env.d.ts' \
+        -not -name 'schema.d.ts' \
+        2>/dev/null \
+        | while read -r f; do
+            base="${f%.js}"
+            base="${base%.d.ts}"
+            if [ -f "${base}.ts" ] || [ -f "${base}.tsx" ]; then
+                echo "$f"
+            fi
+        done
+)
+
+if [ -n "$shadow_violations" ]; then
+    echo "[prep-workspace] FATAL: stale tsc shadow file(s) detected — Vite/Playwright"
+    echo "[prep-workspace]        would resolve these before the .tsx sources:"
+    echo "$shadow_violations" | sed 's|^|  web/|'
+    echo "[prep-workspace]        Run: find web/src web/tests \( -name '*.js' -o -name '*.d.ts' \) -delete"
+    echo "[prep-workspace]        (review allowlist in .gitignore for legitimate exceptions)"
+    exit 2
+fi
+echo "[prep-workspace] no stale .js/.d.ts shadows detected"
