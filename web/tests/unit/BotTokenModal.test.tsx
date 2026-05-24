@@ -2,10 +2,23 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { i18n } from "../../src/lib/i18n";
+import { AuthContext } from "../../src/app/auth-context";
 import { BotTokenModal } from "../../src/app/BotTokenModal";
 
 const VALID_TOKEN =
   "TestTokenSegment0000000000000000000000.NotReal.TestTokenFinalSegment000000000000000";
+
+const fakeAuthValue = {
+  state: {
+    kind: "authenticated" as const,
+    accessToken: "test-access-token",
+    user: { id: 1, email: "owner@acme.test", displayName: "Owner", role: "Owner" },
+    tenant: { id: 1, slug: "acme", name: "ACME" },
+  },
+  login: vi.fn(),
+  logout: vi.fn(),
+  refresh: vi.fn(),
+};
 
 function renderModal(
   overrides: {
@@ -20,16 +33,18 @@ function renderModal(
     onClose,
     onSuccess,
     ...render(
-      <I18nextProvider i18n={i18n}>
-        <BotTokenModal
-          slug="acme"
-          guildPublicId="11111111-1111-1111-1111-111111111111"
-          guildDisplayName="Production"
-          mode={overrides.mode ?? "configure"}
-          onClose={onClose}
-          onSuccess={onSuccess}
-        />
-      </I18nextProvider>,
+      <AuthContext.Provider value={fakeAuthValue}>
+        <I18nextProvider i18n={i18n}>
+          <BotTokenModal
+            slug="acme"
+            guildPublicId="11111111-1111-1111-1111-111111111111"
+            guildDisplayName="Production"
+            mode={overrides.mode ?? "configure"}
+            onClose={onClose}
+            onSuccess={onSuccess}
+          />
+        </I18nextProvider>
+      </AuthContext.Provider>,
     ),
   };
 }

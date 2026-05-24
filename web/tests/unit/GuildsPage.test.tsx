@@ -3,17 +3,32 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { I18nextProvider } from "react-i18next";
 import { i18n } from "../../src/lib/i18n";
+import { AuthContext } from "../../src/app/auth-context";
 import { GuildsPage } from "../../src/app/GuildsPage";
+
+const fakeAuthValue = {
+  state: {
+    kind: "authenticated" as const,
+    accessToken: "test-access-token",
+    user: { id: 1, email: "owner@acme.test", displayName: "Owner", role: "Owner" },
+    tenant: { id: 1, slug: "acme", name: "ACME" },
+  },
+  login: vi.fn(),
+  logout: vi.fn(),
+  refresh: vi.fn(),
+};
 
 function renderPage() {
   return render(
-    <I18nextProvider i18n={i18n}>
-      <MemoryRouter initialEntries={["/t/acme/guilds"]}>
-        <Routes>
-          <Route path="/t/:slug/guilds" element={<GuildsPage />} />
-        </Routes>
-      </MemoryRouter>
-    </I18nextProvider>,
+    <AuthContext.Provider value={fakeAuthValue}>
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={["/t/acme/guilds"]}>
+          <Routes>
+            <Route path="/t/:slug/guilds" element={<GuildsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nextProvider>
+    </AuthContext.Provider>,
   );
 }
 

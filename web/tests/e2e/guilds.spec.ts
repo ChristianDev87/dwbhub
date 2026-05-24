@@ -1,26 +1,20 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { ensureSetupCompleted, SETUP_DEFAULTS } from "./helpers/bootstrap";
 
-const SLUG = "acme";
-const OWNER_EMAIL = "owner@acme.test";
-const OWNER_PASSWORD = "correct horse battery staple";
-
-async function setupReady(request: APIRequestContext): Promise<boolean> {
-  const statusRes = await request.get("/api/setup/status");
-  const status = (await statusRes.json()) as { completed: boolean };
-  return status.completed;
-}
+const {
+  tenantSlug: SLUG,
+  ownerEmail: OWNER_EMAIL,
+  ownerPassword: OWNER_PASSWORD,
+} = SETUP_DEFAULTS;
 
 test.describe("Plan 0.6 guilds flow", () => {
+  test.beforeAll(async ({ request }) => {
+    await ensureSetupCompleted(request);
+  });
+
   test("login → guilds page → add → see in list → delete → empty", async ({
     page,
-    request,
   }) => {
-    const ok = await setupReady(request);
-    test.skip(
-      !ok,
-      "Setup not pre-completed (skip — same convention as auth.spec.ts)",
-    );
-
     await page.goto("/login");
     await page.fill('[data-testid="input-tenantSlug"]', SLUG);
     await page.fill('[data-testid="input-email"]', OWNER_EMAIL);
@@ -48,13 +42,7 @@ test.describe("Plan 0.6 guilds flow", () => {
     });
   });
 
-  test("guarded /guilds without auth redirects to /login", async ({
-    page,
-    request,
-  }) => {
-    const ok = await setupReady(request);
-    test.skip(!ok, "Setup not pre-completed");
-
+  test("guarded /guilds without auth redirects to /login", async ({ page }) => {
     await page.goto(`/t/${SLUG}/guilds`);
     await page.waitForURL("**/login", { timeout: 15_000 });
   });

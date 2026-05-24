@@ -1,30 +1,18 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { ensureSetupCompleted, SETUP_DEFAULTS } from "./helpers/bootstrap";
 
-const SLUG = "acme";
-const OWNER_EMAIL = "owner@acme.test";
-const OWNER_PASSWORD = "correct horse battery staple";
-
-async function tryCompleteSetup(request: APIRequestContext): Promise<boolean> {
-  // Returns true if setup is (or becomes) completed. False if we couldn't seed
-  // (no token endpoint available) — in which case dependent tests should skip.
-  const statusRes = await request.get("/api/setup/status");
-  const status = (await statusRes.json()) as { completed: boolean };
-  if (status.completed) return true;
-
-  // No test-only bootstrap-token endpoint exists in this codebase. The token
-  // lives in a host-side file (deploy/compose/api-data/bootstrap-token.txt)
-  // that the runner container can't read. We skip rather than fail.
-  return false;
-}
+const {
+  tenantSlug: SLUG,
+  ownerEmail: OWNER_EMAIL,
+  ownerPassword: OWNER_PASSWORD,
+} = SETUP_DEFAULTS;
 
 test.describe("Plan 0.5 auth flow", () => {
-  test("login → dashboard → logout", async ({ page, request }) => {
-    const ok = await tryCompleteSetup(request);
-    test.skip(
-      !ok,
-      "Setup not pre-completed and no test-only token endpoint available",
-    );
+  test.beforeAll(async ({ request }) => {
+    await ensureSetupCompleted(request);
+  });
 
+  test("login → dashboard → logout", async ({ page }) => {
     await page.goto("/login");
     await expect(page.getByTestId("input-tenantSlug")).toBeVisible();
 
@@ -42,13 +30,7 @@ test.describe("Plan 0.5 auth flow", () => {
     await page.waitForURL("**/login", { timeout: 15_000 });
   });
 
-  test("guarded route without auth redirects to /login", async ({
-    page,
-    request,
-  }) => {
-    const ok = await tryCompleteSetup(request);
-    test.skip(!ok, "Setup not pre-completed");
-
+  test("guarded route without auth redirects to /login", async ({ page }) => {
     await page.goto(`/t/${SLUG}/dashboard`);
     await page.waitForURL("**/login", { timeout: 15_000 });
   });

@@ -1,19 +1,11 @@
-import {
-  expect,
-  test,
-  type APIRequestContext,
-  type Page,
-} from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+import { ensureSetupCompleted, SETUP_DEFAULTS } from "./helpers/bootstrap";
 
-const SLUG = "acme";
-const OWNER_EMAIL = "owner@acme.test";
-const OWNER_PASSWORD = "correct horse battery staple";
-
-async function setupReady(request: APIRequestContext): Promise<boolean> {
-  const statusRes = await request.get("/api/setup/status");
-  const status = (await statusRes.json()) as { completed: boolean };
-  return status.completed;
-}
+const {
+  tenantSlug: SLUG,
+  ownerEmail: OWNER_EMAIL,
+  ownerPassword: OWNER_PASSWORD,
+} = SETUP_DEFAULTS;
 
 async function loginAsOwner(page: Page) {
   await page.goto("/login");
@@ -25,6 +17,10 @@ async function loginAsOwner(page: Page) {
 }
 
 test.describe("Plan 0.8 bot-connection UI", () => {
+  test.beforeAll(async ({ request }) => {
+    await ensureSetupCompleted(request);
+  });
+
   let createdGuildPublicId: string | null = null;
 
   test.afterEach(async ({ page }) => {
@@ -50,22 +46,15 @@ test.describe("Plan 0.8 bot-connection UI", () => {
     }
   });
 
-  test("activate then deactivate cycle updates buttons", async ({
-    page,
-    request,
-  }) => {
-    const ok = await setupReady(request);
-    test.skip(
-      !ok,
-      "Setup not pre-completed (skip — same convention as auth.spec.ts)",
-    );
-
+  test("activate then deactivate cycle updates buttons", async ({ page }) => {
     await loginAsOwner(page);
     await page.goto(`/t/${SLUG}/guilds`);
 
     // Use a unique Discord guild ID + display name to avoid collision across runs.
+    // Discord snowflake IDs are 17-20 decimal digits. Date.now() is 13 digits in
+    // 2026; multiplying by 10000 gives a 17-digit base that fits the validator.
     const uniqueDiscordId = String(
-      BigInt(Date.now()) * 1000n + BigInt(Math.floor(Math.random() * 1000)),
+      BigInt(Date.now()) * 10000n + BigInt(Math.floor(Math.random() * 10000)),
     );
     const name = `Bot-Connection E2E ${uniqueDiscordId.slice(-6)}`;
 
@@ -115,16 +104,12 @@ test.describe("Plan 0.8 bot-connection UI", () => {
 
   test("reconnect button disabled without bot credentials", async ({
     page,
-    request,
   }) => {
-    const ok = await setupReady(request);
-    test.skip(!ok, "Setup not pre-completed");
-
     await loginAsOwner(page);
     await page.goto(`/t/${SLUG}/guilds`);
 
     const uniqueDiscordId = String(
-      BigInt(Date.now()) * 1000n + BigInt(Math.floor(Math.random() * 1000)),
+      BigInt(Date.now()) * 10000n + BigInt(Math.floor(Math.random() * 10000)),
     );
     const name = `Bot-Connection-Reconnect E2E ${uniqueDiscordId.slice(-6)}`;
 

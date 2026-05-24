@@ -17,6 +17,54 @@ interface LoginResponse {
   };
 }
 
+interface RefreshResponse {
+  accessToken: string;
+}
+
+// ---------------------------------------------------------------------------
+// sessionStorage helpers — persist auth profile across SPA page navigations.
+// The access token is short-lived (24 h); the refresh-token cookie handles
+// silent renewal on production HTTPS. In HTTP dev/test environments the
+// Secure cookie is not sent, so we fall back to the stored profile so that
+// full-page navigations (e.g. Playwright's page.goto) don't lose auth state.
+// ---------------------------------------------------------------------------
+
+const PROFILE_KEY = "dwbhub_profile";
+
+interface StoredProfile {
+  accessToken: string;
+  user: LoginResponse["user"];
+  tenant: LoginResponse["tenant"];
+}
+
+function loadProfile(): StoredProfile | null {
+  try {
+    const raw = sessionStorage.getItem(PROFILE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as StoredProfile;
+  } catch {
+    return null;
+  }
+}
+
+function saveProfile(profile: StoredProfile): void {
+  try {
+    sessionStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  } catch {
+    // storage quota exceeded or unavailable — not critical
+  }
+}
+
+function clearProfile(): void {
+  try {
+    sessionStorage.removeItem(PROFILE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+// ---------------------------------------------------------------------------
+
 export function AuthProvider({
   children,
 }: {
@@ -31,14 +79,35 @@ export function AuthProvider({
         credentials: "include",
       });
       if (!res.ok) {
+        // If there is no stored profile the user is definitively logged out.
+        // If there IS a stored profile but the cookie-based refresh failed
+        // (e.g. HTTP dev where Secure cookies are not transmitted), keep the
+        // current state rather than forcing a logout — the stored access token
+        // remains valid until its 24 h expiry.
+        if (!loadProfile()) {
+          setState({ kind: "unauthenticated" });
+        }
+        return false;
+      }
+      const data = (await res.json()) as RefreshResponse;
+      const stored = loadProfile();
+      if (!stored) {
+        // Refresh succeeded but no profile is stored (unexpected).
         setState({ kind: "unauthenticated" });
         return false;
       }
-      // Refresh endpoint returns a new access token; for now we just mark
-      // unauthenticated and let the user log in fresh. A richer silent-refresh
-      // flow (with cached slug) comes in Plan 0.6+.
-      setState({ kind: "unauthenticated" });
-      return false;
+      const updated: StoredProfile = {
+        ...stored,
+        accessToken: data.accessToken,
+      };
+      saveProfile(updated);
+      setState({
+        kind: "authenticated",
+        accessToken: updated.accessToken,
+        user: updated.user,
+        tenant: updated.tenant,
+      });
+      return true;
     } catch {
       setState({ kind: "unauthenticated" });
       return false;
@@ -79,6 +148,12 @@ export function AuthProvider({
         if (!res.ok) return { kind: "invalid_credentials" };
 
         const body = (await res.json()) as LoginResponse;
+        const profile: StoredProfile = {
+          accessToken: body.accessToken,
+          user: body.user,
+          tenant: body.tenant,
+        };
+        saveProfile(profile);
         setState({
           kind: "authenticated",
           accessToken: body.accessToken,
@@ -102,10 +177,24 @@ export function AuthProvider({
     } catch {
       // swallow — state cleared either way
     }
+    clearProfile();
     setState({ kind: "unauthenticated" });
   }, []);
 
   useEffect(() => {
+    // Restore auth state from sessionStorage immediately so that full-page
+    // navigations (React remount) don't flash the login screen for an already-
+    // authenticated user. Then attempt a cookie-based token refresh in the
+    // background; if it succeeds the access token is silently rotated.
+    const stored = loadProfile();
+    if (stored) {
+      setState({
+        kind: "authenticated",
+        accessToken: stored.accessToken,
+        user: stored.user,
+        tenant: stored.tenant,
+      });
+    }
     void refresh();
   }, [refresh]);
 

@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "./auth-context";
 
 const schema = z.object({
   token: z
@@ -38,6 +39,9 @@ export function BotTokenModal({
   onSuccess,
 }: Props): React.JSX.Element {
   const { t } = useTranslation();
+  const { state } = useAuth();
+  const accessToken =
+    state.kind === "authenticated" ? state.accessToken : null;
   const {
     register,
     handleSubmit,
@@ -49,6 +53,10 @@ export function BotTokenModal({
   async function onSubmit(data: FormValues, e?: React.BaseSyntheticEvent) {
     e?.preventDefault();
     try {
+      const putHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (accessToken) putHeaders["Authorization"] = `Bearer ${accessToken}`;
       const res = await fetch(
         `/api/t/${encodeURIComponent(slug)}/guilds/${encodeURIComponent(
           guildPublicId,
@@ -56,7 +64,7 @@ export function BotTokenModal({
         {
           method: "PUT",
           credentials: "include",
-          headers: { "Content-Type": "application/json" },
+          headers: putHeaders,
           body: JSON.stringify({ token: data.token }),
         },
       );
