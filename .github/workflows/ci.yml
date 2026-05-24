@@ -29,6 +29,8 @@ jobs:
   backend-tests:
     name: backend (lint + unit + integration + security)
     runs-on: [self-hosted, linux, dotnet10]
+    needs: [openapi-drift]
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Prepare workspace mountpoints
@@ -47,6 +49,8 @@ jobs:
   frontend-tests:
     name: frontend (lint + typecheck + vitest + build)
     runs-on: [self-hosted, linux, dotnet10]
+    needs: [backend-tests]
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Prepare workspace mountpoints
@@ -65,6 +69,8 @@ jobs:
   openapi-drift:
     name: OpenAPI + generated client drift
     runs-on: [self-hosted, linux, dotnet10]
+    needs: [sql-tenant-filter]
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Prepare workspace mountpoints
@@ -83,6 +89,8 @@ jobs:
   sql-tenant-filter:
     name: SQL tenant_id lint
     runs-on: [self-hosted, linux, dotnet10]
+    needs: [security]
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - name: Prepare workspace mountpoints
@@ -101,6 +109,7 @@ jobs:
   security:
     name: security (pnpm audit + dotnet vulnerable + trivy)
     runs-on: [self-hosted, linux, dotnet10]
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Prepare workspace mountpoints
@@ -119,6 +128,8 @@ jobs:
   container-smoke:
     name: container build smoke (api + web)
     runs-on: [self-hosted, linux, dotnet10]
+    needs: [frontend-tests]
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Prepare workspace mountpoints
@@ -138,7 +149,8 @@ jobs:
     name: e2e smoke (Playwright via compose)
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: [self-hosted, linux, dotnet10]
-    needs: [backend-tests, frontend-tests, container-smoke]
+    needs: [container-smoke]
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Prepare workspace mountpoints
@@ -160,6 +172,8 @@ jobs:
     name: Discord live tests
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: [self-hosted, linux, dotnet10]
+    needs: [container-smoke]
+    timeout-minutes: 10
     concurrency:
       group: discord-live
       cancel-in-progress: false
