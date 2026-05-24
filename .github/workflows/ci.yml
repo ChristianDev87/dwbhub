@@ -69,6 +69,14 @@ jobs:
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --rm frontend-tests
+      - name: Publish frontend test results
+        if: always()
+        uses: dorny/test-reporter@v2
+        with:
+          name: frontend tests
+          path: test-results/frontend/vitest.xml
+          reporter: jest-junit
+          fail-on-error: false
       - name: Upload test-results
         if: always()
         uses: actions/upload-artifact@v4
