@@ -35,14 +35,14 @@ jobs:
     needs: [openapi-drift]
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm backend-tests
       - name: Publish backend test results
         if: always()
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         with:
           name: backend tests
           path: test-results/backend/*.trx
@@ -53,7 +53,7 @@ jobs:
           fail-on-error: false
       - name: Upload test-results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: backend-tests-results
           path: test-results/backend/
@@ -66,14 +66,14 @@ jobs:
     needs: [backend-tests]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm frontend-tests
       - name: Publish frontend test results
         if: always()
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         with:
           name: frontend tests
           path: test-results/frontend/vitest.xml
@@ -81,7 +81,7 @@ jobs:
           fail-on-error: false
       - name: Upload test-results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: frontend-tests-results
           path: test-results/frontend/
@@ -94,14 +94,14 @@ jobs:
     needs: [sql-tenant-filter]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm openapi-drift
       - name: Upload test-results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: openapi-drift-results
           path: test-results/openapi/
@@ -114,14 +114,14 @@ jobs:
     needs: [security]
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm sql-tenant-filter
       - name: Upload test-results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sql-tenant-filter-results
           path: test-results/sql-tenant-filter/
@@ -133,20 +133,20 @@ jobs:
     runs-on: [self-hosted, linux, dotnet10]
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm security
       - name: Upload Trivy SARIF to Code Scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: test-results/security/trivy.sarif
           category: trivy
       - name: Upload test-results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: security-results
           path: test-results/security/
@@ -159,14 +159,14 @@ jobs:
     needs: [frontend-tests]
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm container-smoke
       - name: Upload test-results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: container-smoke-results
           path: test-results/container-smoke/
@@ -180,7 +180,7 @@ jobs:
     needs: [container-smoke]
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
@@ -189,7 +189,7 @@ jobs:
         run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm e2e-tests
       - name: Upload test-results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: e2e-tests-results
           path: test-results/e2e/
@@ -206,7 +206,7 @@ jobs:
       group: discord-live
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Materialize discord.dev.env
         env:
           TOKEN: ${{ secrets.DISCORD_DEV_BOT_TOKEN }}
@@ -228,7 +228,7 @@ jobs:
         run: rm -f deploy/compose/discord.dev.env
       - name: Upload test-results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: discord-live-tests-results
           path: test-results/discord-live/
@@ -242,7 +242,7 @@ jobs:
     runs-on: [self-hosted, linux, dotnet10]
     timeout-minutes: 5
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           # All upload-artifact calls in the other jobs use names ending in
           # -results (backend-tests-results, frontend-tests-results, etc).
