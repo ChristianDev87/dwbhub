@@ -37,7 +37,8 @@ WORKDIR /app
 
 RUN apk add --no-cache icu-libs icu-data-full \
     && addgroup -S dwbhub && adduser -S dwbhub -G dwbhub \
-    && mkdir -p /app/logs && chown -R dwbhub:dwbhub /app
+    && mkdir -p /app/logs /data/dwbhub \
+    && chown -R dwbhub:dwbhub /app /data/dwbhub
 
 COPY --from=build --chown=dwbhub:dwbhub /app/publish .
 
@@ -47,7 +48,7 @@ ENV ASPNETCORE_URLS=http://+:8080 \
 
 USER dwbhub
 EXPOSE 8080
-VOLUME ["/app/logs"]
+VOLUME ["/app/logs", "/data/dwbhub"]
 
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=4 \
     CMD wget --quiet --spider http://localhost:8080/api/health || exit 1

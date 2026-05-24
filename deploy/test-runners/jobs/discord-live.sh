@@ -1,0 +1,122 @@
+#!/bin/sh
+# Plan 0.8.1 — discord-live job.
+# Runs xUnit tests filtered by Category=DiscordLive against the real Discord gateway.
+#
+# Exit codes:
+#   0 = tests passed OR secret file absent / empty vars (SKIPPED path — CI parity)
+#   1 = tests failed
+#   2 = infrastructure error (token leaked into test-result artifacts)
+#
+# Secret mount: /run/secrets/discord_token
+#   Expected contents (two lines, no quotes):
+#     DISCORD_DEV_BOT_TOKEN=<value>
+#     DISCORD_DEV_GUILD_ID=<value>
+#
+# SECURITY:
+#   * The secret file is NEVER sourced — only two specific keys are extracted via awk.
+#   * The token value is NEVER printed; only its character-length is logged.
+#   * Any literal occurrence of the token in dotnet test output is redacted with
+#     <REDACTED-TOKEN> by a sed pipe before it reaches stdout.
+#   * After the test run, a self-check greps /results/discord-live/ for the
+#     first 12 chars of the token AND the full guild-id snowflake; either
+#     appearing is a leak — exit 2.
+#   * Extracted values are trimmed of any trailing \r so that CRLF-corrupted
+#     secret files (Windows editors silently converting on save) don't slip
+#     a stray byte into Discord.Net's connection string or into the leak grep.
+
+set -e
+
+SECRET_FILE="/run/secrets/discord_token"
+RESULTS=/results/discord-live
+mkdir -p "$RESULTS"
+
+cd /workspace
+
+# ---------------------------------------------------------------------------
+# 1. Parse secret file — strict awk extraction, never source the file
+# ---------------------------------------------------------------------------
+if [ ! -f "$SECRET_FILE" ]; then
+    echo "[discord-live] SKIPPED: secret file not found at ${SECRET_FILE}"
+    echo "[discord-live] To enable: supply discord_token secret (deploy/compose/discord.dev.env)"
+    exit 0
+fi
+
+# Pipe awk through `tr -d '\r'` so that a CRLF-corrupted secret file (Windows
+# editor silently re-saving with `\r\n`) doesn't bleed a trailing `\r` byte
+# into BOT_TOKEN/GUILD_ID — that would push token_len off by one and would
+# defeat the leak grep below (which would search for `<snowflake>\r` instead
+# of the bare snowflake stored in artifacts).
+BOT_TOKEN=$(awk -F= '/^DISCORD_DEV_BOT_TOKEN=/{print substr($0,index($0,"=")+1)}' "$SECRET_FILE" | tr -d '\r')
+GUILD_ID=$(awk -F= '/^DISCORD_DEV_GUILD_ID=/{print substr($0,index($0,"=")+1)}' "$SECRET_FILE" | tr -d '\r')
+
+if [ -z "$BOT_TOKEN" ] || [ -z "$GUILD_ID" ]; then
+    echo "[discord-live] SKIPPED: DISCORD_DEV_BOT_TOKEN or DISCORD_DEV_GUILD_ID missing or empty in ${SECRET_FILE}"
+    echo "[discord-live] Ensure the file contains both keys on separate lines."
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# 2. Log meta-info (length only — per project rule, the entire contents of
+#    deploy/compose/discord.dev.env are credential-grade. Even though the
+#    guild ID alone is a public Discord snowflake, treating the whole file
+#    as opaque keeps the redaction policy consistent and avoids future
+#    drift where someone adds a new "non-secret" field that turns out to
+#    be sensitive.)
+# ---------------------------------------------------------------------------
+TOKEN_LEN=$(printf '%s' "$BOT_TOKEN" | wc -c | tr -d ' ')
+GUILD_LEN=$(printf '%s' "$GUILD_ID" | wc -c | tr -d ' ')
+echo "[discord-live] secret-file ok: token_len=${TOKEN_LEN} guild_id_len=${GUILD_LEN}"
+
+# ---------------------------------------------------------------------------
+# 3. Export env vars for the dotnet child process
+# ---------------------------------------------------------------------------
+export DISCORD_DEV_BOT_TOKEN="$BOT_TOKEN"
+export DISCORD_DEV_GUILD_ID="$GUILD_ID"
+
+# ---------------------------------------------------------------------------
+# 4. Run dotnet test with token-redaction.
+#    Strategy: capture raw output to a temp file (preserves dotnet exit code
+#    via the set +e / capture-exit pattern), then cat through sed to redact.
+#    $BOT_TOKEN is substituted by the shell before sed sees the script string,
+#    so the literal token value is replaced before any output is printed.
+# ---------------------------------------------------------------------------
+SED_SCRIPT="s/${BOT_TOKEN}/<REDACTED-TOKEN>/g"
+RAW_OUT="$RESULTS/.dotnet-raw.tmp"
+
+set +e
+dotnet test api/tests/DwbHub.Tests.Integration/DwbHub.Tests.Integration.csproj \
+    --filter "Category=DiscordLive" \
+    --logger "trx;LogFileName=discord-live.trx" \
+    --results-directory /results/discord-live \
+    --nologo \
+    -v minimal \
+    > "$RAW_OUT" 2>&1
+DOTNET_EXIT=$?
+set -e
+
+# Redact token from captured output, then print (entrypoint tees to run.log).
+sed -E "$SED_SCRIPT" "$RAW_OUT"
+rm -f "$RAW_OUT"
+
+echo "[discord-live] dotnet test exit: ${DOTNET_EXIT}"
+
+# ---------------------------------------------------------------------------
+# 5. Credential-leak self-check: grep result artifacts for the first 12
+#    chars of the bot token AND for the full guild-id snowflake. Either
+#    appearing in /results is a leak — the token is redacted via the sed
+#    pipe over dotnet stdout (and would only appear here through a future
+#    regression), and the guild ID is length-only-logged above. Both must
+#    stay out of uploaded artifacts.
+# ---------------------------------------------------------------------------
+TOKEN_PREFIX=$(printf '%s' "$BOT_TOKEN" | cut -c1-12)
+if grep -rqF "$TOKEN_PREFIX" "$RESULTS/" 2>/dev/null; then
+    echo "[discord-live] FATAL: token prefix found in test-results — leak detected"
+    exit 2
+fi
+if grep -rqF "$GUILD_ID" "$RESULTS/" 2>/dev/null; then
+    echo "[discord-live] FATAL: guild_id found in test-results — leak detected"
+    exit 2
+fi
+
+echo "[discord-live] credential-leak check passed (token + guild_id)"
+exit "$DOTNET_EXIT"

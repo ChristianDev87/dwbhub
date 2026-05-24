@@ -1,0 +1,20 @@
+# Plan 0.8.1 — frontend test runner (eslint + prettier + tsc + vitest + vite build).
+# Base: official Node 22 LTS on Alpine (small, fast cold-start).
+FROM node:22-alpine
+
+# bash is not required by entrypoint.sh (POSIX-portable) but is retained for
+# ad-hoc interactive debugging inside the container. ~5 MB cost. Drop if size matters.
+# git: useful for any pnpm fetches that reference github: protocol (none currently used).
+# ca-certificates: included by node:22-alpine base; explicit add is a no-op safety net.
+RUN apk add --no-cache bash git ca-certificates
+
+# Pin pnpm to the same version the repo uses (package.json packageManager field).
+RUN npm install -g pnpm@11.1.3
+
+COPY deploy/test-runners/entrypoint.sh /opt/test-runners/entrypoint.sh
+COPY deploy/test-runners/jobs/         /opt/test-runners/jobs/
+RUN chmod +x /opt/test-runners/entrypoint.sh /opt/test-runners/jobs/*.sh 2>/dev/null || true
+
+WORKDIR /workspace
+# entrypoint.sh uses POSIX sh — works on alpine's /bin/sh (busybox).
+ENTRYPOINT ["/opt/test-runners/entrypoint.sh"]

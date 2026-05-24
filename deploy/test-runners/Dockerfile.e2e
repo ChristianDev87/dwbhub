@@ -1,0 +1,29 @@
+# Plan 0.8.1 — e2e test runner.
+# Base: Microsoft's official Playwright image. It ships Node 22 + Chromium + Firefox + WebKit
+# + all OS-level deps, pinned to the Playwright minor version.
+#
+# IMPORTANT: bump the tag below whenever you bump @playwright/test in web/package.json.
+# The minor versions MUST match (e.g. v1.49.x image + ^1.49.x in package.json).
+FROM mcr.microsoft.com/playwright:v1.49.1-noble
+
+# The Playwright v1.49.1-noble base ships Node 22.12.0; pnpm 11.x requires >=22.13.
+# Refresh the NodeSource 22.x repo to pull the latest 22.x patch before installing pnpm.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pin pnpm to the same version as Dockerfile.frontend (single source: root package.json packageManager).
+RUN npm install -g pnpm@11.1.3
+
+# docker.io CLI (no daemon) so jobs/e2e.sh can run `docker compose up/down` against
+# the host's daemon via mounted /var/run/docker.sock.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY deploy/test-runners/entrypoint.sh /opt/test-runners/entrypoint.sh
+COPY deploy/test-runners/jobs/         /opt/test-runners/jobs/
+RUN chmod +x /opt/test-runners/entrypoint.sh /opt/test-runners/jobs/*.sh 2>/dev/null || true
+
+WORKDIR /workspace
+ENTRYPOINT ["/opt/test-runners/entrypoint.sh"]

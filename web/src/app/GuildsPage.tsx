@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "./auth-context";
 import { BotTokenModal } from "./BotTokenModal";
 import { PauseGuildModal } from "./components/PauseGuildModal";
 
@@ -56,6 +57,8 @@ function statusColor(state: BotConnectionState): string {
 export function GuildsPage(): React.JSX.Element {
   const { t, i18n } = useTranslation();
   const { slug } = useParams<{ slug: string }>();
+  const { state } = useAuth();
+  const accessToken = state.kind === "authenticated" ? state.accessToken : null;
   const [guilds, setGuilds] = useState<Guild[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">(
     "loading",
@@ -97,10 +100,13 @@ export function GuildsPage(): React.JSX.Element {
 
   async function loadList() {
     try {
+      const headers: Record<string, string> = {};
+      if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
       const res = await fetch(
         `/api/t/${encodeURIComponent(slug ?? "")}/guilds`,
         {
           credentials: "include",
+          headers,
         },
       );
       if (!res.ok) {
@@ -116,9 +122,11 @@ export function GuildsPage(): React.JSX.Element {
   }
 
   useEffect(() => {
-    void loadList();
+    if (accessToken) {
+      void loadList();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug]);
+  }, [slug, accessToken]);
 
   useEffect(() => {
     const anyConnecting = guilds.some(
@@ -149,12 +157,16 @@ export function GuildsPage(): React.JSX.Element {
     e?.preventDefault();
     setAddError(null);
     try {
+      const addHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (accessToken) addHeaders["Authorization"] = `Bearer ${accessToken}`;
       const res = await fetch(
         `/api/t/${encodeURIComponent(slug ?? "")}/guilds`,
         {
           method: "POST",
           credentials: "include",
-          headers: { "Content-Type": "application/json" },
+          headers: addHeaders,
           body: JSON.stringify(data),
         },
       );
@@ -176,9 +188,11 @@ export function GuildsPage(): React.JSX.Element {
   async function confirmDelete() {
     if (!pendingDelete) return;
     try {
+      const deleteHeaders: Record<string, string> = {};
+      if (accessToken) deleteHeaders["Authorization"] = `Bearer ${accessToken}`;
       const res = await fetch(
         `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${pendingDelete.publicId}`,
-        { method: "DELETE", credentials: "include" },
+        { method: "DELETE", credentials: "include", headers: deleteHeaders },
       );
       if (res.status === 204) {
         setPendingDelete(null);
@@ -192,9 +206,12 @@ export function GuildsPage(): React.JSX.Element {
   async function confirmBotRemove() {
     if (!pendingBotRemove) return;
     try {
+      const botRemoveHeaders: Record<string, string> = {};
+      if (accessToken)
+        botRemoveHeaders["Authorization"] = `Bearer ${accessToken}`;
       const res = await fetch(
         `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${pendingBotRemove.publicId}/bot-credentials`,
-        { method: "DELETE", credentials: "include" },
+        { method: "DELETE", credentials: "include", headers: botRemoveHeaders },
       );
       if (res.status === 204) {
         setPendingBotRemove(null);
@@ -212,10 +229,12 @@ export function GuildsPage(): React.JSX.Element {
   async function confirmPause() {
     if (!pauseTarget) return;
     setActionPending(pauseTarget.publicId);
+    const pauseHeaders: Record<string, string> = {};
+    if (accessToken) pauseHeaders["Authorization"] = `Bearer ${accessToken}`;
     try {
       await fetch(
         `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${pauseTarget.publicId}/deactivate`,
-        { method: "POST", credentials: "include" },
+        { method: "POST", credentials: "include", headers: pauseHeaders },
       );
     } finally {
       setActionPending(null);
@@ -225,10 +244,12 @@ export function GuildsPage(): React.JSX.Element {
   }
 
   async function handleResume(g: Guild) {
+    const resumeHeaders: Record<string, string> = {};
+    if (accessToken) resumeHeaders["Authorization"] = `Bearer ${accessToken}`;
     try {
       await fetch(
         `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${g.publicId}/activate`,
-        { method: "POST", credentials: "include" },
+        { method: "POST", credentials: "include", headers: resumeHeaders },
       );
     } finally {
       await loadList();
@@ -236,10 +257,13 @@ export function GuildsPage(): React.JSX.Element {
   }
 
   async function handleReconnect(g: Guild) {
+    const reconnectHeaders: Record<string, string> = {};
+    if (accessToken)
+      reconnectHeaders["Authorization"] = `Bearer ${accessToken}`;
     try {
       await fetch(
         `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${g.publicId}/bot/reconnect`,
-        { method: "POST", credentials: "include" },
+        { method: "POST", credentials: "include", headers: reconnectHeaders },
       );
     } finally {
       await loadList();
@@ -348,6 +372,7 @@ export function GuildsPage(): React.JSX.Element {
                   </p>
                   <p
                     data-testid={`guild-status-${g.publicId}`}
+                    data-state={g.botConnectionState ?? "null"}
                     className={`text-xs mt-1 ${statusColor(g.botConnectionState)}`}
                   >
                     ● {statusLabel(g.botConnectionState)}

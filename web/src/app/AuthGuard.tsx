@@ -1,5 +1,5 @@
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "./AuthContext";
+import { useAuth } from "./auth-context";
 
 /**
  * Renders children only when the user is authenticated. While the initial refresh
