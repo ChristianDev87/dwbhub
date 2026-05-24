@@ -47,10 +47,16 @@ if [ -z "$BOT_TOKEN" ] || [ -z "$GUILD_ID" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 2. Log meta-info (length only for token; guild ID is a public snowflake)
+# 2. Log meta-info (length only — per project rule, the entire contents of
+#    deploy/compose/discord.dev.env are credential-grade. Even though the
+#    guild ID alone is a public Discord snowflake, treating the whole file
+#    as opaque keeps the redaction policy consistent and avoids future
+#    drift where someone adds a new "non-secret" field that turns out to
+#    be sensitive.)
 # ---------------------------------------------------------------------------
 TOKEN_LEN=$(printf '%s' "$BOT_TOKEN" | wc -c | tr -d ' ')
-echo "[discord-live] token length: ${TOKEN_LEN}, guild_id: ${GUILD_ID}"
+GUILD_LEN=$(printf '%s' "$GUILD_ID" | wc -c | tr -d ' ')
+echo "[discord-live] secret-file ok: token_len=${TOKEN_LEN} guild_id_len=${GUILD_LEN}"
 
 # ---------------------------------------------------------------------------
 # 3. Export env vars for the dotnet child process
@@ -86,15 +92,22 @@ rm -f "$RAW_OUT"
 echo "[discord-live] dotnet test exit: ${DOTNET_EXIT}"
 
 # ---------------------------------------------------------------------------
-# 5. Token-leak self-check: grep result artifacts for the first 12 chars.
-#    The .trx file is XML and may contain env-var names but not values;
-#    this check guards against any unexpected serialisation path.
+# 5. Credential-leak self-check: grep result artifacts for the first 12
+#    chars of the bot token AND for the full guild-id snowflake. Either
+#    appearing in /results is a leak — the token is redacted via the sed
+#    pipe over dotnet stdout (and would only appear here through a future
+#    regression), and the guild ID is length-only-logged above. Both must
+#    stay out of uploaded artifacts.
 # ---------------------------------------------------------------------------
 TOKEN_PREFIX=$(printf '%s' "$BOT_TOKEN" | cut -c1-12)
 if grep -rqF "$TOKEN_PREFIX" "$RESULTS/" 2>/dev/null; then
     echo "[discord-live] FATAL: token prefix found in test-results — leak detected"
     exit 2
 fi
+if grep -rqF "$GUILD_ID" "$RESULTS/" 2>/dev/null; then
+    echo "[discord-live] FATAL: guild_id found in test-results — leak detected"
+    exit 2
+fi
 
-echo "[discord-live] token-leak check passed"
+echo "[discord-live] credential-leak check passed (token + guild_id)"
 exit "$DOTNET_EXIT"
