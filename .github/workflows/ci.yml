@@ -237,7 +237,21 @@ jobs:
 
   summary:
     name: PR test summary
-    needs: [security, sql-tenant-filter, openapi-drift, backend-tests, frontend-tests, container-smoke]
+    # Include e2e-tests and discord-live-tests so their results land in the
+    # sticky comment when the PR targets main. On PR->develop both have
+    # if-conditions that resolve to false, so they finish in the "skipped"
+    # state immediately — `needs:` treats skipped as resolved, so the
+    # summary doesn't wait long. `if: always()` on the summary itself means
+    # it still runs even when an upstream job failed or was skipped.
+    needs:
+      - security
+      - sql-tenant-filter
+      - openapi-drift
+      - backend-tests
+      - frontend-tests
+      - container-smoke
+      - e2e-tests
+      - discord-live-tests
     if: always()
     runs-on: [self-hosted, linux, dotnet10]
     timeout-minutes: 5
@@ -255,11 +269,18 @@ jobs:
       - name: Publish consolidated test summary
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          # Both globs intentional: TRX from backend, JUnit XML from frontend.
-          # EnricoMi auto-detects the format per file.
+          # File patterns by source job:
+          #   *.trx          backend-tests (unit/integration/security)
+          #                  + discord-live-tests (when it runs on PR->main)
+          #   vitest.xml     frontend-tests (Vitest JUnit reporter)
+          #   playwright.xml e2e-tests (Playwright JUnit reporter, PR->main)
+          # EnricoMi auto-detects the format per file. Artifacts that aren't
+          # present (e.g. e2e/discord on PR->develop where those jobs skip)
+          # are silently ignored, so the same glob covers both PR targets.
           files: |
             test-results/**/*.trx
             test-results/**/vitest.xml
+            test-results/**/playwright.xml
           check_name: "Test Results"
           # 'always' creates the sticky comment on first run and UPDATES it
           # on every subsequent run of the same PR — one comment per PR,
