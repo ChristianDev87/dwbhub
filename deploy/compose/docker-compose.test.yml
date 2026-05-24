@@ -20,7 +20,7 @@ services:
       tags: [dwbhub-test-runner-backend:dev]
     volumes:
       - ../..:/workspace:ro
-      - ../../test-results:/results
+      - ${TEST_RESULTS_DIR:-../../test-results}:/results
       - /var/run/docker.sock:/var/run/docker.sock
     tmpfs:
       # dotnet build writes to obj/ and bin/. tmpfs mounts at these subpaths
@@ -73,7 +73,7 @@ services:
       tags: [dwbhub-test-runner-frontend:dev]
     volumes:
       - ../..:/workspace:ro
-      - ../../test-results:/results
+      - ${TEST_RESULTS_DIR:-../../test-results}:/results
       # Named volumes overlay the :ro workspace at the three writable paths.
       # Named volumes (unlike tmpfs) are mounted exec by Docker Desktop / Linux,
       # so node binary postinstall scripts (esbuild, rollup, etc.) can run.
@@ -101,7 +101,7 @@ services:
       tags: [dwbhub-test-runner-backend:dev]
     volumes:
       - ../..:/workspace:ro
-      - ../../test-results:/results
+      - ${TEST_RESULTS_DIR:-../../test-results}:/results
       - /var/run/docker.sock:/var/run/docker.sock
       # gen-openapi-client.ps1 invokes `pnpm --filter dwbhub-web exec openapi-typescript`,
       # which auto-triggers `pnpm install` if node_modules look stale. The install needs
@@ -156,7 +156,7 @@ services:
       tags: [dwbhub-test-runner-backend:dev]
     volumes:
       - ../..:/workspace:ro
-      - ../../test-results:/results
+      - ${TEST_RESULTS_DIR:-../../test-results}:/results
     networks: [test-net]
     command: ["sql-tenant-filter"]
 
@@ -167,7 +167,7 @@ services:
       tags: [dwbhub-test-runner-security:dev]
     volumes:
       - ../..:/workspace:ro
-      - ../../test-results:/results
+      - ${TEST_RESULTS_DIR:-../../test-results}:/results
     environment:
       CI: "true"
       pnpm_config_store_dir: /tmp/pnpm-store
@@ -181,7 +181,7 @@ services:
       tags: [dwbhub-test-runner-backend:dev]
     volumes:
       - ../..:/workspace:ro
-      - ../../test-results:/results
+      - ${TEST_RESULTS_DIR:-../../test-results}:/results
       - /var/run/docker.sock:/var/run/docker.sock
     networks: [test-net]
     command: ["container-smoke"]
@@ -193,7 +193,7 @@ services:
       tags: [dwbhub-test-runner-e2e:dev]
     volumes:
       - ../..:/workspace:ro
-      - ../../test-results:/results
+      - ${TEST_RESULTS_DIR:-../../test-results}:/results
       - /var/run/docker.sock:/var/run/docker.sock
       # Named volumes overlay the :ro workspace at the two writable paths pnpm needs.
       # Named volumes (unlike tmpfs) are mounted exec by Docker Desktop / Linux,
@@ -227,7 +227,7 @@ services:
       tags: [dwbhub-test-runner-backend:dev]
     volumes:
       - ../..:/workspace:ro
-      - ../../test-results:/results
+      - ${TEST_RESULTS_DIR:-../../test-results}:/results
     tmpfs:
       # dotnet test compiles DwbHub.Tests.Integration and its transitive deps.
       # tmpfs shadows the :ro workspace bind at obj/bin so dotnet can write.
