@@ -32,7 +32,6 @@ out/
 .turbo/
 storybook-static/
 playwright-report/
-test-results/*
 *.log
 npm-debug.log*
 yarn-debug.log*
