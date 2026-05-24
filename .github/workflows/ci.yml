@@ -38,7 +38,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-tests-results
-          path: test-results/backend-tests/
+          path: test-results/backend/
           retention-days: 7
           if-no-files-found: warn
 
@@ -54,7 +54,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: frontend-tests-results
-          path: test-results/frontend-tests/
+          path: test-results/frontend/
           retention-days: 7
           if-no-files-found: warn
 
@@ -70,7 +70,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: openapi-drift-results
-          path: test-results/openapi-drift/
+          path: test-results/openapi/
           retention-days: 7
           if-no-files-found: warn
 
@@ -138,7 +138,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-tests-results
-          path: test-results/e2e-tests/
+          path: test-results/e2e/
           retention-days: 7
           if-no-files-found: warn
 
