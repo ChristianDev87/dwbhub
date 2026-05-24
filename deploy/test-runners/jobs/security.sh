@@ -17,6 +17,8 @@ cd /workspace
 pnpm --filter dwbhub-web audit --json --audit-level high > "$RESULTS/pnpm.json" || true
 dotnet list api/DwbHub.sln package --vulnerable --include-transitive --format json > "$RESULTS/dotnet.json" || true
 trivy fs --format json --severity HIGH,CRITICAL --scanners vuln /workspace > "$RESULTS/trivy.json"
+# SARIF output for GitHub Code Scanning — uploaded by ci.yml (Plan 0.8.3 Task 7)
+trivy fs --format sarif --severity HIGH,CRITICAL --scanners vuln /workspace --output "$RESULTS/trivy.sarif"
 
 FAIL=0
 # Parse via node (Dockerfile.security has node)

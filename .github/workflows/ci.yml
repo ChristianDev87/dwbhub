@@ -16,6 +16,9 @@ on:
 
 permissions:
   contents: read
+  checks: write          # required by dorny/test-reporter (Tasks 5, 6)
+  security-events: write # required by github/codeql-action/upload-sarif (Task 7)
+  pull-requests: write   # required by EnricoMi/publish-unit-test-result-action sticky comment (Task 8)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
@@ -29,12 +32,25 @@ jobs:
   backend-tests:
     name: backend (lint + unit + integration + security)
     runs-on: [self-hosted, linux, dotnet10]
+    needs: [openapi-drift]
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm backend-tests
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm backend-tests
+      - name: Publish backend test results
+        if: always()
+        uses: dorny/test-reporter@v2
+        with:
+          name: backend tests
+          path: test-results/backend/*.trx
+          reporter: dotnet-trx
+          # The docker compose step already fails the job on test failure;
+          # this step is annotation-only. fail-on-error: false prevents
+          # double-failure noise.
+          fail-on-error: false
       - name: Upload test-results
         if: always()
         uses: actions/upload-artifact@v4
@@ -47,12 +63,22 @@ jobs:
   frontend-tests:
     name: frontend (lint + typecheck + vitest + build)
     runs-on: [self-hosted, linux, dotnet10]
+    needs: [backend-tests]
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm frontend-tests
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm frontend-tests
+      - name: Publish frontend test results
+        if: always()
+        uses: dorny/test-reporter@v2
+        with:
+          name: frontend tests
+          path: test-results/frontend/vitest.xml
+          reporter: jest-junit
+          fail-on-error: false
       - name: Upload test-results
         if: always()
         uses: actions/upload-artifact@v4
@@ -65,12 +91,14 @@ jobs:
   openapi-drift:
     name: OpenAPI + generated client drift
     runs-on: [self-hosted, linux, dotnet10]
+    needs: [sql-tenant-filter]
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm openapi-drift
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm openapi-drift
       - name: Upload test-results
         if: always()
         uses: actions/upload-artifact@v4
@@ -83,12 +111,14 @@ jobs:
   sql-tenant-filter:
     name: SQL tenant_id lint
     runs-on: [self-hosted, linux, dotnet10]
+    needs: [security]
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm sql-tenant-filter
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm sql-tenant-filter
       - name: Upload test-results
         if: always()
         uses: actions/upload-artifact@v4
@@ -101,12 +131,19 @@ jobs:
   security:
     name: security (pnpm audit + dotnet vulnerable + trivy)
     runs-on: [self-hosted, linux, dotnet10]
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm security
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm security
+      - name: Upload Trivy SARIF to Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: test-results/security/trivy.sarif
+          category: trivy
       - name: Upload test-results
         if: always()
         uses: actions/upload-artifact@v4
@@ -119,12 +156,14 @@ jobs:
   container-smoke:
     name: container build smoke (api + web)
     runs-on: [self-hosted, linux, dotnet10]
+    needs: [frontend-tests]
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm container-smoke
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm container-smoke
       - name: Upload test-results
         if: always()
         uses: actions/upload-artifact@v4
@@ -138,7 +177,8 @@ jobs:
     name: e2e smoke (Playwright via compose)
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: [self-hosted, linux, dotnet10]
-    needs: [backend-tests, frontend-tests, container-smoke]
+    needs: [container-smoke]
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Prepare workspace mountpoints
@@ -146,7 +186,7 @@ jobs:
       - name: Run via docker compose
         env:
           HOST_REPO_ROOT: ${{ github.workspace }}
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm e2e-tests
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm e2e-tests
       - name: Upload test-results
         if: always()
         uses: actions/upload-artifact@v4
@@ -160,6 +200,8 @@ jobs:
     name: Discord live tests
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: [self-hosted, linux, dotnet10]
+    needs: [container-smoke]
+    timeout-minutes: 10
     concurrency:
       group: discord-live
       cancel-in-progress: false
@@ -179,7 +221,7 @@ jobs:
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm discord-live-tests
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm discord-live-tests
       - name: Cleanup discord.dev.env
         if: always()
         shell: bash
@@ -192,3 +234,35 @@ jobs:
           path: test-results/discord-live/
           retention-days: 7
           if-no-files-found: warn
+
+  summary:
+    name: PR test summary
+    needs: [security, sql-tenant-filter, openapi-drift, backend-tests, frontend-tests, container-smoke]
+    if: always()
+    runs-on: [self-hosted, linux, dotnet10]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          # All upload-artifact calls in the other jobs use names ending in
+          # -results (backend-tests-results, frontend-tests-results, etc).
+          # The `pattern: '*-results'` form downloads every artifact whose
+          # name matches the glob; merge-multiple: false keeps each artifact
+          # in its own subdirectory under ./test-results/<name>/.
+          path: test-results/
+          pattern: '*-results'
+          merge-multiple: false
+      - name: Publish consolidated test summary
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          # Both globs intentional: TRX from backend, JUnit XML from frontend.
+          # EnricoMi auto-detects the format per file.
+          files: |
+            test-results/**/*.trx
+            test-results/**/vitest.xml
+          check_name: "Test Results"
+          # 'always' creates the sticky comment on first run and UPDATES it
+          # on every subsequent run of the same PR — one comment per PR,
+          # never spam.
+          comment_mode: always
+          report_individual_runs: true
