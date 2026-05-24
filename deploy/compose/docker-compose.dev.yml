@@ -28,6 +28,10 @@ services:
       && pnpm --filter dwbhub-web dev --host 0.0.0.0 --port 5173"
     environment:
       VITE_API_BASE: http://api:8080
+      # Vite's dev-server proxy target. Inside this container, `localhost:5080`
+      # routes back to the web container itself (where nothing listens), so the
+      # /api/* and /hub/* proxy rules need an explicit container-network target.
+      DWBHUB_PROXY_API_TARGET: http://api:8080
     ports: !override
       - "${WEB_PORT:-5173}:5173"
     volumes:

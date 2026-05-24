@@ -1,18 +1,15 @@
 name: ci
 
-# Phase A (validated 2026-05-21): backend, frontend, openapi-drift, sql-tenant-filter-lint.
-# Phase B (added once Phase A was green): security-audit, container-smoke, e2e-smoke.
-# All jobs target the self-hosted runner image github-runner:latest with labels
-# [self-hosted, linux, dotnet10] (pre-installs: .NET 10 SDK, Node 22, pnpm 11.1.3,
-# pwsh 7, Pester 5.5+, docker CLI + buildx + compose).
-
 # Trigger model:
 #   - PR-driven only. Every PR targeting main or develop runs the full pipeline.
-#   - PR develop -> main runs all 7 checks including e2e (MainSecure ruleset gates merge).
-#   - PR feature -> develop runs the 6 cheap checks (DevelopSecure ruleset gates merge).
+#   - PR develop -> main runs all 8 checks including e2e and discord-live (MainSecure ruleset).
+#   - PR feature -> develop runs the 6 cheap checks (DevelopSecure ruleset).
 #   - No push triggers: post-merge re-runs would re-test the exact same code state
 #     under squash-merge semantics (identical tree hash). The ruleset already enforces
 #     a green pipeline on the PR head before allowing the merge.
+#
+# Each job delegates to the corresponding docker-compose.test.yml service.
+# Same compose command runs locally and in CI — no drift between environments.
 on:
   pull_request:
     branches: [main, develop]
@@ -21,10 +18,6 @@ permissions:
   contents: read
 
 concurrency:
-  # Group by source branch so rapid-fire pushes on a PR cancel earlier in-flight runs
-  # for the same PR (only the latest commit matters). pull_request.head.ref is the
-  # source branch name (e.g. "feature/xyz"); github.ref_name is the fallback for any
-  # non-PR event (currently none, kept for forward compatibility).
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
@@ -33,274 +26,169 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: "true"
 
 jobs:
-  backend-lint-and-test:
+  backend-tests:
     name: backend (lint + unit + integration + security)
     runs-on: [self-hosted, linux, dotnet10]
     steps:
       - uses: actions/checkout@v4
-      - name: Restore tools
-        run: dotnet tool restore
-      - name: Restore packages
-        run: dotnet restore api/DwbHub.sln
-      - name: Verify formatting
-        run: dotnet format api/DwbHub.sln --verify-no-changes --no-restore
-      - name: Build (warnings as errors)
-        run: dotnet build api/DwbHub.sln --no-restore -c Release
-      - name: Unit tests
-        run: dotnet test api/tests/DwbHub.Tests.Unit/DwbHub.Tests.Unit.csproj --no-build -c Release --logger "trx;LogFileName=unit.trx" --collect:"XPlat Code Coverage"
-      - name: Integration tests
-        run: dotnet test api/tests/DwbHub.Tests.Integration/DwbHub.Tests.Integration.csproj --no-build -c Release --logger "trx;LogFileName=integration.trx"
-      - name: Security tests
-        run: dotnet test api/tests/DwbHub.Tests.Security/DwbHub.Tests.Security.csproj --no-build -c Release --logger "trx;LogFileName=security.trx"
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
+      - name: Run via docker compose
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm backend-tests
+      - name: Upload test-results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-tests-results
+          path: test-results/backend/
+          retention-days: 7
+          if-no-files-found: warn
 
-  frontend-lint-typecheck-test:
+  frontend-tests:
     name: frontend (lint + typecheck + vitest + build)
     runs-on: [self-hosted, linux, dotnet10]
     steps:
       - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Lint
-        run: pnpm --filter dwbhub-web lint
-      - name: Prettier format check
-        run: pnpm --filter dwbhub-web format:check
-      - name: Typecheck
-        run: pnpm --filter dwbhub-web typecheck
-      - name: Vitest
-        run: pnpm --filter dwbhub-web test
-      - name: Build (production bundle)
-        run: pnpm --filter dwbhub-web build
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
+      - name: Run via docker compose
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm frontend-tests
+      - name: Upload test-results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-tests-results
+          path: test-results/frontend/
+          retention-days: 7
+          if-no-files-found: warn
 
   openapi-drift:
     name: OpenAPI + generated client drift
     runs-on: [self-hosted, linux, dotnet10]
     steps:
       - uses: actions/checkout@v4
-      - name: Restore tools
-        run: dotnet tool restore
-      - name: Install web deps
-        run: pnpm install --frozen-lockfile
-      - name: Verify openapi.yaml has no drift
-        run: pwsh ./tools/verify-openapi.ps1
-      - name: Verify generated client has no drift
-        run: pwsh ./scripts/gen-openapi-client.ps1 -Check
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
+      - name: Run via docker compose
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm openapi-drift
+      - name: Upload test-results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-drift-results
+          path: test-results/openapi/
+          retention-days: 7
+          if-no-files-found: warn
 
-  sql-tenant-filter-lint:
+  sql-tenant-filter:
     name: SQL tenant_id lint
     runs-on: [self-hosted, linux, dotnet10]
     steps:
       - uses: actions/checkout@v4
-      - name: Lint
-        run: pwsh ./tools/check-tenant-filter.ps1
-      - name: Pester tests
-        run: pwsh -NoLogo -NoProfile -Command "Invoke-Pester -Path tools/tests -Output Detailed -CI"
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
+      - name: Run via docker compose
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm sql-tenant-filter
+      - name: Upload test-results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sql-tenant-filter-results
+          path: test-results/sql-tenant-filter/
+          retention-days: 7
+          if-no-files-found: warn
 
-  security-audit:
+  security:
     name: security (pnpm audit + dotnet vulnerable + trivy)
     runs-on: [self-hosted, linux, dotnet10]
-    permissions:
-      contents: read
-      security-events: write
     steps:
       - uses: actions/checkout@v4
-      - name: Install web dependencies
-        run: pnpm install --frozen-lockfile
-      - name: pnpm audit (high+)
-        run: pnpm audit --audit-level=high
-      - name: Restore .NET packages
-        run: dotnet restore api/DwbHub.sln
-      - name: dotnet vulnerable packages
-        shell: bash
-        run: |
-          OUTPUT=$(dotnet list api/DwbHub.sln package --vulnerable --include-transitive)
-          echo "$OUTPUT"
-          if echo "$OUTPUT" | grep -E "(High|Critical)" >/dev/null; then
-            echo "::error::High/Critical vulnerable .NET packages detected."
-            exit 1
-          fi
-      - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@master
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
+      - name: Run via docker compose
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm security
+      - name: Upload test-results
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          scan-type: fs
-          scan-ref: .
-          severity: CRITICAL,HIGH
-          exit-code: "1"
-          ignore-unfixed: true
+          name: security-results
+          path: test-results/security/
+          retention-days: 7
+          if-no-files-found: warn
 
   container-smoke:
     name: container build smoke (api + web)
     runs-on: [self-hosted, linux, dotnet10]
-    env:
-      DWBHUB_SMTP_HOST: mailhog
-      DWBHUB_SMTP_PORT: "1025"
-      DWBHUB_SMTP_FROM: "DwbHub <noreply@ci.local>"
-      DWBHUB_BOOTSTRAP_TOKEN_FILE: /tmp/dwbhub-bootstrap-token.txt
     steps:
       - uses: actions/checkout@v4
-      - name: Build API image (amd64 only, no push)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: deploy/docker/Dockerfile.api
-          platforms: linux/amd64
-          tags: dwbhub-api:smoke
-          load: true
-          # Suppress the build-summary artifact (`.dockerbuild`) that v6 auto-uploads.
-          provenance: false
-          sbom: false
-        env:
-          DOCKER_BUILD_SUMMARY: "false"
-          DOCKER_BUILD_RECORD_UPLOAD: "false"
-      - name: Build Web image (amd64 only, no push)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: deploy/docker/Dockerfile.web
-          platforms: linux/amd64
-          tags: dwbhub-web:smoke
-          load: true
-          provenance: false
-          sbom: false
-        env:
-          DOCKER_BUILD_SUMMARY: "false"
-          DOCKER_BUILD_RECORD_UPLOAD: "false"
-      - name: Smoke-run API health (with Postgres sidecar)
-        shell: bash
-        run: |
-          # The API boots, runs FluentMigrator MigrateUp, then serves /api/health.
-          # That requires a reachable Postgres on the same docker network. We spin
-          # up a throw-away one here — no skip flags, the real boot path is exercised.
-          #
-          # Pre-clean orphans from a previous hard-cancelled run.
-          docker rm -f dwbhub-api-smoke dwbhub-pg-smoke dwbhub-mp-smoke 2>/dev/null || true
-          docker network rm dwbhub-smoke-net 2>/dev/null || true
-          docker network create dwbhub-smoke-net
-
-          docker run -d --name dwbhub-pg-smoke --network dwbhub-smoke-net \
-            -e POSTGRES_DB=dwbhub \
-            -e POSTGRES_USER=dwbhub \
-            -e POSTGRES_PASSWORD=dwbhub_smoke \
-            postgres:17-alpine
-          for i in {1..30}; do
-            if docker exec dwbhub-pg-smoke pg_isready -U dwbhub -d dwbhub >/dev/null 2>&1; then
-              echo "Postgres ready"; break
-            fi
-            sleep 1
-          done
-
-          # Mailpit sidecar (Plan 0.3c): API fails fast on missing DWBHUB_SMTP_*
-          # at boot since MailKitEmailSender is registered unconditionally. The
-          # alias `mailhog` matches the job-level env DWBHUB_SMTP_HOST.
-          docker run -d --name dwbhub-mp-smoke --network dwbhub-smoke-net \
-            --network-alias mailhog \
-            axllent/mailpit:v1.21
-          sleep 2
-
-          # API: high host port to dodge co-tenant clashes; reaches Postgres via
-          # the shared docker network using its container name.
-          docker run -d --name dwbhub-api-smoke --network dwbhub-smoke-net -p 15080:8080 \
-            -e DWBHUB_DB_CONNECTION="Host=dwbhub-pg-smoke;Port=5432;Database=dwbhub;Username=dwbhub;Password=dwbhub_smoke" \
-            -e DWBHUB_JWT_SECRET=ZGV2X2p3dF9zZWNyZXRfZG9fbm90X3VzZV9pbl9wcm9k \
-            -e DWBHUB_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
-            -e DWBHUB_SMTP_HOST="$DWBHUB_SMTP_HOST" \
-            -e DWBHUB_SMTP_PORT="$DWBHUB_SMTP_PORT" \
-            -e DWBHUB_SMTP_FROM="$DWBHUB_SMTP_FROM" \
-            -e DWBHUB_BOOTSTRAP_TOKEN_FILE="$DWBHUB_BOOTSTRAP_TOKEN_FILE" \
-            dwbhub-api:smoke
-          for i in {1..30}; do
-            if curl -fsS http://host-gateway:15080/api/health >/dev/null; then
-              echo "API healthy"; exit 0
-            fi
-            sleep 1
-          done
-          echo "--- API logs ---"
-          docker logs dwbhub-api-smoke
-          echo "--- Postgres logs ---"
-          docker logs dwbhub-pg-smoke
-          exit 1
-      - name: Smoke-run Web index
-        shell: bash
-        run: |
-          docker rm -f dwbhub-web-smoke 2>/dev/null || true
-          docker run -d --name dwbhub-web-smoke -p 15173:8080 dwbhub-web:smoke
-          for i in {1..15}; do
-            if curl -fsS http://host-gateway:15173/ >/dev/null; then
-              echo "Web reachable"; exit 0
-            fi
-            sleep 1
-          done
-          docker logs dwbhub-web-smoke
-          exit 1
-      - name: Tear down
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
+      - name: Run via docker compose
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm container-smoke
+      - name: Upload test-results
         if: always()
-        shell: bash
-        run: |
-          docker rm -f dwbhub-api-smoke dwbhub-web-smoke dwbhub-pg-smoke dwbhub-mp-smoke 2>/dev/null || true
-          docker network rm dwbhub-smoke-net 2>/dev/null || true
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-smoke-results
+          path: test-results/container-smoke/
+          retention-days: 7
+          if-no-files-found: warn
 
-  e2e-smoke:
-    # Heavy full-stack job: only runs on PRs that target main (the release branch).
-    # PRs targeting develop (feature -> develop) skip e2e — those gates only require
-    # the six cheap jobs (see DevelopSecure ruleset). The MainSecure ruleset requires
-    # this check, so any develop -> main PR cannot be merged without a green e2e.
+  e2e-tests:
     name: e2e smoke (Playwright via compose)
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: [self-hosted, linux, dotnet10]
-    needs: [backend-lint-and-test, frontend-lint-typecheck-test, container-smoke]
-    env:
-      # Runner is itself a container; reach host-published compose ports via host-gateway
-      # (the watcher launches runners with --add-host=host-gateway:host-gateway).
-      E2E_HOST: host-gateway
-      # High ports to avoid clashing with co-tenant services on the runner host.
-      API_PORT: "15080"
-      WEB_PORT: "15173"
-      POSTGRES_PORT: "15432"
-      MAILHOG_SMTP_PORT: "11025"
-      MAILHOG_UI_PORT: "18025"
+    needs: [backend-tests, frontend-tests, container-smoke]
     steps:
       - uses: actions/checkout@v4
-      - name: Install web deps
-        run: pnpm install --frozen-lockfile
-      - name: Run E2E
-        run: pwsh ./scripts/e2e-up.ps1
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
+      - name: Run via docker compose
+        env:
+          HOST_REPO_ROOT: ${{ github.workspace }}
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm e2e-tests
+      - name: Upload test-results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-tests-results
+          path: test-results/e2e/
+          retention-days: 7
+          if-no-files-found: warn
 
   discord-live-tests:
     name: Discord live tests
-    needs: [backend-lint-and-test]
-    # The workflow only runs on pull_request events (no push triggers exist —
-    # see the comment block at the top of the file). Fire this job on the
-    # release PR develop→main, where verifying against the real Discord
-    # gateway is most valuable as a pre-merge gate. The job still skips
-    # cleanly when the GitHub Secrets are absent (e.g., repo forks).
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, dotnet10]
     concurrency:
       group: discord-live
       cancel-in-progress: false
-    env:
-      DISCORD_DEV_BOT_TOKEN: ${{ secrets.DISCORD_DEV_BOT_TOKEN }}
-      DISCORD_DEV_GUILD_ID:  ${{ secrets.DISCORD_DEV_GUILD_ID }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-      - name: Skip if secret absent
-        id: gate
+      - name: Materialize discord.dev.env
+        env:
+          TOKEN: ${{ secrets.DISCORD_DEV_BOT_TOKEN }}
+          GUILD_ID: ${{ secrets.DISCORD_DEV_GUILD_ID }}
+        shell: bash
         run: |
-          if [ -z "$DISCORD_DEV_BOT_TOKEN" ] || [ -z "$DISCORD_DEV_GUILD_ID" ]; then
-            echo "skip=true" >> $GITHUB_OUTPUT
+          if [ -z "$TOKEN" ] || [ -z "$GUILD_ID" ]; then
             echo "::notice::Discord live tests skipped — DISCORD_DEV_BOT_TOKEN / DISCORD_DEV_GUILD_ID not set in repo secrets"
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
+            exit 0
           fi
-      - name: Restore + build
-        if: steps.gate.outputs.skip != 'true'
-        run: dotnet build api/DwbHub.sln -c Release --nologo
-      - name: Run Discord live tests
-        if: steps.gate.outputs.skip != 'true'
-        run: |
-          dotnet test api/tests/DwbHub.Tests.Integration/DwbHub.Tests.Integration.csproj \
-            --filter "Category=DiscordLive" \
-            --no-build -c Release \
-            --logger "console;verbosity=normal"
+          printf '%s=%s\n%s=%s\n' DISCORD_DEV_BOT_TOKEN "$TOKEN" DISCORD_DEV_GUILD_ID "$GUILD_ID" > deploy/compose/discord.dev.env
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
+      - name: Run via docker compose
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm discord-live-tests
+      - name: Cleanup discord.dev.env
+        if: always()
+        shell: bash
+        run: rm -f deploy/compose/discord.dev.env
+      - name: Upload test-results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: discord-live-tests-results
+          path: test-results/discord-live/
+          retention-days: 7
+          if-no-files-found: warn

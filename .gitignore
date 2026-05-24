@@ -32,12 +32,17 @@ out/
 .turbo/
 storybook-static/
 playwright-report/
-test-results/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+# Repo-root pnpm store written by docker-compose.test.yml's named-volume mount
+# when pnpm_config_store_dir is not honored by an outside-container pnpm invocation
+.pnpm-store/
+
+# Per-user IDE/tool session settings (local only)
+.claude/
 
 # IDE
 .idea/
@@ -59,8 +64,15 @@ appsettings.Development.json
 *.local.json
 discord.dev.env
 
-# Logs
-logs/
+# Logs — keep the directory marker so test-runner tmpfs mounts have an existing
+# mountpoint inside the :ro workspace bind, but exclude the per-start log files.
+logs/*
+!logs/.gitkeep
+
+# Test result outputs (Plan 0.8.1 — local CI runner)
+# We commit only the .gitkeep marker so the directory exists for first-time clones.
+test-results/*
+!test-results/.gitkeep
 
 # Temp / scratch
 *.tmp

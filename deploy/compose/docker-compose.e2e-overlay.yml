@@ -1,0 +1,28 @@
+# Plan 0.8.1 — e2e DinD path-translation overlay.
+#
+# Used ONLY by deploy/test-runners/jobs/e2e.sh, layered on top of
+# docker-compose.yml + docker-compose.dev.yml when the e2e job spawns the
+# dev stack via the host docker daemon (mounted /var/run/docker.sock).
+#
+# WHY THIS FILE EXISTS:
+# The dev stack's web service has a bind-mount `../../:/repo` (relative to
+# deploy/compose/). When `docker compose ... up -d` is invoked from inside
+# the e2e-tests test-runner container, the compose CLI sees relative paths
+# from its own CWD (/workspace inside the container). It then sends the
+# resolved path /workspace to the host docker daemon — which has no
+# /workspace and silently mounts an empty directory. Result: web container
+# `pnpm install` fails with ERR_PNPM_NO_PKG_MANIFEST and restarts forever.
+#
+# This overlay !overrides the web service's volumes list with absolute HOST
+# paths (via $HOST_REPO_ROOT), so the host docker daemon receives a mount
+# instruction pointing to a real existing directory.
+#
+# REQUIRED env var: HOST_REPO_ROOT — absolute host-side path to the repo
+# root. Set by docker-compose.test.yml's e2e-tests service from $PWD.
+
+services:
+  web:
+    volumes: !override
+      - ${HOST_REPO_ROOT}:/repo
+      - /repo/node_modules
+      - /repo/web/node_modules
