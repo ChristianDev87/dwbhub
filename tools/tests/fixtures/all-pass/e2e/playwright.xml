@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites id="" name="" tests="2" failures="0" skipped="0" errors="0" time="3.0">
+  <testsuite name="example.spec.ts" hostname="chromium" tests="1" failures="0" skipped="0" time="1.5" errors="0">
+    <testcase classname="example.spec.ts" name="works" time="1.5" />
+  </testsuite>
+  <testsuite name="example.spec.ts" hostname="firefox" tests="1" failures="0" skipped="0" time="1.5" errors="0">
+    <testcase classname="example.spec.ts" name="works" time="1.5" />
+  </testsuite>
+</testsuites>

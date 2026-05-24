@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="all-pass-unit" name="all-pass" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-05-24T12:00:00.0000000+00:00" queuing="2026-05-24T12:00:00.0000000+00:00" start="2026-05-24T12:00:00.0000000+00:00" finish="2026-05-24T12:00:02.0000000+00:00" />
+  <Results>
+    <UnitTestResult testName="Suite.Test1" outcome="Passed" />
+    <UnitTestResult testName="Suite.Test2" outcome="Passed" />
+  </Results>
+  <ResultSummary outcome="Completed">
+    <Counters total="2" executed="2" passed="2" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+  </ResultSummary>
+</TestRun>
