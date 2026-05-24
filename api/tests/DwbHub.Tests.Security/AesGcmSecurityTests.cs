@@ -35,23 +35,27 @@ public sealed class AesGcmSecurityTests
     }
 
     /// <summary>
-    /// Flipping a single bit in the authentication tag must cause AES-GCM to reject
-    /// the envelope. The tag is the integrity-protection binding nonce + ciphertext,
-    /// so any tamper — even to the tag itself — must be caught.
+    /// Replacing the nonce with a different value (even off by one bit) must cause
+    /// AES-GCM to fail authentication. This is a strictly different attack vector
+    /// than ciphertext tampering: it verifies the nonce is genuinely an input to
+    /// the GMAC computation, not merely an IV reused as a derivation seed. A
+    /// regression that ever stripped the nonce from the auth-binding would slip
+    /// past a ciphertext-only tamper check but be caught here.
     /// </summary>
     [Fact]
-    public void AesGcm_TamperedAuthTag_ThrowsAuthEx()
+    public void AesGcm_TamperedNonce_ThrowsAuthEx()
     {
         var sut = new AesGcmBotTokenEncryptor(TestKey);
         var envelope = sut.Encrypt(BotToken);
 
-        // Clone the tag and flip the last byte
-        var tamperedTag = (byte[])envelope.Tag.Clone();
-        tamperedTag[^1] ^= 0xFF;
-        var tampered = envelope with { Tag = tamperedTag };
+        // Clone the nonce and flip the first byte
+        var tamperedNonce = (byte[])envelope.Nonce.Clone();
+        tamperedNonce[0] ^= 0x01;
+        var tampered = envelope with { Nonce = tamperedNonce };
 
         Action act = () => sut.Decrypt(tampered);
         act.Should().Throw<CryptographicException>(
-            "a modified authentication tag must prevent decryption of the ciphertext");
+            "AES-GCM must detect and reject decryption attempts with a nonce that " +
+            "does not match the one used at encryption time");
     }
 }
