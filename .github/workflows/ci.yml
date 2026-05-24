@@ -18,7 +18,7 @@ permissions:
   contents: read
   checks: write          # required by dorny/test-reporter (Tasks 5, 6)
   security-events: write # required by github/codeql-action/upload-sarif (Task 7)
-  pull-requests: write   # required by EnricoMi/publish-unit-test-result-action sticky comment (Task 8)
+  pull-requests: write   # required by marocchino/sticky-pull-request-comment (Plan 0.8.6 Task 2)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
@@ -245,12 +245,10 @@ jobs:
           # Plan 0.8.5: read test results from the host-shared path each
           # test-producing job wrote to. No download-artifact — nothing was uploaded.
           #
-          # EnricoMi runs INSIDE a docker container with only ${{ github.workspace }}
-          # bind-mounted at /github/workspace. The host shared-results path lives
-          # OUTSIDE the workspace and is not visible to that container — so we
-          # copy the files into ${{ github.workspace }}/.staged-results/ and point
-          # EnricoMi at the relative path. The staged copy lives only for the
-          # duration of this job and is removed by the cleanup step below.
+          # Plan 0.8.6: render-test-summary.py runs directly on the runner (not
+          # inside a docker container), so it can access any path. We still copy
+          # into .staged-results/ so the renderer has a single, clean root to
+          # walk, and the cleanup step removes it afterwards.
           SHARED="$(realpath ${{ github.workspace }}/..)/shared-results/${{ github.run_id }}"
           STAGED="${{ github.workspace }}/.staged-results"
           mkdir -p "$STAGED"
@@ -261,29 +259,35 @@ jobs:
           else
               echo "(no shared-results dir or empty — all upstream jobs may have failed/skipped before writing)"
           fi
-      - name: Publish consolidated test summary
+      - name: Render markdown summary
+        id: summary
         if: always()
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        run: |
+          # Plan 0.8.6: run the renderer over the staged test results.
+          # Exit code mirrors test outcome (0 pass, 1 any-fail), so this
+          # step itself fails when tests fail — that bubbles up as the
+          # summary job's status.
+          python3 tools/render-test-summary.py .staged-results > /tmp/dwbhub-summary.md
+          STATUS=$?
+          # Stream the markdown to the workflow log so it's visible in the
+          # runner UI alongside the comment.
+          cat /tmp/dwbhub-summary.md
+          # Capture the markdown as a step output for the next step.
+          {
+            echo 'markdown<<__EOF_SUMMARY__'
+            cat /tmp/dwbhub-summary.md
+            echo '__EOF_SUMMARY__'
+          } >> "$GITHUB_OUTPUT"
+          exit $STATUS
+      - name: Post sticky PR comment
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
-          # File patterns are RELATIVE to ${{ github.workspace }} so EnricoMi's
-          # docker container (which only sees /github/workspace) can resolve them.
-          # By source job:
-          #   *.trx          backend-tests (unit/integration/security)
-          #                  + discord-live-tests (when it runs on PR->main)
-          #   vitest.xml     frontend-tests (Vitest JUnit reporter)
-          #   playwright.xml e2e-tests (Playwright JUnit reporter, PR->main)
-          # Jobs that didn't write results (e.g. e2e/discord on PR->develop
-          # where those jobs skip) are silently ignored.
-          files: |
-            .staged-results/**/*.trx
-            .staged-results/**/vitest.xml
-            .staged-results/**/playwright.xml
-          check_name: "Test Results"
-          # 'always' creates the sticky comment on first run and UPDATES it
-          # on every subsequent run of the same PR — one comment per PR,
-          # never spam.
-          comment_mode: always
-          report_individual_runs: true
+          # Header tag matches the HTML marker in the rendered markdown so
+          # marocchino finds and updates the same comment on every re-run
+          # instead of posting a new one each time.
+          header: DWBHUB_TEST_SUMMARY
+          message: ${{ steps.summary.outputs.markdown }}
       - name: Cleanup shared-results host path + staged copy
         if: always()
         run: |

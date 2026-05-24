@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites id="" name="" tests="4" failures="1" skipped="0" errors="0" time="6.0">
+  <testsuite name="example.spec.ts" hostname="chromium" tests="2" failures="1" skipped="0" time="3.0" errors="0">
+    <testcase classname="example.spec.ts" name="works" time="1.5" />
+    <testcase classname="example.spec.ts" name="broken test" time="1.5">
+      <failure message="Expected true but got false">assertion failed at line 42</failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="example.spec.ts" hostname="firefox" tests="2" failures="0" skipped="0" time="3.0" errors="0">
+    <testcase classname="example.spec.ts" name="works" time="1.5" />
+    <testcase classname="example.spec.ts" name="broken test" time="1.5" />
+  </testsuite>
+</testsuites>

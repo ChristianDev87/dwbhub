@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="2" failures="0" errors="0" skipped="0" time="1.5">
+  <testsuite name="example.test.tsx" tests="2" failures="0" errors="0" skipped="0" time="1.5">
+    <testcase classname="example.test.tsx" name="works" time="0.7" />
+    <testcase classname="example.test.tsx" name="works again" time="0.8" />
+  </testsuite>
+</testsuites>
