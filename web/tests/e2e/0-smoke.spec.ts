@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 
 // Plan 0.3d's SetupGuard redirects `/` to `/setup` until the wizard completes.
 // In e2e CI the DB is always fresh when the first browser project (chromium)
@@ -7,9 +7,7 @@ import { expect, test } from "@playwright/test";
 // therefore adaptive: they assert the redirect to /setup when setup is pending,
 // or pass immediately when setup is already done (nothing to verify).
 
-async function isSetupComplete(
-  request: import("@playwright/test").APIRequestContext,
-): Promise<boolean> {
+async function isSetupComplete(request: APIRequestContext): Promise<boolean> {
   try {
     const res = await request.get("/api/setup/status");
     if (!res.ok()) return false;

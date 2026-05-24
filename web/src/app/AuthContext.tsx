@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { AuthContext, type AuthState, type LoginResult } from "./auth-context";
+import { i18n } from "../lib/i18n";
 
 interface LoginResponse {
   accessToken: string;
@@ -154,6 +155,13 @@ export function AuthProvider({
           tenant: body.tenant,
         };
         saveProfile(profile);
+        // Apply the tenant's preferred locale so the UI renders in the
+        // correct language immediately after login. Without this call,
+        // i18next falls back to the browser's navigator.language, which
+        // may differ from the tenant configuration.
+        if (body.tenant.locale) {
+          void i18n.changeLanguage(body.tenant.locale);
+        }
         setState({
           kind: "authenticated",
           accessToken: body.accessToken,
@@ -188,6 +196,11 @@ export function AuthProvider({
     // background; if it succeeds the access token is silently rotated.
     const stored = loadProfile();
     if (stored) {
+      // Restore the tenant locale so full-page navigations (React remount)
+      // render the correct language without waiting for the refresh call.
+      if (stored.tenant.locale) {
+        void i18n.changeLanguage(stored.tenant.locale);
+      }
       setState({
         kind: "authenticated",
         accessToken: stored.accessToken,

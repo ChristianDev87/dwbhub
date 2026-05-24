@@ -25,7 +25,12 @@ test.describe("Plan 0.6 guilds flow", () => {
     await page.goto(`/t/${SLUG}/guilds`);
     await expect(page.getByTestId("input-discord-guild-id")).toBeVisible();
 
-    const discordId = "1234567890123456789";
+    // Use a unique Discord snowflake to avoid a 409 conflict when another
+    // spec (e.g. bot-credentials) has registered a fixed ID and its cleanup
+    // did not finish before this test runs.
+    const discordId = String(
+      BigInt(Date.now()) * 10000n + BigInt(Math.floor(Math.random() * 10000)),
+    );
     await page.fill('[data-testid="input-discord-guild-id"]', discordId);
     await page.fill(
       '[data-testid="input-guild-display-name"]',
@@ -34,10 +39,16 @@ test.describe("Plan 0.6 guilds flow", () => {
     await page.click('[data-testid="add-guild-submit"]');
     await expect(page.getByText("E2E Test Server")).toBeVisible();
 
-    await page.click('[data-testid="delete-guild-button"]');
+    const row = page
+      .locator("li")
+      .filter({ hasText: "E2E Test Server" })
+      .first();
+    await row.locator('[data-testid="delete-guild-button"]').click();
     await expect(page.getByTestId("delete-confirm-yes")).toBeVisible();
     await page.click('[data-testid="delete-confirm-yes"]');
-    await expect(page.getByText("E2E Test Server")).not.toBeVisible({
+    await expect(
+      page.getByText("E2E Test Server", { exact: true }),
+    ).not.toBeVisible({
       timeout: 5_000,
     });
   });

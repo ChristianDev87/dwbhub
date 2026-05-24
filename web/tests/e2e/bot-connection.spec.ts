@@ -97,9 +97,11 @@ test.describe("Plan 0.8 bot-connection UI", () => {
 
     // Status indicator remains gray (no credentials, no connection attempted).
     // Without credentials, manager.GetState returns null → UI shows "unknown".
-    await expect(page.getByTestId(`guild-status-${publicId}`)).toContainText(
-      /unknown|disconnected/i,
-    );
+    // Assert via the locale-stable data-state attribute rather than translated
+    // text so the test is not affected by the Playwright browser locale setting.
+    const guildStatusEl = page.getByTestId(`guild-status-${publicId}`);
+    const state = await guildStatusEl.getAttribute("data-state");
+    expect(state === "null" || state === "disconnected").toBe(true);
   });
 
   test("reconnect button disabled without bot credentials", async ({

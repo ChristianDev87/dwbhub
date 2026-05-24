@@ -40,8 +40,7 @@ export function BotTokenModal({
 }: Props): React.JSX.Element {
   const { t } = useTranslation();
   const { state } = useAuth();
-  const accessToken =
-    state.kind === "authenticated" ? state.accessToken : null;
+  const accessToken = state.kind === "authenticated" ? state.accessToken : null;
   const {
     register,
     handleSubmit,

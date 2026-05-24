@@ -10,7 +10,12 @@ const fakeAuthValue = {
   state: {
     kind: "authenticated" as const,
     accessToken: "test-access-token",
-    user: { id: 1, email: "owner@acme.test", displayName: "Owner", role: "Owner" },
+    user: {
+      id: 1,
+      email: "owner@acme.test",
+      displayName: "Owner",
+      role: "Owner",
+    },
     tenant: { id: 1, slug: "acme", name: "ACME" },
   },
   login: vi.fn(),

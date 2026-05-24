@@ -58,8 +58,7 @@ export function GuildsPage(): React.JSX.Element {
   const { t, i18n } = useTranslation();
   const { slug } = useParams<{ slug: string }>();
   const { state } = useAuth();
-  const accessToken =
-    state.kind === "authenticated" ? state.accessToken : null;
+  const accessToken = state.kind === "authenticated" ? state.accessToken : null;
   const [guilds, setGuilds] = useState<Guild[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">(
     "loading",
@@ -373,6 +372,7 @@ export function GuildsPage(): React.JSX.Element {
                   </p>
                   <p
                     data-testid={`guild-status-${g.publicId}`}
+                    data-state={g.botConnectionState ?? "null"}
                     className={`text-xs mt-1 ${statusColor(g.botConnectionState)}`}
                   >
                     ● {statusLabel(g.botConnectionState)}
