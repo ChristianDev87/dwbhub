@@ -272,12 +272,17 @@ volumes:
   # `gen-openapi-client.ps1` step which runs pnpm exec openapi-typescript.
   openapi-nm-root:
   openapi-nm-web:
-  # api-data is declared and owned by docker-compose.yml (the dev/prod base stack,
-  # project name "dwbhub"). Docker names it "dwbhub_api-data". Declared external
-  # here so docker-compose.test.yml can reference it for the e2e-tests read-only
-  # mount without recreating or owning it.
+  # api-data is shared with docker-compose.yml (the dev/prod base stack). Both
+  # files pin the literal volume name "dwbhub_api-data" via `name:`, bypassing
+  # the project-prefix that compose would otherwise apply. Either compose file
+  # can create the volume on first use; both then reference the SAME docker
+  # volume regardless of COMPOSE_PROJECT_NAME or working-directory differences
+  # between the local dev box and a CI runner.
+  # NOT `external: true` — e2e.sh's cleanup trap removes the volume via
+  # `compose down -v` after every run, so a fresh CI runner needs to recreate
+  # it on the next run. Plan 0.8.4 Task 6 caught the external-true regression
+  # on PR #45's first CI attempt.
   api-data:
-    external: true
     name: dwbhub_api-data
 
 secrets:

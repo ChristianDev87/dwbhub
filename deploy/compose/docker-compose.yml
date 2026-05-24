@@ -69,4 +69,12 @@ services:
 volumes:
   pg-data:
   api-logs:
+  # api-data is pinned to a literal docker volume name (no project-prefix) so
+  # docker-compose.test.yml's e2e-tests service can mount the SAME volume read-only
+  # at /api-bootstrap-ro. Without the explicit name, the test compose file would
+  # try to find dwbhub_api-data while the base compose creates <project>_api-data
+  # under whatever project name happens to be active (depends on COMPOSE_PROJECT_NAME
+  # or the compose-file's parent directory). Plan 0.8.4 Task 6 hit this on the
+  # CI runner where the volume did not yet exist as dwbhub_api-data.
   api-data:
+    name: dwbhub_api-data
