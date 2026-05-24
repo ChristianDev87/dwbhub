@@ -281,7 +281,7 @@ jobs:
           exit $STATUS
       - name: Post sticky PR comment
         if: always()
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           # Header tag matches the HTML marker in the rendered markdown so
           # marocchino finds and updates the same comment on every re-run
