@@ -31,6 +31,8 @@ jobs:
     runs-on: [self-hosted, linux, dotnet10]
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --rm backend-tests
       - name: Upload test-results
@@ -47,6 +49,8 @@ jobs:
     runs-on: [self-hosted, linux, dotnet10]
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --rm frontend-tests
       - name: Upload test-results
@@ -63,6 +67,8 @@ jobs:
     runs-on: [self-hosted, linux, dotnet10]
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --rm openapi-drift
       - name: Upload test-results
@@ -79,6 +85,8 @@ jobs:
     runs-on: [self-hosted, linux, dotnet10]
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --rm sql-tenant-filter
       - name: Upload test-results
@@ -95,6 +103,8 @@ jobs:
     runs-on: [self-hosted, linux, dotnet10]
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --rm security
       - name: Upload test-results
@@ -111,6 +121,8 @@ jobs:
     runs-on: [self-hosted, linux, dotnet10]
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --rm container-smoke
       - name: Upload test-results
@@ -129,6 +141,8 @@ jobs:
     needs: [backend-tests, frontend-tests, container-smoke]
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         env:
           HOST_REPO_ROOT: ${{ github.workspace }}
@@ -162,6 +176,8 @@ jobs:
             exit 0
           fi
           printf '%s=%s\n%s=%s\n' DISCORD_DEV_BOT_TOKEN "$TOKEN" DISCORD_DEV_GUILD_ID "$GUILD_ID" > deploy/compose/discord.dev.env
+      - name: Prepare workspace mountpoints
+        run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
         run: docker compose -f deploy/compose/docker-compose.test.yml run --rm discord-live-tests
       - name: Cleanup discord.dev.env
