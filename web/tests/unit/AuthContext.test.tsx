@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { AuthProvider, useAuth } from "../../src/app/AuthContext";
+import { AuthProvider } from "../../src/app/AuthContext";
+import { useAuth } from "../../src/app/auth-context";
 
 function Probe() {
   const { state, login } = useAuth();

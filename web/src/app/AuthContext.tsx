@@ -1,66 +1,20 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
-
-type User = {
-  id: number;
-  email: string;
-  displayName: string;
-  role: string;
-};
-
-type Tenant = {
-  id: number;
-  slug: string;
-  name: string;
-  locale?: "de" | "en";
-};
-
-export type AuthState =
-  | { kind: "checking" }
-  | { kind: "unauthenticated" }
-  | {
-      kind: "authenticated";
-      accessToken: string;
-      user: User;
-      tenant: Tenant;
-    };
-
-export type LoginResult =
-  | { kind: "success" }
-  | { kind: "invalid_credentials" }
-  | { kind: "locked_out"; retryAfterSeconds: number }
-  | { kind: "email_not_verified"; email: string }
-  | { kind: "network_error" };
-
-interface AuthContextValue {
-  state: AuthState;
-  login: (
-    slug: string,
-    email: string,
-    password: string,
-  ) => Promise<LoginResult>;
-  logout: () => Promise<void>;
-  refresh: () => Promise<boolean>;
-}
-
-const Ctx = createContext<AuthContextValue | null>(null);
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(Ctx);
-  if (!ctx) throw new Error("useAuth() must be used inside <AuthProvider>");
-  return ctx;
-}
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { AuthContext, type AuthState, type LoginResult } from "./auth-context";
 
 interface LoginResponse {
   accessToken: string;
-  user: User;
-  tenant: Tenant;
+  user: {
+    id: number;
+    email: string;
+    displayName: string;
+    role: string;
+  };
+  tenant: {
+    id: number;
+    slug: string;
+    name: string;
+    locale?: "de" | "en";
+  };
 }
 
 export function AuthProvider({
@@ -156,8 +110,8 @@ export function AuthProvider({
   }, [refresh]);
 
   return (
-    <Ctx.Provider value={{ state, login, logout, refresh }}>
+    <AuthContext.Provider value={{ state, login, logout, refresh }}>
       {children}
-    </Ctx.Provider>
+    </AuthContext.Provider>
   );
 }

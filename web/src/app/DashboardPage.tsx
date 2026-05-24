@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { useAuth } from "./AuthContext";
+import { useAuth } from "./auth-context";
 
 export function DashboardPage(): React.JSX.Element | null {
   const { t } = useTranslation();

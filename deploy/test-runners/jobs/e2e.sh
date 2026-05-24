@@ -130,7 +130,18 @@ if [ "$WEB_READY" = "0" ]; then
 fi
 
 echo "=== e2e: playwright test ==="
+# Two reporters in one invocation:
+#   - junit emits an XML file dorny/test-reporter + EnricoMi can consume for
+#     inline failed-test annotations and PR-comment counts (Plan 0.8.3 follow-up)
+#   - json stays for the existing artefact archive path
+# Playwright's CLI takes --reporter as a comma-separated list and the
+# corresponding output paths via PLAYWRIGHT_JUNIT_OUTPUT_NAME + the json
+# reporter's --output=… argument.
 E2E_BASE_URL="http://host.docker.internal:${WEB_PORT}" \
-    pnpm --filter dwbhub-web exec playwright test --reporter=json --output="$RESULTS/traces" > "$RESULTS/playwright.json"
+PLAYWRIGHT_JUNIT_OUTPUT_NAME="$RESULTS/playwright.xml" \
+    pnpm --filter dwbhub-web exec playwright test \
+        --reporter=junit,json \
+        --output="$RESULTS/traces" \
+        > "$RESULTS/playwright.json"
 
 echo "=== e2e.sh: complete ==="
