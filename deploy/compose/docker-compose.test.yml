@@ -103,6 +103,12 @@ services:
       - ../..:/workspace:ro
       - ../../test-results:/results
       - /var/run/docker.sock:/var/run/docker.sock
+      # gen-openapi-client.ps1 invokes `pnpm --filter dwbhub-web exec openapi-typescript`,
+      # which auto-triggers `pnpm install` if node_modules look stale. The install needs
+      # writable node_modules — without these named-volume overlays it would target the
+      # :ro workspace bind and fail with exit 226. Same pattern as frontend-tests + e2e.
+      - openapi-nm-root:/workspace/node_modules
+      - openapi-nm-web:/workspace/web/node_modules
     tmpfs:
       # openapi-drift runs dotnet build inside verify-openapi.ps1 — same obj/bin tmpfs as backend-tests
       - /workspace/api/src/DwbHub.Api/obj
@@ -138,6 +144,8 @@ services:
       # need "host-gateway" (which resolves via extra_hosts above to the Docker host IP).
       # Setting GITHUB_ACTIONS=true activates the DinD code path without any ps1 changes.
       GITHUB_ACTIONS: "true"
+      # Redirect pnpm's content-addressable store out of /workspace (which is :ro).
+      pnpm_config_store_dir: /tmp/pnpm-store
     networks: [test-net]
     command: ["openapi"]
 
@@ -255,6 +263,10 @@ volumes:
   # shadow the :ro workspace bind at the two paths pnpm needs to write into.
   e2e-nm-root:
   e2e-nm-web:
+  # Overlay volumes for openapi-drift: same node_modules pattern for the
+  # `gen-openapi-client.ps1` step which runs pnpm exec openapi-typescript.
+  openapi-nm-root:
+  openapi-nm-web:
 
 secrets:
   discord_token:
