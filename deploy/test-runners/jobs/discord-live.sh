@@ -17,8 +17,12 @@
 #   * The token value is NEVER printed; only its character-length is logged.
 #   * Any literal occurrence of the token in dotnet test output is redacted with
 #     <REDACTED-TOKEN> by a sed pipe before it reaches stdout.
-#   * After the test run, a self-check greps /results/discord-live/ for the first
-#     12 chars of the token; any match is a leak — exit 2.
+#   * After the test run, a self-check greps /results/discord-live/ for the
+#     first 12 chars of the token AND the full guild-id snowflake; either
+#     appearing is a leak — exit 2.
+#   * Extracted values are trimmed of any trailing \r so that CRLF-corrupted
+#     secret files (Windows editors silently converting on save) don't slip
+#     a stray byte into Discord.Net's connection string or into the leak grep.
 
 set -e
 
@@ -37,8 +41,13 @@ if [ ! -f "$SECRET_FILE" ]; then
     exit 0
 fi
 
-BOT_TOKEN=$(awk -F= '/^DISCORD_DEV_BOT_TOKEN=/{print substr($0,index($0,"=")+1)}' "$SECRET_FILE")
-GUILD_ID=$(awk -F= '/^DISCORD_DEV_GUILD_ID=/{print substr($0,index($0,"=")+1)}' "$SECRET_FILE")
+# Pipe awk through `tr -d '\r'` so that a CRLF-corrupted secret file (Windows
+# editor silently re-saving with `\r\n`) doesn't bleed a trailing `\r` byte
+# into BOT_TOKEN/GUILD_ID — that would push token_len off by one and would
+# defeat the leak grep below (which would search for `<snowflake>\r` instead
+# of the bare snowflake stored in artifacts).
+BOT_TOKEN=$(awk -F= '/^DISCORD_DEV_BOT_TOKEN=/{print substr($0,index($0,"=")+1)}' "$SECRET_FILE" | tr -d '\r')
+GUILD_ID=$(awk -F= '/^DISCORD_DEV_GUILD_ID=/{print substr($0,index($0,"=")+1)}' "$SECRET_FILE" | tr -d '\r')
 
 if [ -z "$BOT_TOKEN" ] || [ -z "$GUILD_ID" ]; then
     echo "[discord-live] SKIPPED: DISCORD_DEV_BOT_TOKEN or DISCORD_DEV_GUILD_ID missing or empty in ${SECRET_FILE}"
