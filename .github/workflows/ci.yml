@@ -39,7 +39,7 @@ jobs:
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm backend-tests
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm backend-tests
       - name: Publish backend test results
         if: always()
         uses: dorny/test-reporter@v2
@@ -70,7 +70,7 @@ jobs:
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm frontend-tests
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm frontend-tests
       - name: Publish frontend test results
         if: always()
         uses: dorny/test-reporter@v2
@@ -98,7 +98,7 @@ jobs:
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm openapi-drift
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm openapi-drift
       - name: Upload test-results
         if: always()
         uses: actions/upload-artifact@v4
@@ -118,7 +118,7 @@ jobs:
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm sql-tenant-filter
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm sql-tenant-filter
       - name: Upload test-results
         if: always()
         uses: actions/upload-artifact@v4
@@ -137,7 +137,7 @@ jobs:
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm security
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm security
       - name: Upload Trivy SARIF to Code Scanning
         if: always()
         uses: github/codeql-action/upload-sarif@v3
@@ -163,7 +163,7 @@ jobs:
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm container-smoke
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm container-smoke
       - name: Upload test-results
         if: always()
         uses: actions/upload-artifact@v4
@@ -186,7 +186,7 @@ jobs:
       - name: Run via docker compose
         env:
           HOST_REPO_ROOT: ${{ github.workspace }}
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm e2e-tests
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm e2e-tests
       - name: Upload test-results
         if: always()
         uses: actions/upload-artifact@v4
@@ -221,7 +221,7 @@ jobs:
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Run via docker compose
-        run: docker compose -f deploy/compose/docker-compose.test.yml run --rm discord-live-tests
+        run: docker compose -f deploy/compose/docker-compose.test.yml run --build --rm discord-live-tests
       - name: Cleanup discord.dev.env
         if: always()
         shell: bash
