@@ -240,17 +240,20 @@ jobs:
     runs-on: [self-hosted, linux, dotnet10]
     timeout-minutes: 5
     steps:
-      - uses: actions/download-artifact@v7
-        with:
-          # All upload-artifact calls in the other jobs use names ending in
-          # -results (backend-tests-results, frontend-tests-results, etc).
-          # The `pattern: '*-results'` form downloads every artifact whose
-          # name matches the glob; merge-multiple: false keeps each artifact
-          # in its own subdirectory under ./test-results/<name>/.
-          path: test-results/
-          pattern: '*-results'
-          merge-multiple: false
+      - name: Stage shared results for EnricoMi
+        run: |
+          # Plan 0.8.5: read test results from the host-shared path each
+          # test-producing job wrote to. No download-artifact — nothing was uploaded.
+          SHARED="$(realpath ${{ github.workspace }}/..)/shared-results/${{ github.run_id }}"
+          echo "SHARED_RESULTS=$SHARED" >> $GITHUB_ENV
+          if [ -d "$SHARED" ]; then
+              echo "shared-results contents:"
+              find "$SHARED" -maxdepth 2 -type f \( -name '*.trx' -o -name '*.xml' \) | head -30
+          else
+              echo "(no shared-results dir — all upstream jobs may have failed before writing)"
+          fi
       - name: Publish consolidated test summary
+        if: always()
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
           # File patterns by source job:
@@ -258,16 +261,30 @@ jobs:
           #                  + discord-live-tests (when it runs on PR->main)
           #   vitest.xml     frontend-tests (Vitest JUnit reporter)
           #   playwright.xml e2e-tests (Playwright JUnit reporter, PR->main)
-          # EnricoMi auto-detects the format per file. Artifacts that aren't
-          # present (e.g. e2e/discord on PR->develop where those jobs skip)
-          # are silently ignored, so the same glob covers both PR targets.
+          # EnricoMi auto-detects the format per file. Jobs that didn't write
+          # results (e.g. e2e/discord on PR->develop where those jobs skip)
+          # are silently ignored — the same glob covers both PR targets.
           files: |
-            test-results/**/*.trx
-            test-results/**/vitest.xml
-            test-results/**/playwright.xml
+            ${{ env.SHARED_RESULTS }}/**/*.trx
+            ${{ env.SHARED_RESULTS }}/**/vitest.xml
+            ${{ env.SHARED_RESULTS }}/**/playwright.xml
           check_name: "Test Results"
           # 'always' creates the sticky comment on first run and UPDATES it
           # on every subsequent run of the same PR — one comment per PR,
           # never spam.
           comment_mode: always
           report_individual_runs: true
+      - name: Cleanup shared-results host path
+        if: always()
+        run: |
+          SHARED="$(realpath ${{ github.workspace }}/..)/shared-results/${{ github.run_id }}"
+          if [ -d "$SHARED" ]; then
+              rm -rf "$SHARED"
+              echo "Cleaned up: $SHARED"
+          fi
+          # Opportunistically clean any orphan shared-results dirs older than
+          # 24 hours (catches workflows that aborted before reaching summary).
+          PARENT="$(realpath ${{ github.workspace }}/..)/shared-results"
+          if [ -d "$PARENT" ]; then
+              find "$PARENT" -mindepth 1 -maxdepth 1 -type d -mtime +1 -exec rm -rf {} \; 2>/dev/null || true
+          fi
