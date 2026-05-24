@@ -18,6 +18,7 @@ permissions:
   contents: read
   checks: write          # required by dorny/test-reporter (Tasks 5, 6)
   security-events: write # required by github/codeql-action/upload-sarif (Task 7)
+  pull-requests: write   # required by EnricoMi/publish-unit-test-result-action sticky comment (Task 8)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
@@ -233,3 +234,35 @@ jobs:
           path: test-results/discord-live/
           retention-days: 7
           if-no-files-found: warn
+
+  summary:
+    name: PR test summary
+    needs: [security, sql-tenant-filter, openapi-drift, backend-tests, frontend-tests, container-smoke]
+    if: always()
+    runs-on: [self-hosted, linux, dotnet10]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          # All upload-artifact calls in the other jobs use names ending in
+          # -results (backend-tests-results, frontend-tests-results, etc).
+          # The `pattern: '*-results'` form downloads every artifact whose
+          # name matches the glob; merge-multiple: false keeps each artifact
+          # in its own subdirectory under ./test-results/<name>/.
+          path: test-results/
+          pattern: '*-results'
+          merge-multiple: false
+      - name: Publish consolidated test summary
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          # Both globs intentional: TRX from backend, JUnit XML from frontend.
+          # EnricoMi auto-detects the format per file.
+          files: |
+            test-results/**/*.trx
+            test-results/**/vitest.xml
+          check_name: "Test Results"
+          # 'always' creates the sticky comment on first run and UPDATES it
+          # on every subsequent run of the same PR — one comment per PR,
+          # never spam.
+          comment_mode: always
+          report_individual_runs: true
