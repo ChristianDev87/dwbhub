@@ -95,3 +95,22 @@ README.md
 CONTRIBUTING.md
 CHANGELOG.md
 CODE_OF_CONDUCT.md
+
+# --- Stale tsc shadow files (recurring issue across Plan 0.8.1, 0.8.3, 0.8.4) ---
+# `tsc -b` or IDE-triggered compilation can emit .js next to .tsx/.ts sources.
+# Vite + Playwright + Vitest module resolution prefers .js when both exist, so
+# stale compiled output silently overrides edits to the source. Block at the
+# .gitignore layer; prep-workspace.sh additionally fails CI if any sneak in.
+web/src/**/*.js
+web/src/**/*.d.ts
+web/tests/**/*.js
+web/tests/**/*.d.ts
+# Whitelist legitimate exceptions:
+!web/src/lib/api/generated/schema.d.ts
+!web/src/vite-env.d.ts
+!web/eslint.config.js
+!web/postcss.config.js
+!web/prettier.config.js
+!web/vite.config.ts
+!web/playwright.config.ts
+!web/vitest.config.ts

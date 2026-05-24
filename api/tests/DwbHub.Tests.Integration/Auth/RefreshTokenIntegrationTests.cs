@@ -206,6 +206,43 @@ public sealed class RefreshTokenIntegrationTests : IAsyncLifetime
         unrevokedCount.Should().Be(0);
     }
 
+    /// <summary>
+    /// Spec §2.3 reuse-detection invariant: re-presenting a consumed token must both
+    /// fail AND revoke the entire forward chain.  This test asserts the service-level
+    /// outcome when the successor token (tokenB) is presented AFTER the chain was
+    /// revoked by a replay of the predecessor (tokenA).
+    ///
+    /// Attack sequence reproduced:
+    ///   1. Issue tokenA (legitimate login).
+    ///   2. refresh(tokenA) → succeeds, produces tokenB.  tokenA is now consumed.
+    ///   3. refresh(tokenA) again → ChainCompromised; service marks the whole family revoked.
+    ///   4. refresh(tokenB) → must also fail because the chain revocation in step 3
+    ///      set revoked_at on tokenB.
+    /// </summary>
+    [Fact]
+    public async Task Refresh_reuse_of_tokenA_invalidates_tokenB_which_also_fails()
+    {
+        var (tenant, user) = await SeedAsync();
+
+        // Step 1: issue initial token (tokenA).
+        var tokenA = await IssueTokenAsync(tenant, user);
+
+        // Step 2: first rotation — legitimate use; succeeds, produces tokenB.
+        var firstOutcome = await _sut.RefreshAsync(tokenA, TestIp, "test-ua");
+        firstOutcome.Should().BeOfType<RefreshOutcome.Success>("first use of tokenA must succeed");
+        var tokenB = ((RefreshOutcome.Success)firstOutcome).RefreshToken;
+
+        // Step 3: replay tokenA — must fail with ChainCompromised and revoke the family.
+        var replayOutcome = await _sut.RefreshAsync(tokenA, TestIp, "attacker-ua");
+        replayOutcome.Should().BeOfType<RefreshOutcome.ChainCompromised>(
+            "replaying a consumed token signals token theft; the whole family must be revoked");
+
+        // Step 4: tokenB was part of the revoked chain — presenting it must also fail.
+        var tokenBOutcome = await _sut.RefreshAsync(tokenB, TestIp, "test-ua");
+        tokenBOutcome.Should().BeOfType<RefreshOutcome.ChainCompromised>(
+            "tokenB was revoked as part of the family; the legitimate holder must be forced to re-login");
+    }
+
     [Fact]
     public async Task Logout_revokes_current_token_returns_no_throw()
     {

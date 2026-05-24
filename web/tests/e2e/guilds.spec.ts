@@ -1,26 +1,20 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { ensureSetupCompleted, SETUP_DEFAULTS } from "./helpers/bootstrap";
 
-const SLUG = "acme";
-const OWNER_EMAIL = "owner@acme.test";
-const OWNER_PASSWORD = "correct horse battery staple";
-
-async function setupReady(request: APIRequestContext): Promise<boolean> {
-  const statusRes = await request.get("/api/setup/status");
-  const status = (await statusRes.json()) as { completed: boolean };
-  return status.completed;
-}
+const {
+  tenantSlug: SLUG,
+  ownerEmail: OWNER_EMAIL,
+  ownerPassword: OWNER_PASSWORD,
+} = SETUP_DEFAULTS;
 
 test.describe("Plan 0.6 guilds flow", () => {
+  test.beforeAll(async ({ request }) => {
+    await ensureSetupCompleted(request);
+  });
+
   test("login → guilds page → add → see in list → delete → empty", async ({
     page,
-    request,
   }) => {
-    const ok = await setupReady(request);
-    test.skip(
-      !ok,
-      "Setup not pre-completed (skip — same convention as auth.spec.ts)",
-    );
-
     await page.goto("/login");
     await page.fill('[data-testid="input-tenantSlug"]', SLUG);
     await page.fill('[data-testid="input-email"]', OWNER_EMAIL);
@@ -31,7 +25,12 @@ test.describe("Plan 0.6 guilds flow", () => {
     await page.goto(`/t/${SLUG}/guilds`);
     await expect(page.getByTestId("input-discord-guild-id")).toBeVisible();
 
-    const discordId = "1234567890123456789";
+    // Use a unique Discord snowflake to avoid a 409 conflict when another
+    // spec (e.g. bot-credentials) has registered a fixed ID and its cleanup
+    // did not finish before this test runs.
+    const discordId = String(
+      BigInt(Date.now()) * 10000n + BigInt(Math.floor(Math.random() * 10000)),
+    );
     await page.fill('[data-testid="input-discord-guild-id"]', discordId);
     await page.fill(
       '[data-testid="input-guild-display-name"]',
@@ -40,21 +39,21 @@ test.describe("Plan 0.6 guilds flow", () => {
     await page.click('[data-testid="add-guild-submit"]');
     await expect(page.getByText("E2E Test Server")).toBeVisible();
 
-    await page.click('[data-testid="delete-guild-button"]');
+    const row = page
+      .locator("li")
+      .filter({ hasText: "E2E Test Server" })
+      .first();
+    await row.locator('[data-testid="delete-guild-button"]').click();
     await expect(page.getByTestId("delete-confirm-yes")).toBeVisible();
     await page.click('[data-testid="delete-confirm-yes"]');
-    await expect(page.getByText("E2E Test Server")).not.toBeVisible({
+    await expect(
+      page.getByText("E2E Test Server", { exact: true }),
+    ).not.toBeVisible({
       timeout: 5_000,
     });
   });
 
-  test("guarded /guilds without auth redirects to /login", async ({
-    page,
-    request,
-  }) => {
-    const ok = await setupReady(request);
-    test.skip(!ok, "Setup not pre-completed");
-
+  test("guarded /guilds without auth redirects to /login", async ({ page }) => {
     await page.goto(`/t/${SLUG}/guilds`);
     await page.waitForURL("**/login", { timeout: 15_000 });
   });

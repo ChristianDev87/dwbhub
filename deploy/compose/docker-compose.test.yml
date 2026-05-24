@@ -200,6 +200,11 @@ services:
       # so node binary postinstall scripts (esbuild, rollup, etc.) can run.
       - e2e-nm-root:/workspace/node_modules
       - e2e-nm-web:/workspace/web/node_modules
+      # Read-only mount of the api-data volume so Playwright helpers can read the
+      # bootstrap token written by BootstrapTokenProvisioner on first api boot.
+      # Path inside this container: /api-bootstrap-ro/bootstrap-token.txt
+      # (mirrors the api container's /data/dwbhub/bootstrap-token.txt).
+      - api-data:/api-bootstrap-ro:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -267,6 +272,13 @@ volumes:
   # `gen-openapi-client.ps1` step which runs pnpm exec openapi-typescript.
   openapi-nm-root:
   openapi-nm-web:
+  # api-data is declared and owned by docker-compose.yml (the dev/prod base stack,
+  # project name "dwbhub"). Docker names it "dwbhub_api-data". Declared external
+  # here so docker-compose.test.yml can reference it for the e2e-tests read-only
+  # mount without recreating or owning it.
+  api-data:
+    external: true
+    name: dwbhub_api-data
 
 secrets:
   discord_token:
