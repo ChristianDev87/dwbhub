@@ -129,6 +129,14 @@ test.describe("Plan 1.0 channels page", () => {
     // progress-badge visibility window. FakeDiscordRestChannelClient finishes
     // the backfill in <5s (no network IO) so the badge may never become visible
     // before the status transitions to "complete".
+    //
+    // fetchedCount note: this test runs once per browser. On the FIRST run we
+    // expect 200 (FakeDiscord scripts 50+50+100 = 200 messages). On the SECOND
+    // run (other browser, same dev stack) the messages table already contains
+    // those snowflakes, so MessageRepository.InsertAsync hits ON CONFLICT DO
+    // NOTHING for every row and fetchedCount = 0. Both are correct — we assert
+    // status reaches "complete" and that fetchedCount is either 200 (fresh run)
+    // OR 0 (idempotent re-run); never some partial in-between value.
     const accessToken = await apiLogin(request);
     const authHeader = { Authorization: `Bearer ${accessToken}` };
     const deadline = Date.now() + 30_000;
@@ -144,7 +152,7 @@ test.describe("Plan 1.0 channels page", () => {
           status: { status: string; fetchedCount: number };
         };
         if (body.status?.status === "complete") {
-          expect(body.status.fetchedCount).toBe(200);
+          expect([0, 200]).toContain(body.status.fetchedCount);
           completed = true;
           break;
         }

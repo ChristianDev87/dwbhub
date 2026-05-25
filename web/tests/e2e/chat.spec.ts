@@ -108,6 +108,14 @@ async function setupBridgedChannel(
     timeout: 15_000,
   });
 
+  // Wait for SignalR connection to enter Connected state — without this,
+  // live broadcasts (edit/delete/inject) might fire during the connect gap
+  // and be dropped silently. See useMessagesHub for the StrictMode-safe
+  // lifecycle pattern.
+  await expect(
+    page.locator('[data-signalr-state="Connected"]').first(),
+  ).toBeVisible({ timeout: 15_000 });
+
   return { channelPublicId: firstTextChannelPublicId, accessToken, authHeader };
 }
 
@@ -284,10 +292,16 @@ test.describe("Plan 1.0 chat page", () => {
       msgRow.first().locator('[data-testid="message-pending"]'),
     ).toHaveCount(0, { timeout: 15_000 });
 
-    // Extract the message row testid to get its ID
+    // Extract the message row testid to get its ID. Capture a STABLE testid-based
+    // locator here BEFORE the edit fires — after the edit the row's hasText no
+    // longer contains `uniqueContent` (server-pushed MessageUpdated replaces
+    // m.content with the new value), so a hasText-filter would stop matching
+    // and Playwright would report "element(s) not found".
     const testId = await msgRow.first().getAttribute("data-testid");
     const messageId = testId?.replace("message-row-", "");
-    if (!messageId) throw new Error("Could not extract message ID from testid");
+    if (!testId || !messageId)
+      throw new Error("Could not extract message ID from testid");
+    const stableRow = page.locator(`[data-testid="${testId}"]`);
 
     // Inject edit via test-only endpoint
     const editedContent = `edited-${Date.now()}`;
@@ -301,10 +315,15 @@ test.describe("Plan 1.0 chat page", () => {
     // 204 = success; 404 = test mode not active (env-var not set)
     expect(editRes.status()).toBe(204);
 
-    // "(edited)" indicator should appear
+    // "(edited)" indicator should appear on the SAME row (located by stable testid).
     await expect(
-      msgRow.first().locator('[data-testid="message-edited"]'),
+      stableRow.locator('[data-testid="message-edited"]'),
     ).toBeVisible({ timeout: 10_000 });
+    // Content should reflect the new value.
+    await expect(stableRow.locator('[data-testid="message-content"]')).toContainText(
+      editedContent,
+      { timeout: 5_000 },
+    );
   });
 
   // ── Test 7: deleted Discord message shows [deleted] placeholder ───────────
@@ -331,9 +350,14 @@ test.describe("Plan 1.0 chat page", () => {
       msgRow.first().locator('[data-testid="message-pending"]'),
     ).toHaveCount(0, { timeout: 15_000 });
 
+    // Capture STABLE testid-based locator BEFORE delete — after the delete the
+    // row's content is replaced with the localized deleted-placeholder so a
+    // hasText-filter on `uniqueContent` would stop matching.
     const testId = await msgRow.first().getAttribute("data-testid");
     const messageId = testId?.replace("message-row-", "");
-    if (!messageId) throw new Error("Could not extract message ID from testid");
+    if (!testId || !messageId)
+      throw new Error("Could not extract message ID from testid");
+    const stableRow = page.locator(`[data-testid="${testId}"]`);
 
     const deleteRes = await request.post(
       `/api/t/${SLUG}/test-only/messages/${messageId}/delete`,
@@ -343,9 +367,10 @@ test.describe("Plan 1.0 chat page", () => {
 
     // Message content should be replaced by the deleted placeholder
     // MessageRow renders t("chat.deleted") when isDeleted=true.
-    // We check for the message-content testid to have changed to the deleted text.
-    const content = msgRow.first().locator('[data-testid="message-content"]');
-    // The deleted text varies by locale; check it no longer shows original content
+    // Locate the row by its stable testid (NOT by hasText, because the content
+    // has changed by now).
+    const content = stableRow.locator('[data-testid="message-content"]');
+    // The deleted text varies by locale; check it no longer shows original content.
     await expect(content).not.toContainText(uniqueContent, { timeout: 10_000 });
   });
 
@@ -407,16 +432,33 @@ test.describe("Plan 1.0 chat page", () => {
     const msgRows = page.locator('[data-testid^="message-row-"]');
     await expect(msgRows.first()).toBeVisible({ timeout: 10_000 });
 
-    // Scroll up (away from bottom) to trigger "not at bottom" state
-    const scroller = page.locator(".virtuoso-scroller").first();
-    if ((await scroller.count()) > 0) {
-      await scroller.evaluate((el) => {
-        el.scrollTop = 0;
-      });
-    }
-    await new Promise((r) => setTimeout(r, 500));
+    // Scroll up away from bottom. react-virtuoso v4 doesn't expose a stable
+    // CSS class for its scroller — the previous `.virtuoso-scroller` selector
+    // matched nothing in v4. Two robust alternatives:
+    //   1. scrollIntoViewIfNeeded() on the oldest visible row — fires real
+    //      scroll events that virtuoso's IntersectionObserver picks up
+    //   2. Find virtuoso's actual scroller via [data-virtuoso-scroller]
+    // (1) is simpler and doesn't depend on virtuoso internals.
+    await msgRows.first().scrollIntoViewIfNeeded();
 
-    // Record scroll position before injecting new message
+    // Reinforce: dispatch real wheel events upward in the message-list area
+    // so virtuoso's atBottomStateChange definitely fires with atBottom=false.
+    const listBox = await msgRows.first().boundingBox();
+    if (listBox) {
+      await page.mouse.move(listBox.x + listBox.width / 2, listBox.y + 50);
+      for (let i = 0; i < 3; i++) {
+        await page.mouse.wheel(0, -800);
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+    // Generous settle window — IntersectionObserver callbacks are batched and
+    // react-virtuoso's atBottomStateChange usually fires within 200-500 ms,
+    // but Playwright's headless browsers (especially Firefox) can be slower.
+    await new Promise((r) => setTimeout(r, 2_000));
+
+    // Capture scroll position via the actual virtuoso scroller (data-attribute
+    // is stable across v4 minor versions; fall back to first row's offsetParent).
+    const scroller = page.locator("[data-virtuoso-scroller], [data-test-id='virtuoso-item-list']").first();
     let scrollBefore = 0;
     if ((await scroller.count()) > 0) {
       scrollBefore = await scroller.evaluate((el) => el.scrollTop);
@@ -443,7 +485,8 @@ test.describe("Plan 1.0 chat page", () => {
         timeout: 8_000,
       });
 
-      // Scroll position should be roughly preserved (within 100px)
+      // Scroll position should be roughly preserved (within 100px) — only check
+      // if we could locate the scroller in the first place.
       if ((await scroller.count()) > 0) {
         const scrollAfter = await scroller.evaluate((el) => el.scrollTop);
         expect(Math.abs(scrollAfter - scrollBefore)).toBeLessThan(100);

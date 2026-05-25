@@ -78,6 +78,35 @@ public sealed class ChannelBackfillJobRepositoryTests : IAsyncLifetime
         job.CompletedAt.Should().BeNull();
     }
 
+    [Fact]
+    public async Task InsertPending_OnExistingJobForChannel_ResetsStateInPlace()
+    {
+        // Regression: previously InsertPendingAsync used a plain INSERT and
+        // threw on the UNIQUE(channel_id) constraint when a channel was
+        // re-bridged after a prior bridge cycle. The fix is UPSERT: the row
+        // for the channel is reused and all progress fields are cleared.
+        var (tid, _, _, cid) = await SeedAsync();
+
+        var first = await _sut.InsertPendingAsync(tid, cid);
+        // Simulate a completed prior backfill
+        await _sut.MarkRunningAsync(tid, first.Id);
+        await _sut.AdvanceCursorAsync(tid, first.Id, oldestSnowflake: 12345L, fetchedCount: 7);
+        await _sut.MarkCompleteAsync(tid, first.Id, finalCount: 7);
+
+        // Re-bridge: InsertPendingAsync must NOT throw, and the existing row
+        // must be reset to pending with cleared progress fields.
+        var second = await _sut.InsertPendingAsync(tid, cid);
+
+        second.Id.Should().Be(first.Id, "the upsert must reuse the existing row");
+        second.Status.Should().Be(BackfillStatus.Pending);
+        second.FetchedCount.Should().Be(0);
+        second.OldestFetchedSnowflake.Should().BeNull();
+        second.StartedAt.Should().BeNull();
+        second.CompletedAt.Should().BeNull();
+        second.HangfireJobId.Should().BeNull();
+        second.LastError.Should().BeNull();
+    }
+
     // ── GetByChannelAsync ──────────────────────────────────────────────────────
 
     [Fact]

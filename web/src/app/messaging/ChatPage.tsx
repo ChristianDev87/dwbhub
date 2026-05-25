@@ -41,6 +41,7 @@ export function ChatPage(): React.JSX.Element {
     isSending,
     sendError,
     newCount,
+    hubState,
     loadOlder,
     sendMessage,
     markAtBottom,
@@ -83,7 +84,10 @@ export function ChatPage(): React.JSX.Element {
   }
 
   return (
-    <div className="flex flex-col h-screen max-w-3xl mx-auto">
+    <div
+      className="flex flex-col h-screen max-w-3xl mx-auto"
+      data-signalr-state={hubState.toString()}
+    >
       {/* Header */}
       <header className="p-4 border-b border-gray-200 flex items-center gap-3 shrink-0">
         <BackLink slug={slug ?? ""} t={t} />

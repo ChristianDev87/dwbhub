@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { type HubConnectionState } from "@microsoft/signalr";
 import { useAuth } from "../auth-context";
 import { useMessagesHub } from "./useMessagesHub";
 import type { MessageEvent } from "./messages-events";
@@ -68,6 +69,8 @@ export interface UseChannelResult {
   isSending: boolean;
   sendError: string | null;
   newCount: number;
+  /** Current SignalR hub connection state. Used by ChatPage for data-signalr-state. */
+  hubState: HubConnectionState;
   loadOlder: () => void;
   sendMessage: (content: string) => Promise<void>;
   markAtBottom: (atBottom: boolean) => void;
@@ -318,7 +321,7 @@ export function useChannel(
     [channelPublicId],
   );
 
-  useMessagesHub(hubHandler);
+  const hubState = useMessagesHub(hubHandler);
 
   // ---------------------------------------------------------------------------
   // Send message
@@ -409,6 +412,7 @@ export function useChannel(
     isSending,
     sendError,
     newCount,
+    hubState,
     loadOlder,
     sendMessage,
     markAtBottom,

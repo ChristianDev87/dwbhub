@@ -4,10 +4,16 @@
  * Usage:
  *   const hubState = useMessagesHub(handler);
  *
- * IMPORTANT: `handler` must be wrapped in `useCallback` by the caller.
- * The hook's useEffect depends on [accessToken, handler], so an unstable
- * (non-memoised) handler reference will cause the connection to tear down
- * and reconnect on every render.
+ * StrictMode-safe + handler-stable:
+ *  - The connection is created ONCE per accessToken via a cancellation flag,
+ *    so StrictMode's double-mount tears down + rebuilds the SAME connection
+ *    slot instead of racing.
+ *  - The `handler` is held in a ref so the connection is NOT recreated when
+ *    the caller passes a new handler reference (e.g. inline arrow). Callers
+ *    no longer need to `useCallback` defensively.
+ *  - The returned `connState` is `HubConnectionState.Connected` only after
+ *    `conn.start()` has resolved. Callers that need to gate sends on a live
+ *    connection can check this value.
  *
  * Multi-tenant isolation: the tenant group is assigned server-side from the
  * JWT claim — clients cannot subscribe to other tenants' broadcasts.
@@ -35,8 +41,9 @@ export type { MessageEvent };
  * Returns the current `HubConnectionState` for UI feedback (e.g. a
  * "Reconnecting…" banner when the state is `Reconnecting`).
  *
- * @param handler - Stable callback (wrap in `useCallback`!) invoked for
- *   every received hub event.
+ * @param handler - Callback invoked for every received hub event. A ref
+ *   is used internally, so callers do NOT need to `useCallback` to prevent
+ *   spurious reconnects.
  */
 export function useMessagesHub(
   handler: (evt: MessageEvent) => void,
@@ -47,68 +54,89 @@ export function useMessagesHub(
   const [connState, setConnState] = useState<HubConnectionState>(
     HubConnectionState.Disconnected,
   );
-  const connRef = useRef<HubConnection | null>(null);
+
+  // Latest-handler ref: caller can pass a fresh closure every render without
+  // forcing a reconnect.
+  const handlerRef = useRef(handler);
+  useEffect(() => {
+    handlerRef.current = handler;
+  }, [handler]);
 
   useEffect(() => {
-    if (!accessToken) return;
+    if (!accessToken) {
+      setConnState(HubConnectionState.Disconnected);
+      return;
+    }
 
-    const conn = new HubConnectionBuilder()
+    // Cancellation flag — set true in the effect cleanup so the async start()
+    // promise can detect that we were unmounted before connection finished
+    // and refrain from stale-setState.
+    let cancelled = false;
+
+    const conn: HubConnection = new HubConnectionBuilder()
       .withUrl("/api/hubs/messages", {
-        accessTokenFactory: () => {
-          // accessTokenFactory captures the token at connection-build time. A new token
-          // from AuthContext causes this effect to re-run (see dep array below) and
-          // rebuild the connection with the fresh token. The factory itself is NOT
-          // re-read on every call.
-          return accessToken;
-        },
+        accessTokenFactory: () => accessToken,
       })
       .withAutomaticReconnect([0, 2000, 10000, 30000, 30000])
       .configureLogging(LogLevel.Warning)
       .build();
 
+    // Use handlerRef so a re-rendered caller doesn't recreate the connection.
     conn.on("MessageReceived", (payload) =>
-      handler({ kind: "MessageReceived", payload }),
+      handlerRef.current({ kind: "MessageReceived", payload }),
     );
     conn.on("MessageUpdated", (payload) =>
-      handler({ kind: "MessageUpdated", payload }),
+      handlerRef.current({ kind: "MessageUpdated", payload }),
     );
     conn.on("MessageDeleted", (payload) =>
-      handler({ kind: "MessageDeleted", payload }),
+      handlerRef.current({ kind: "MessageDeleted", payload }),
     );
     conn.on("BackfillProgress", (payload) =>
-      handler({ kind: "BackfillProgress", payload }),
+      handlerRef.current({ kind: "BackfillProgress", payload }),
     );
     conn.on("BackfillComplete", (payload) =>
-      handler({ kind: "BackfillComplete", payload }),
+      handlerRef.current({ kind: "BackfillComplete", payload }),
     );
     conn.on("ChannelBridgeChanged", (payload) =>
-      handler({ kind: "ChannelBridgeChanged", payload }),
+      handlerRef.current({ kind: "ChannelBridgeChanged", payload }),
     );
 
-    conn.onreconnecting(() => setConnState(HubConnectionState.Reconnecting));
-    conn.onreconnected(() => setConnState(HubConnectionState.Connected));
-    conn.onclose(() => setConnState(HubConnectionState.Disconnected));
+    conn.onreconnecting(() => {
+      if (!cancelled) setConnState(HubConnectionState.Reconnecting);
+    });
+    conn.onreconnected(() => {
+      if (!cancelled) setConnState(HubConnectionState.Connected);
+    });
+    conn.onclose(() => {
+      if (!cancelled) setConnState(HubConnectionState.Disconnected);
+    });
 
-    connRef.current = conn;
     setConnState(HubConnectionState.Connecting);
 
     conn
       .start()
       .then(() => {
+        if (cancelled) {
+          // We were unmounted before start finished — stop immediately so we
+          // don't leak a half-open connection and don't push stale state.
+          void conn.stop().catch(() => {});
+          return;
+        }
         setConnState(HubConnectionState.Connected);
       })
       .catch((err: unknown) => {
+        if (cancelled) return;
         console.error("SignalR connect failed", err);
         setConnState(HubConnectionState.Disconnected);
       });
 
     return () => {
-      connRef.current = null;
-      conn.stop().catch(() => {
+      cancelled = true;
+      void conn.stop().catch(() => {
         // intentional: ignore stop errors during cleanup
       });
     };
-  }, [accessToken, handler]);
+  }, [accessToken]); // ← handler intentionally OMITTED — captured via ref
 
   return connState;
 }
