@@ -136,6 +136,19 @@
     "toggleError": "Brücke konnte nicht aktualisiert werden ({{code}}). Bitte erneut versuchen.",
     "guildsLink": "Kanäle →"
   },
+  "chat": {
+    "back": "← Zurück",
+    "deleted": "[gelöscht]",
+    "edited": "bearbeitet",
+    "empty": "Noch keine Nachrichten.",
+    "errorLoad": "Chat konnte nicht geladen werden.",
+    "errorSend": "Senden fehlgeschlagen. Erneut versuchen.",
+    "newMessages": "{{count}} neu",
+    "placeholder": "Nachricht eingeben…",
+    "send": "Senden",
+    "sending": "wird gesendet…",
+    "you": "Du"
+  },
   "botCredentials": {
     "configured": "Bot-Token konfiguriert",
     "notConfigured": "Bot-Token nicht konfiguriert",

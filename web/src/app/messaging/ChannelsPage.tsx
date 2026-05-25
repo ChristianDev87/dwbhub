@@ -108,6 +108,7 @@ export function ChannelsPage(): React.JSX.Element {
               {isText && c.isBridged && (
                 <Link
                   to={`/t/${slug ?? ""}/channels/${c.publicId}`}
+                  state={{ channelName: c.name }}
                   data-testid={`channel-open-chat-${c.publicId}`}
                   className="text-sm text-blue-600 hover:underline"
                 >

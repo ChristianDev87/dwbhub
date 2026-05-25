@@ -10,6 +10,7 @@ import { DashboardPage } from "./DashboardPage";
 import { GuildsPage } from "./GuildsPage";
 import { AuthGuard } from "./AuthGuard";
 import { ChannelsPage } from "./messaging/ChannelsPage";
+import { ChatPage } from "./messaging/ChatPage";
 
 export function AppRouter(): React.JSX.Element {
   return (
@@ -47,14 +48,11 @@ export function AppRouter(): React.JSX.Element {
           </AuthGuard>
         }
       />
-      {/* Task 13: ChatPage placeholder route */}
       <Route
         path="/t/:slug/channels/:channelPublicId"
         element={
           <AuthGuard>
-            <div className="p-8 text-gray-500">
-              Chat — coming soon (Task 13)
-            </div>
+            <ChatPage />
           </AuthGuard>
         }
       />

@@ -136,6 +136,19 @@
     "toggleError": "Could not update bridge ({{code}}). Please try again.",
     "guildsLink": "Channels →"
   },
+  "chat": {
+    "back": "← Back",
+    "deleted": "[deleted]",
+    "edited": "edited",
+    "empty": "No messages yet.",
+    "errorLoad": "Failed to load chat.",
+    "errorSend": "Failed to send. Try again.",
+    "newMessages": "{{count}} new",
+    "placeholder": "Type a message…",
+    "send": "Send",
+    "sending": "sending…",
+    "you": "You"
+  },
   "botCredentials": {
     "configured": "Bot token configured",
     "notConfigured": "Bot token not configured",
