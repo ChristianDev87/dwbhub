@@ -242,6 +242,36 @@ builder.Services.AddSignalR(opts =>
 builder.Services.AddSingleton<DwbHub.Application.Messaging.IMessagesBroadcaster,
                               DwbHub.Api.Messaging.SignalRMessagesBroadcaster>();
 
+// --- Plan 1.0 Messaging services ----------------------------------------
+// IChannelWebhookCipher reuses DWBHUB_ENCRYPTION_KEY (same key already
+// required for IBotTokenEncryptor above — one master key, two ciphers).
+builder.Services.AddSingleton<DwbHub.Application.Messaging.IChannelWebhookCipher>(
+    new DwbHub.Infrastructure.Messaging.AesGcmChannelWebhookCipher(encryptionKey));
+
+builder.Services.AddScoped<DwbHub.Core.Repositories.IMessageRepository,
+                           DwbHub.Data.Repositories.MessageRepository>();
+builder.Services.AddScoped<DwbHub.Core.Repositories.IGuildChannelRepository,
+                           DwbHub.Data.Repositories.GuildChannelRepository>();
+builder.Services.AddScoped<DwbHub.Core.Repositories.IChannelWebhookRepository,
+                           DwbHub.Data.Repositories.ChannelWebhookRepository>();
+builder.Services.AddScoped<DwbHub.Core.Repositories.IChannelBackfillJobRepository,
+                           DwbHub.Data.Repositories.ChannelBackfillJobRepository>();
+
+builder.Services.AddScoped<DwbHub.Application.Messaging.IMessageService,
+                           DwbHub.Application.Messaging.MessageService>();
+builder.Services.AddScoped<DwbHub.Application.Messaging.IChannelSyncService,
+                           DwbHub.Application.Messaging.ChannelSyncService>();
+builder.Services.AddScoped<DwbHub.Application.Messaging.IChannelWebhookService,
+                           DwbHub.Application.Messaging.ChannelWebhookService>();
+builder.Services.AddScoped<DwbHub.Application.Messaging.IBackfillRunner,
+                           DwbHub.Application.Messaging.BackfillRunner>();
+
+// DiscordRestChannelClient needs an HttpClient for the webhook-execute path.
+// AddHttpClient<TInterface, TImplementation> registers both the typed client
+// and the IHttpClientFactory binding so DI can resolve the concrete ctor.
+builder.Services.AddHttpClient<DwbHub.Application.Messaging.IDiscordRestChannelClient,
+                               DwbHub.Infrastructure.Messaging.DiscordRestChannelClient>();
+
 // JWT bearer for SignalR: the SignalR client sends the access token as
 // ?access_token=... in the WebSocket/LongPolling upgrade URL. We must extract it
 // from the query string for /api/hubs/* paths ONLY — other paths are unaffected.
