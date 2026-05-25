@@ -5,7 +5,9 @@
  *   - Initial fetch of message history (newest-first, then reversed for display)
  *   - Lazy-load of older pages via loadOlder()
  *   - Live SignalR events: MessageReceived, MessageUpdated, MessageDeleted
- *   - Optimistic send with echo deduplication by discordMessageId
+ *   - Optimistic send with echo deduplication by discordMessageId; falls back
+ *     to content+authorName match when the POST has not yet resolved (race
+ *     case: server broadcasts before the HTTP response reaches the client)
  *
  * AbortController is used on all fetches so that stale responses from
  * StrictMode double-mounts are discarded before they can call setState.
@@ -80,6 +82,8 @@ export function useChannel(
 ): UseChannelResult {
   const { state } = useAuth();
   const accessToken = state.kind === "authenticated" ? state.accessToken : null;
+  const displayName =
+    state.kind === "authenticated" ? state.user.displayName : "";
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -229,13 +233,25 @@ export function useChannel(
         if (p.channelPublicId !== channelPublicId) return;
 
         setMessages((prev) => {
-          // Check if this echoes a pending send (match by discordMessageId)
-          const pendingIdx = prev.findIndex(
+          // Match 1: pending entry already has discordMessageId (POST resolved first)
+          let pendingIdx = prev.findIndex(
             (m) =>
               m.isPending &&
               m.discordMessageId !== null &&
               String(m.discordMessageId) === String(p.discordMessageId),
           );
+
+          // Match 2: race case — POST has not resolved yet so discordMessageId
+          // is still null on the pending entry; fall back to content + authorName
+          if (pendingIdx === -1 && p.viaDwbhub) {
+            pendingIdx = prev.findIndex(
+              (m) =>
+                m.isPending &&
+                m.discordMessageId === null &&
+                m.content === p.content &&
+                m.authorName === p.authorName,
+            );
+          }
 
           if (pendingIdx !== -1) {
             // Replace pending entry with confirmed message
@@ -254,7 +270,7 @@ export function useChannel(
             return updated;
           }
 
-          // New message from someone else (or unmatched — append)
+          // No match: new message from someone else (or unmatched — append)
           const newMsg: ChatMessage = {
             id: p.id,
             authorName: p.authorName,
@@ -315,7 +331,7 @@ export function useChannel(
       const tempId = -Date.now();
       const pendingMsg: ChatMessage = {
         id: tempId,
-        authorName: "",
+        authorName: displayName,
         content: trimmed,
         sentAt: new Date().toISOString(),
         editedAt: null,
@@ -364,7 +380,7 @@ export function useChannel(
         setIsSending(false);
       }
     },
-    [slug, channelPublicId, accessToken],
+    [slug, channelPublicId, accessToken, displayName],
   );
 
   // ---------------------------------------------------------------------------

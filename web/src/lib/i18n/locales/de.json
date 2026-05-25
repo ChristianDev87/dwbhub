@@ -138,7 +138,9 @@
   },
   "chat": {
     "back": "← Zurück",
+    "composeAria": "Nachricht verfassen",
     "deleted": "[gelöscht]",
+    "deletedAria": "Diese Nachricht wurde gelöscht",
     "edited": "bearbeitet",
     "empty": "Noch keine Nachrichten.",
     "errorLoad": "Chat konnte nicht geladen werden.",
@@ -147,6 +149,7 @@
     "placeholder": "Nachricht eingeben…",
     "send": "Senden",
     "sending": "wird gesendet…",
+    "viaDwbhub": "(über DwbHub)",
     "you": "Du"
   },
   "botCredentials": {

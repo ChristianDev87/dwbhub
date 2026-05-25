@@ -60,7 +60,7 @@ export function SendBox({
         disabled={disabled}
         placeholder={t("chat.placeholder")}
         data-testid="send-box-input"
-        aria-label={t("chat.placeholder")}
+        aria-label={t("chat.composeAria")}
       />
       <button
         type="button"

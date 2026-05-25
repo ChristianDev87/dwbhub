@@ -53,6 +53,14 @@ export function MessageRow({ message }: MessageRowProps): React.JSX.Element {
             ({t("chat.edited")})
           </span>
         )}
+        {message.viaDwbhub && !message.isDeleted && (
+          <span
+            className="text-xs text-gray-400"
+            data-testid="message-via-dwbhub"
+          >
+            {t("chat.viaDwbhub")}
+          </span>
+        )}
         {message.isPending && (
           <span className="text-xs text-gray-400" data-testid="message-pending">
             {t("chat.sending")}
@@ -61,6 +69,7 @@ export function MessageRow({ message }: MessageRowProps): React.JSX.Element {
       </div>
       <p
         className={`text-sm mt-0.5 ${message.isDeleted ? "text-gray-400 italic" : "text-gray-700"} whitespace-pre-wrap break-words`}
+        aria-label={message.isDeleted ? t("chat.deletedAria") : undefined}
         data-testid="message-content"
       >
         {message.isDeleted ? t("chat.deleted") : message.content}
