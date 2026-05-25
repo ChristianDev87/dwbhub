@@ -229,6 +229,42 @@ builder.Services
     });
 builder.Services.AddAuthorization();
 
+// --- SignalR (Plan 1.0 Task 8) ------------------------------------------
+// Hub at /api/hubs/messages pushes 6 event types to per-tenant groups.
+builder.Services.AddSignalR(opts =>
+{
+    opts.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    opts.MaximumReceiveMessageSize = 64 * 1024; // 64 KiB — defense in depth (hub has no client-callable methods)
+});
+
+// SignalR broadcaster: implements IMessagesBroadcaster so Application services
+// stay free of SignalR types. Registered as singleton to match IHubContext lifetime.
+builder.Services.AddSingleton<DwbHub.Application.Messaging.IMessagesBroadcaster,
+                              DwbHub.Api.Messaging.SignalRMessagesBroadcaster>();
+
+// JWT bearer for SignalR: the SignalR client sends the access token as
+// ?access_token=... in the WebSocket/LongPolling upgrade URL. We must extract it
+// from the query string for /api/hubs/* paths ONLY — other paths are unaffected.
+builder.Services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, opts =>
+{
+    opts.Events ??= new JwtBearerEvents();
+    var originalOnMessageReceived = opts.Events.OnMessageReceived;
+    opts.Events.OnMessageReceived = async ctx =>
+    {
+        if (originalOnMessageReceived is not null)
+            await originalOnMessageReceived(ctx);
+
+        // Only read the query-string token for hub upgrade requests.
+        if (string.IsNullOrEmpty(ctx.Token))
+        {
+            var accessToken = ctx.Request.Query["access_token"];
+            var path = ctx.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/api/hubs"))
+                ctx.Token = accessToken;
+        }
+    };
+});
+
 var app = builder.Build();
 
 // --- Apply DB migrations (Plan 0.2) ------------------------------------
@@ -296,6 +332,9 @@ Hangfire.RecurringJob.AddOrUpdate<DwbHub.Application.Background.IAuthTokenPruneJ
     "30 3 * * *", new Hangfire.RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 
 app.MapControllers();
+
+// --- SignalR hub (Plan 1.0 Task 8) --------------------------------------
+app.MapHub<DwbHub.Api.Hubs.MessagesHub>("/api/hubs/messages");
 
 Log.Information("DwbHub.Api starting. LogFile={LogFile}", logFilePath);
 
