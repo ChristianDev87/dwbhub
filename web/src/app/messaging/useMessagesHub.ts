@@ -55,8 +55,10 @@ export function useMessagesHub(
     const conn = new HubConnectionBuilder()
       .withUrl("/api/hubs/messages", {
         accessTokenFactory: () => {
-          // Re-read auth state on every call so a silently-refreshed token
-          // (Plan 0.3b) is picked up without tearing down the connection.
+          // accessTokenFactory captures the token at connection-build time. A new token
+          // from AuthContext causes this effect to re-run (see dep array below) and
+          // rebuild the connection with the fresh token. The factory itself is NOT
+          // re-read on every call.
           return accessToken;
         },
       })

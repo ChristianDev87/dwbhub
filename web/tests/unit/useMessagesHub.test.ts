@@ -14,8 +14,16 @@ import { renderHook, act } from "@testing-library/react";
 // ---------------------------------------------------------------------------
 
 const { fakeConnRef, mockTokenRef } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fakeConnRef: { current: any } = { current: null };
+  interface FakeConn {
+    on: ReturnType<typeof vi.fn>;
+    onreconnecting: ReturnType<typeof vi.fn>;
+    onreconnected: ReturnType<typeof vi.fn>;
+    onclose: ReturnType<typeof vi.fn>;
+    start: ReturnType<typeof vi.fn>;
+    stop: ReturnType<typeof vi.fn>;
+    emit: (eventName: string, payload: unknown) => void;
+  }
+  const fakeConnRef: { current: FakeConn | null } = { current: null };
   const mockTokenRef: { current: string | null } = {
     current: "test-token",
   };
