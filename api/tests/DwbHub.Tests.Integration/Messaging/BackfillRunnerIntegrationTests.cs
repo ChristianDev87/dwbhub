@@ -225,6 +225,8 @@ public sealed class BackfillRunnerIntegrationTests : IAsyncLifetime
         finalJob!.Status.Should().Be(BackfillStatus.Complete);
         finalJob.FetchedCount.Should().Be(250);
         finalJob.CompletedAt.Should().NotBeNull();
+        finalJob.OldestFetchedSnowflake.Should().Be(801L,
+            "cursor must end on the minimum snowflake of the last non-empty batch");
 
         // ── Assert: broadcaster received 3 BackfillProgress + 1 BackfillComplete ─
         broadcaster.ProgressCounts.Should().Equal(100, 200, 250);
