@@ -28,4 +28,5 @@ public sealed record MessageBroadcastDto(
     string AuthorName,
     string Content,
     DateTimeOffset SentAt,
-    bool ViaDwbhub);
+    bool ViaDwbhub,
+    long DiscordMessageId);

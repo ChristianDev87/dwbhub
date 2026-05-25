@@ -16,4 +16,5 @@ public sealed record MessageHistoryItem(
     string Content,
     DateTimeOffset SentAt,
     DateTimeOffset? EditedAt,
-    bool ViaDwbhub);
+    bool ViaDwbhub,
+    long DiscordMessageId);

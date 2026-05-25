@@ -170,7 +170,8 @@ public sealed class MessagesController(
             Content: m.Content,
             SentAt: m.SentAt,
             EditedAt: m.EditedAt,
-            ViaDwbhub: m.ViaDwbhub))
+            ViaDwbhub: m.ViaDwbhub,
+            DiscordMessageId: m.DiscordMessageId))
             .ToList();
 
         // NextBefore = oldest snowflake in this page; null when end of history reached.

@@ -50,4 +50,12 @@ public interface IMessageRepository
         long? beforeSnowflake,
         int limit,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetch a single message by its internal autoincrement primary key.
+    /// Used by test-only endpoints to resolve the internal id → discord_message_id
+    /// mapping so simulated edit/delete events can target the correct row.
+    /// Returns null when no row matches the supplied tenant + id combination.
+    /// </summary>
+    Task<Message?> GetByInternalIdAsync(long tenantId, long id, CancellationToken ct = default);
 }

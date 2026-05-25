@@ -93,6 +93,24 @@ public sealed class MessageRepository(IDbConnectionFactory connectionFactory) : 
         return affected > 0;
     }
 
+    public async Task<Message?> GetByInternalIdAsync(long tenantId, long id, CancellationToken ct = default)
+    {
+        using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
+        const string sql = """
+            SELECT id, tenant_id, channel_id, discord_message_id, discord_author_id,
+                   discord_author_name, via_dwbhub, dwbhub_user_id, content,
+                   sent_at, edited_at, deleted_at, created_at, updated_at
+            FROM messages
+            WHERE tenant_id = @TenantId
+              AND id = @Id;
+            """;
+        return await conn.QuerySingleOrDefaultAsync<Message>(
+            new CommandDefinition(sql,
+                new { TenantId = tenantId, Id = id },
+                cancellationToken: ct))
+            .ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<Message>> ListByChannelBeforeAsync(
         long tenantId,
         long channelId,

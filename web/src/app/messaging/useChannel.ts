@@ -44,6 +44,7 @@ interface MessageHistoryItem {
   sentAt: string;
   editedAt: string | null;
   viaDwbhub: boolean;
+  discordMessageId: number | string;
 }
 
 interface MessageHistoryResponse {
@@ -117,7 +118,7 @@ export function useChannel(
       sentAt: item.sentAt,
       editedAt: item.editedAt ?? null,
       viaDwbhub: item.viaDwbhub,
-      discordMessageId: null, // history items have no discordMessageId from this endpoint
+      discordMessageId: item.discordMessageId,
       isDeleted: false,
       isPending: false,
     };
@@ -291,21 +292,26 @@ export function useChannel(
         });
       } else if (evt.kind === "MessageUpdated") {
         const p = evt.payload;
-        if (p.channelPublicId !== channelPublicId) return;
-
+        // Backend broadcasts messageId = discord_message_id (snowflake).
+        // Match against ChatMessage.discordMessageId using string comparison
+        // to avoid precision loss on very large snowflakes.
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === p.id
+            m.discordMessageId !== null &&
+            String(m.discordMessageId) === String(p.messageId)
               ? { ...m, content: p.content, editedAt: p.editedAt }
               : m,
           ),
         );
       } else if (evt.kind === "MessageDeleted") {
         const p = evt.payload;
-        if (p.channelPublicId !== channelPublicId) return;
-
         setMessages((prev) =>
-          prev.map((m) => (m.id === p.id ? { ...m, isDeleted: true } : m)),
+          prev.map((m) =>
+            m.discordMessageId !== null &&
+            String(m.discordMessageId) === String(p.messageId)
+              ? { ...m, isDeleted: true }
+              : m,
+          ),
         );
       }
     },

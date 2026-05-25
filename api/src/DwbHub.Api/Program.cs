@@ -269,8 +269,23 @@ builder.Services.AddScoped<DwbHub.Application.Messaging.IBackfillRunner,
 // DiscordRestChannelClient needs an HttpClient for the webhook-execute path.
 // AddHttpClient<TInterface, TImplementation> registers both the typed client
 // and the IHttpClientFactory binding so DI can resolve the concrete ctor.
-builder.Services.AddHttpClient<DwbHub.Application.Messaging.IDiscordRestChannelClient,
-                               DwbHub.Infrastructure.Messaging.DiscordRestChannelClient>();
+//
+// When DWBHUB_DISCORD_TEST_MODE=fake-rest the scripted fake is substituted so
+// e2e tests can run without a real Discord bot. The fake is FORBIDDEN in
+// Production (double-guarded: here and inside FakeDiscordRestChannelClient ctor).
+if (Environment.GetEnvironmentVariable("DWBHUB_DISCORD_TEST_MODE") == "fake-rest")
+{
+    if (builder.Environment.IsProduction())
+        throw new InvalidOperationException(
+            "DWBHUB_DISCORD_TEST_MODE=fake-rest is forbidden when ASPNETCORE_ENVIRONMENT=Production");
+    builder.Services.AddScoped<DwbHub.Application.Messaging.IDiscordRestChannelClient,
+                               DwbHub.Infrastructure.Messaging.FakeDiscordRestChannelClient>();
+}
+else
+{
+    builder.Services.AddHttpClient<DwbHub.Application.Messaging.IDiscordRestChannelClient,
+                                   DwbHub.Infrastructure.Messaging.DiscordRestChannelClient>();
+}
 
 // JWT bearer for SignalR: the SignalR client sends the access token as
 // ?access_token=... in the WebSocket/LongPolling upgrade URL. We must extract it

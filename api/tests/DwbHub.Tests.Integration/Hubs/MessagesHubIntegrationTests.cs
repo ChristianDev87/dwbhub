@@ -162,7 +162,8 @@ public sealed class MessagesHubIntegrationTests : IAsyncLifetime
             Id: 1, TenantId: tidA,
             ChannelPublicId: Guid.NewGuid(),
             AuthorName: "alice", Content: "hello-A",
-            SentAt: DateTimeOffset.UtcNow, ViaDwbhub: false);
+            SentAt: DateTimeOffset.UtcNow, ViaDwbhub: false,
+            DiscordMessageId: 100001L);
 
         await broadcaster.MessageReceivedAsync(msgA, msgA.ChannelPublicId);
 
@@ -177,7 +178,8 @@ public sealed class MessagesHubIntegrationTests : IAsyncLifetime
             Id: 2, TenantId: tidB,
             ChannelPublicId: Guid.NewGuid(),
             AuthorName: "bob", Content: "hello-B",
-            SentAt: DateTimeOffset.UtcNow, ViaDwbhub: false);
+            SentAt: DateTimeOffset.UtcNow, ViaDwbhub: false,
+            DiscordMessageId: 100002L);
 
         await broadcaster.MessageReceivedAsync(msgB, msgB.ChannelPublicId);
         await Task.Delay(500);

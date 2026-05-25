@@ -30,7 +30,14 @@ export default defineConfig({
     // and `localhost:5080` resolves back to the web container itself. The dev
     // compose file sets DWBHUB_PROXY_API_TARGET so the proxy hits the right host.
     proxy: {
-      "/api": process.env.DWBHUB_PROXY_API_TARGET || "http://localhost:5080",
+      // ws:true is required so that SignalR's WebSocket transport on /api/hubs/*
+      // can be proxied. Without it, Vite only proxies HTTP on /api; SignalR falls
+      // back to Long Polling (~5 s negotiation delay) and e2e assertions that wait
+      // for SignalR-confirmed state (pending cleared, edit/delete reflected) time out.
+      "/api": {
+        target: process.env.DWBHUB_PROXY_API_TARGET || "http://localhost:5080",
+        ws: true,
+      },
       "/hub": {
         target: process.env.DWBHUB_PROXY_API_TARGET || "http://localhost:5080",
         ws: true,

@@ -175,7 +175,8 @@ public sealed class SignalRTenantIsolationTests : IAsyncLifetime
             Id: 99, TenantId: tidB,
             ChannelPublicId: Guid.NewGuid(),
             AuthorName: "attacker", Content: "cross-tenant-payload",
-            SentAt: DateTimeOffset.UtcNow, ViaDwbhub: false);
+            SentAt: DateTimeOffset.UtcNow, ViaDwbhub: false,
+            DiscordMessageId: 100099L);
 
         await broadcaster.MessageReceivedAsync(msgB, msgB.ChannelPublicId);
 
@@ -229,12 +230,14 @@ public sealed class SignalRTenantIsolationTests : IAsyncLifetime
         var msg1 = new MessageBroadcastDto(
             Id: 1, TenantId: 1, ChannelPublicId: Guid.NewGuid(),
             AuthorName: "a", Content: "msg-for-1",
-            SentAt: DateTimeOffset.UtcNow, ViaDwbhub: false);
+            SentAt: DateTimeOffset.UtcNow, ViaDwbhub: false,
+            DiscordMessageId: 100001L);
 
         var msg2 = new MessageBroadcastDto(
             Id: 2, TenantId: 2, ChannelPublicId: Guid.NewGuid(),
             AuthorName: "b", Content: "msg-for-2",
-            SentAt: DateTimeOffset.UtcNow, ViaDwbhub: false);
+            SentAt: DateTimeOffset.UtcNow, ViaDwbhub: false,
+            DiscordMessageId: 100002L);
 
         await broadcaster.MessageReceivedAsync(msg1, msg1.ChannelPublicId);
         await broadcaster.MessageReceivedAsync(msg2, msg2.ChannelPublicId);

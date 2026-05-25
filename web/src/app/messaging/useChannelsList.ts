@@ -15,7 +15,7 @@ import { useMessagesHub } from "./useMessagesHub";
 import type { MessageEvent } from "./messages-events";
 
 export interface BackfillInfo {
-  status: "idle" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "complete" | "failed" | "cancelled";
   fetchedCount: number;
 }
 
@@ -95,14 +95,14 @@ export function useChannelsList(
           ),
         );
       } else if (evt.kind === "BackfillProgress") {
-        const { channelPublicId, fetchedCount, status } = evt.payload;
+        const { channelPublicId, fetchedCount } = evt.payload;
         setChannels((prev) =>
           prev.map((c) =>
             c.publicId === channelPublicId
               ? {
                   ...c,
                   backfill: {
-                    status: status as BackfillInfo["status"],
+                    status: "running" as BackfillInfo["status"],
                     fetchedCount,
                   },
                 }
@@ -116,7 +116,7 @@ export function useChannelsList(
             c.publicId === channelPublicId
               ? {
                   ...c,
-                  backfill: { status: "completed", fetchedCount: totalFetched },
+                  backfill: { status: "complete", fetchedCount: totalFetched },
                 }
               : c,
           ),

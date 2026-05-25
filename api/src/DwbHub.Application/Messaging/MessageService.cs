@@ -116,7 +116,8 @@ public sealed class MessageService : IMessageService
                 AuthorName: inserted.DiscordAuthorName,
                 Content: inserted.Content,
                 SentAt: inserted.SentAt,
-                ViaDwbhub: inserted.ViaDwbhub),
+                ViaDwbhub: inserted.ViaDwbhub,
+                DiscordMessageId: inserted.DiscordMessageId),
             channel.PublicId, ct).ConfigureAwait(false);
 
         return inserted;
@@ -287,7 +288,8 @@ public sealed class MessageService : IMessageService
                 AuthorName: inserted.DiscordAuthorName,
                 Content: inserted.Content,
                 SentAt: inserted.SentAt,
-                ViaDwbhub: inserted.ViaDwbhub),
+                ViaDwbhub: inserted.ViaDwbhub,
+                DiscordMessageId: inserted.DiscordMessageId),
             channel.PublicId, ct).ConfigureAwait(false);
 
         return inserted;

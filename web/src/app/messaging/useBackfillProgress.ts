@@ -10,7 +10,13 @@
 import { useCallback, useState } from "react";
 import type { MessageEvent } from "./messages-events";
 
-export type BackfillStatus = "idle" | "running" | "completed" | "failed";
+export type BackfillStatus =
+  | "idle"
+  | "pending"
+  | "running"
+  | "complete"
+  | "failed"
+  | "cancelled";
 
 export interface BackfillState {
   status: BackfillStatus;
@@ -41,7 +47,7 @@ export function useBackfillProgress(channelPublicId: string): {
         evt.payload.channelPublicId === channelPublicId
       ) {
         setState({
-          status: evt.payload.status as BackfillStatus,
+          status: "running",
           fetchedCount: evt.payload.fetchedCount,
         });
       } else if (
@@ -49,7 +55,7 @@ export function useBackfillProgress(channelPublicId: string): {
         evt.payload.channelPublicId === channelPublicId
       ) {
         setState({
-          status: "completed",
+          status: "complete",
           fetchedCount: evt.payload.totalFetched,
         });
       }

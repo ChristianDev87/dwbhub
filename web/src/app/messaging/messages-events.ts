@@ -22,26 +22,21 @@ export interface MessageReceivedPayload {
 }
 
 export interface MessageUpdatedPayload {
-  id: number;
-  tenantId: number;
-  channelPublicId: string;
+  /** Discord snowflake id of the updated message. Match against ChatMessage.discordMessageId. */
+  messageId: number | string;
   content: string;
   editedAt: string;
-  discordMessageId: number | string;
 }
 
 export interface MessageDeletedPayload {
-  id: number;
-  tenantId: number;
-  channelPublicId: string;
-  discordMessageId: number | string;
+  /** Discord snowflake id of the deleted message. Match against ChatMessage.discordMessageId. */
+  messageId: number | string;
 }
 
 export interface BackfillProgressPayload {
   channelPublicId: string;
   tenantId: number;
   fetchedCount: number;
-  status: "running" | "completed" | "failed";
 }
 
 export interface BackfillCompletePayload {
