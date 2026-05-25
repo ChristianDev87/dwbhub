@@ -144,4 +144,56 @@ PLAYWRIGHT_JUNIT_OUTPUT_NAME="$RESULTS/playwright.xml" \
         --output="$RESULTS/traces" \
         > "$RESULTS/playwright.json"
 
+# Plan 1.0 Task 14.5: capture dev-stack docker logs as ephemeral runner-side
+# files + scan for server-side errors that Playwright assertions might not
+# catch (e.g. the Plan 1.0 Task 14 duplicate-key UNIQUE violation that lived
+# only in api logs for hours before being noticed).
+#
+# Privacy:
+#   - Logs stay on the runner (ephemeral — runner cleans up later).
+#   - We NEVER print log CONTENT in CI mode. Counts only.
+#   - Locally (no CI env var) we print first 10 lines per category for
+#     developer convenience. Test-results dir is overwritten next run.
+#   - No artifacts uploaded anywhere.
+echo "=== e2e: capturing dev-stack logs ==="
+docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_DEV" -f "$COMPOSE_E2E_OVERLAY" \
+    logs api      > "$RESULTS/api.log"      2>&1 || true
+docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_DEV" -f "$COMPOSE_E2E_OVERLAY" \
+    logs postgres > "$RESULTS/postgres.log" 2>&1 || true
+
+# Patterns:
+#   API (Serilog): [ERR] / [FATAL] / "Unhandled exception" / *Exception types
+#   Allowlist: bot-401-with-fake-mode is expected when DWBHUB_DISCORD_TEST_MODE=fake-rest
+#              (the bot cannot connect to real Discord with a fake-shape token)
+API_ERRS=$(grep -E '\[ERR\]|\[FATAL\]|Unhandled exception|PostgresException|NpgsqlException' "$RESULTS/api.log" 2>/dev/null \
+    | grep -vE 'Bot disconnected.*401: Unauthorized' \
+    | wc -l | tr -d ' ')
+
+# Postgres ERROR/FATAL with hangfire-schema-first-boot allowlisted.
+PG_ERRS=$(grep -E 'ERROR:|FATAL:' "$RESULTS/postgres.log" 2>/dev/null \
+    | grep -vE 'hangfire\.schema.*does not exist|"hangfire"\."schema"' \
+    | wc -l | tr -d ' ')
+
+if [ "$API_ERRS" -gt 0 ] || [ "$PG_ERRS" -gt 0 ]; then
+    echo "[e2e] SERVER-SIDE ERRORS DETECTED (api=$API_ERRS pg=$PG_ERRS)"
+
+    # Local-only convenience output. In CI (env CI or GITHUB_ACTIONS set)
+    # we print NO content to keep job logs clean of any sensitive data.
+    if [ -z "$CI" ] && [ -z "$GITHUB_ACTIONS" ]; then
+        echo "--- api: first 10 matching lines ---"
+        grep -E '\[ERR\]|\[FATAL\]|Unhandled exception|PostgresException|NpgsqlException' "$RESULTS/api.log" 2>/dev/null \
+            | grep -vE 'Bot disconnected.*401: Unauthorized' \
+            | head -10
+        echo "--- postgres: first 10 matching lines ---"
+        grep -E 'ERROR:|FATAL:' "$RESULTS/postgres.log" 2>/dev/null \
+            | grep -vE 'hangfire\.schema.*does not exist|"hangfire"\."schema"' \
+            | head -10
+    fi
+
+    # Sentinel — entrypoint.sh upgrades exit 0 → 3 when this file exists.
+    # Naming the marker conveys the new exit-code convention without needing
+    # the job script itself to know how to exit 3.
+    touch "$RESULTS/.scan-exit3"
+fi
+
 echo "=== e2e.sh: complete ==="
