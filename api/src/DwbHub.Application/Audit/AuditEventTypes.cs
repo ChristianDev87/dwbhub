@@ -11,6 +11,9 @@ public static class AuditEventTypes
     public const string GuildDeactivated = "guild.deactivated";
 
     // Messaging events (Plan 1.0)
+    public const string ChannelBackfillCompleted = "channel.backfill_completed";
+    public const string ChannelBackfillFailed = "channel.backfill_failed";
+    public const string ChannelBackfillStarted = "channel.backfill_started";
     public const string ChannelSyncCompleted = "channel.sync_completed";
     public const string MessageDeleted = "message.deleted";
     public const string MessageEdited = "message.edited";
