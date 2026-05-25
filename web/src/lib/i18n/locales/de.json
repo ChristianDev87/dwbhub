@@ -123,6 +123,19 @@
       "confirm": "Pausieren"
     }
   },
+  "channels": {
+    "title": "Kanäle",
+    "back": "← Zurück zu Servern",
+    "resync": "Neu synchronisieren",
+    "loading": "Lade Kanäle…",
+    "error": "Kanalliste konnte nicht geladen werden.",
+    "empty": "Keine Kanäle gefunden. Bitte neu synchronisieren.",
+    "notBridgeable": "kein Text-Kanal — nicht überbrückbar",
+    "backfillProgress": "{{count}} Nachrichten geladen…",
+    "openChat": "Chat öffnen",
+    "toggleError": "Brücke konnte nicht aktualisiert werden ({{code}}). Bitte erneut versuchen.",
+    "guildsLink": "Kanäle →"
+  },
   "botCredentials": {
     "configured": "Bot-Token konfiguriert",
     "notConfigured": "Bot-Token nicht konfiguriert",

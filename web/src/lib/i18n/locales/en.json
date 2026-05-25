@@ -123,6 +123,19 @@
       "confirm": "Pause"
     }
   },
+  "channels": {
+    "title": "Channels",
+    "back": "← Back to Guilds",
+    "resync": "Re-sync",
+    "loading": "Loading channels…",
+    "error": "Failed to load channels.",
+    "empty": "No channels found. Try re-syncing.",
+    "notBridgeable": "not a text channel — cannot bridge",
+    "backfillProgress": "{{count}} messages fetched…",
+    "openChat": "Open chat",
+    "toggleError": "Could not update bridge ({{code}}). Please try again.",
+    "guildsLink": "Channels →"
+  },
   "botCredentials": {
     "configured": "Bot token configured",
     "notConfigured": "Bot token not configured",
