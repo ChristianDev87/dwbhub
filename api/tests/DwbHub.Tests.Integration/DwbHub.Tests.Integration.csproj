@@ -9,6 +9,7 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="FluentMigrator.Runner" />
     <PackageReference Include="FluentMigrator.Runner.Postgres" />
+    <PackageReference Include="Hangfire.AspNetCore" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
