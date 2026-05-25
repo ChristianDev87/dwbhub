@@ -21,6 +21,17 @@ public sealed class AesGcmChannelWebhookCipher : IChannelWebhookCipher
 
     public AesGcmChannelWebhookCipher(string base64Key)
     {
+        // Guard empty/whitespace first so the failure mode is a clear ArgumentException
+        // instead of FormatException from Base64 decoding an empty string. The practical
+        // risk is identical (startup crash either way) but the error type is what
+        // operators will read in their logs.
+        if (string.IsNullOrWhiteSpace(base64Key))
+        {
+            throw new ArgumentException(
+                "DWBHUB_ENCRYPTION_KEY must not be null, empty, or whitespace.",
+                nameof(base64Key));
+        }
+
         _key = Convert.FromBase64String(base64Key);
         if (_key.Length != 32)
         {
