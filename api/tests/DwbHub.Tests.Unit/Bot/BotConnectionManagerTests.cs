@@ -196,8 +196,19 @@ public sealed class BotConnectionManagerTests
         var outcome = await mgr.OnManualReconnectAsync(90, actorUserId: 42, CancellationToken.None);
 
         outcome.Should().BeOfType<ManualReconnectOutcome.Triggered>();
-        // Background reconnect is fire-and-forget — wait for it to complete before asserting state.
+
+        // Manual reconnect is fire-and-forget; wait for the background cycle to actually
+        // disconnect the first connection and swap in a replacement before asserting.
+        // WaitForConnectAsync alone is insufficient because `first` is already Connected when
+        // the wait begins, so it would return immediately without the cycle having happened.
+        var deadline = DateTime.UtcNow.AddSeconds(2);
+        while ((first.DisconnectCalls == 0 || ReferenceEquals(factory.Created[90], first))
+               && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10);
+        }
         var conn = await factory.WaitForConnectAsync(90, TimeSpan.FromSeconds(2));
+
         first.DisconnectCalls.Should().BeGreaterThan(0);
         conn.Should().NotBeSameAs(first);
         conn.State.Should().Be(BotConnectionState.Connected);
