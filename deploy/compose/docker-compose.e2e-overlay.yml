@@ -21,6 +21,14 @@
 # root. Set by docker-compose.test.yml's e2e-tests service from $PWD.
 
 services:
+  api:
+    # Plan 1.0 Task 14 — activate FakeDiscordRestChannelClient for e2e runs.
+    # This env-var is ONLY set via this overlay (e2e.sh), never in docker-compose.yml
+    # or docker-compose.dev.yml. The FakeDiscordRestChannelClient constructor throws
+    # if ASPNETCORE_ENVIRONMENT=Production as a defence-in-depth guard.
+    environment:
+      DWBHUB_DISCORD_TEST_MODE: fake-rest
+
   web:
     volumes: !override
       - ${HOST_REPO_ROOT}:/repo

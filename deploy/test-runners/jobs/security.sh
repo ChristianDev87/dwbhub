@@ -13,12 +13,53 @@ mkdir -p "$RESULTS"
 
 cd /workspace
 
+# Wrap a long-running command with a heartbeat that emits a "still working"
+# line to STDERR every 30s. trivy's internal scan phase (between "Vulnerability
+# scanning is enabled" and the WARN flood for the dotnet deps walk) is ~3 min
+# of complete silence with no native progress output. Without the heartbeat,
+# operators can't tell if the process is hung or scanning.
+#
+# Heartbeat to stderr keeps the wrapped command's stdout clean for the JSON
+# file redirect. The entrypoint.sh '2>&1 | tee' pipeline still surfaces it
+# live in run.log + container stdout.
+with_heartbeat() {
+    local label="$1"
+    shift
+    ( while sleep 30; do echo "  ... ${label} still running ($(date -u +%H:%M:%S))" >&2; done ) &
+    local hb_pid=$!
+    "$@"
+    local rc=$?
+    # `|| true` is mandatory under `set -e`: `wait` returns the heartbeat's
+    # exit status, which is 143 (128 + SIGTERM) because we just killed it.
+    # Without the guard, `set -e` aborts the function with 143 even when
+    # trivy itself exited 0 — that's the "trivy scan exit 143 at exactly 302s"
+    # bug from Plan 1.0 closeout. `kill` is similarly guarded for the case
+    # where the heartbeat already exited (e.g. very short command).
+    kill "$hb_pid" 2>/dev/null || true
+    wait "$hb_pid" 2>/dev/null || true
+    return $rc
+}
+
 # Run all three; capture each to JSON; only fail at the end if any has HIGH/CRITICAL.
+# Each step echoes a banner so operators see live progress while the long-running
+# tools (especially trivy's first-run DB download, ~3 min, ~178 MB) are silent.
+echo "=== security.sh: pnpm audit (HIGH/CRITICAL) ==="
 pnpm --filter dwbhub-web audit --json --audit-level high > "$RESULTS/pnpm.json" || true
+
+echo "=== security.sh: dotnet list package --vulnerable ==="
 dotnet list api/DwbHub.sln package --vulnerable --include-transitive --format json > "$RESULTS/dotnet.json" || true
-trivy fs --format json --severity HIGH,CRITICAL --scanners vuln /workspace > "$RESULTS/trivy.json"
-# SARIF output for GitHub Code Scanning — uploaded by ci.yml (Plan 0.8.3 Task 7)
-trivy fs --format sarif --severity HIGH,CRITICAL --scanners vuln /workspace --output "$RESULTS/trivy.sarif"
+
+echo "=== security.sh: trivy fs --format json (first run downloads ~178 MB vuln DB; takes 2-3 min) ==="
+# Trivy's default --timeout=5m self-SIGTERMs (exit 143) mid-scan on the Plan
+# 1.0 dependency graph: 6 .NET projects + transitive NuGet + pnpm workspace
+# routinely tip over 5 min on slow CI. Bump to 15m. Heartbeat tells operators
+# the process is still alive while trivy is silently chewing through .deps.json.
+with_heartbeat "trivy json scan" trivy fs --timeout 15m --format json --severity HIGH,CRITICAL --scanners vuln /workspace > "$RESULTS/trivy.json"
+
+echo "=== security.sh: trivy fs --format sarif (for GitHub Code Scanning — Plan 0.8.3 Task 7) ==="
+with_heartbeat "trivy sarif scan" trivy fs --timeout 15m --format sarif --severity HIGH,CRITICAL --scanners vuln /workspace --output "$RESULTS/trivy.sarif"
+
+echo "=== security.sh: parsing results ==="
 
 FAIL=0
 # Parse via node (Dockerfile.security has node)

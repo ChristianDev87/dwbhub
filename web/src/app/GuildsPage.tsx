@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -379,6 +379,13 @@ export function GuildsPage(): React.JSX.Element {
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
+                  <Link
+                    to={`/t/${slug ?? ""}/guilds/${g.publicId}/channels`}
+                    data-testid={`guild-channels-link-${g.publicId}`}
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    {t("channels.guildsLink")}
+                  </Link>
                   {g.botCredentialsConfigured ? (
                     <span
                       data-testid="bot-credentials-configured"

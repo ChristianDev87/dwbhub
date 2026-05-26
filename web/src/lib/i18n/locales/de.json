@@ -123,6 +123,35 @@
       "confirm": "Pausieren"
     }
   },
+  "channels": {
+    "title": "Kanäle",
+    "back": "← Zurück zu Servern",
+    "resync": "Neu synchronisieren",
+    "loading": "Lade Kanäle…",
+    "error": "Kanalliste konnte nicht geladen werden.",
+    "empty": "Keine Kanäle gefunden. Bitte neu synchronisieren.",
+    "notBridgeable": "kein Text-Kanal — nicht überbrückbar",
+    "backfillProgress": "{{count}} Nachrichten geladen…",
+    "openChat": "Chat öffnen",
+    "toggleError": "Brücke konnte nicht aktualisiert werden ({{code}}). Bitte erneut versuchen.",
+    "guildsLink": "Kanäle →"
+  },
+  "chat": {
+    "back": "← Zurück",
+    "composeAria": "Nachricht verfassen",
+    "deleted": "[gelöscht]",
+    "deletedAria": "Diese Nachricht wurde gelöscht",
+    "edited": "bearbeitet",
+    "empty": "Noch keine Nachrichten.",
+    "errorLoad": "Chat konnte nicht geladen werden.",
+    "errorSend": "Senden fehlgeschlagen. Erneut versuchen.",
+    "newMessages": "{{count}} neu",
+    "placeholder": "Nachricht eingeben…",
+    "send": "Senden",
+    "sending": "wird gesendet…",
+    "viaDwbhub": "(über DwbHub)",
+    "you": "Du"
+  },
   "botCredentials": {
     "configured": "Bot-Token konfiguriert",
     "notConfigured": "Bot-Token nicht konfiguriert",

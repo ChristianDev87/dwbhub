@@ -8,9 +8,13 @@
 #   2 = infrastructure error (token leaked into test-result artifacts)
 #
 # Secret mount: /run/secrets/discord_token
-#   Expected contents (two lines, no quotes):
+#   Expected contents (three lines, no quotes):
 #     DISCORD_DEV_BOT_TOKEN=<value>
 #     DISCORD_DEV_GUILD_ID=<value>
+#     DISCORD_DEV_CHANNEL_ID=<value>   # optional — when set, additionally
+#                                        unlocks the REST live tests
+#                                        (ListChannels / GetMessages) against
+#                                        this specific channel. Plan 1.0 Task 15.
 #
 # SECURITY:
 #   * The secret file is NEVER sourced — only two specific keys are extracted via awk.
@@ -48,6 +52,9 @@ fi
 # of the bare snowflake stored in artifacts).
 BOT_TOKEN=$(awk -F= '/^DISCORD_DEV_BOT_TOKEN=/{print substr($0,index($0,"=")+1)}' "$SECRET_FILE" | tr -d '\r')
 GUILD_ID=$(awk -F= '/^DISCORD_DEV_GUILD_ID=/{print substr($0,index($0,"=")+1)}' "$SECRET_FILE" | tr -d '\r')
+# CHANNEL_ID is OPTIONAL. When present, unlocks the REST live tests
+# (Plan 1.0 Task 15). When absent the gateway-connection tests still run.
+CHANNEL_ID=$(awk -F= '/^DISCORD_DEV_CHANNEL_ID=/{print substr($0,index($0,"=")+1)}' "$SECRET_FILE" | tr -d '\r')
 
 if [ -z "$BOT_TOKEN" ] || [ -z "$GUILD_ID" ]; then
     echo "[discord-live] SKIPPED: DISCORD_DEV_BOT_TOKEN or DISCORD_DEV_GUILD_ID missing or empty in ${SECRET_FILE}"
@@ -65,13 +72,23 @@ fi
 # ---------------------------------------------------------------------------
 TOKEN_LEN=$(printf '%s' "$BOT_TOKEN" | wc -c | tr -d ' ')
 GUILD_LEN=$(printf '%s' "$GUILD_ID" | wc -c | tr -d ' ')
-echo "[discord-live] secret-file ok: token_len=${TOKEN_LEN} guild_id_len=${GUILD_LEN}"
+CHANNEL_LEN=$(printf '%s' "$CHANNEL_ID" | wc -c | tr -d ' ')
+if [ "$CHANNEL_LEN" -gt 0 ]; then
+    echo "[discord-live] secret-file ok: token_len=${TOKEN_LEN} guild_id_len=${GUILD_LEN} channel_id_len=${CHANNEL_LEN} (REST tests will run)"
+else
+    echo "[discord-live] secret-file ok: token_len=${TOKEN_LEN} guild_id_len=${GUILD_LEN} (REST tests SKIPPED — no DISCORD_DEV_CHANNEL_ID)"
+fi
 
 # ---------------------------------------------------------------------------
 # 3. Export env vars for the dotnet child process
 # ---------------------------------------------------------------------------
 export DISCORD_DEV_BOT_TOKEN="$BOT_TOKEN"
 export DISCORD_DEV_GUILD_ID="$GUILD_ID"
+# Only export channel ID when set — keeps the SkippableFact's Skip.If
+# check meaningful when the user runs without it.
+if [ -n "$CHANNEL_ID" ]; then
+    export DISCORD_DEV_CHANNEL_ID="$CHANNEL_ID"
+fi
 
 # ---------------------------------------------------------------------------
 # 4. Run dotnet test with token-redaction.
@@ -117,6 +134,17 @@ if grep -rqF "$GUILD_ID" "$RESULTS/" 2>/dev/null; then
     echo "[discord-live] FATAL: guild_id found in test-results — leak detected"
     exit 2
 fi
+# Channel ID is also treated as opaque (see header comment) — same policy as
+# the guild ID. Skip the grep when CHANNEL_ID is empty (REST tests were not
+# enabled this run, so nothing could have leaked it).
+if [ -n "$CHANNEL_ID" ] && grep -rqF "$CHANNEL_ID" "$RESULTS/" 2>/dev/null; then
+    echo "[discord-live] FATAL: channel_id found in test-results — leak detected"
+    exit 2
+fi
 
-echo "[discord-live] credential-leak check passed (token + guild_id)"
+if [ -n "$CHANNEL_ID" ]; then
+    echo "[discord-live] credential-leak check passed (token + guild_id + channel_id)"
+else
+    echo "[discord-live] credential-leak check passed (token + guild_id)"
+fi
 exit "$DOTNET_EXIT"

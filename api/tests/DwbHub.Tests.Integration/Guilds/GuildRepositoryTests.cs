@@ -1,5 +1,6 @@
 using Dapper;
 using DwbHub.Core.Entities;
+using DwbHub.Core.Repositories;
 using DwbHub.Data.Connections;
 using DwbHub.Data.Repositories;
 using DwbHub.Infrastructure.Auth;
@@ -73,13 +74,19 @@ public sealed class GuildRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Create_with_duplicate_discord_guild_id_in_same_tenant_throws_23505()
+    public async Task Create_with_duplicate_discord_guild_id_in_same_tenant_throws_GuildAlreadyExistsException()
     {
+        // Plan 1.0 Fix C: repository now uses INSERT ... ON CONFLICT DO NOTHING
+        // so PostgreSQL no longer emits a 23505 ERROR log line for the violation.
+        // The application instead raises GuildAlreadyExistsException explicitly
+        // when zero rows were inserted — the API contract (HTTP 409 from the
+        // controller) is preserved, but the postgres log stays clean.
         var (tid, uid) = await SeedTenantAndOwnerAsync();
         await _sut.CreateAsync(tid, "1234567890123456789", "First", uid);
 
         Func<Task> act = () => _sut.CreateAsync(tid, "1234567890123456789", "Second", uid);
-        await act.Should().ThrowAsync<PostgresException>().Where(e => e.SqlState == "23505");
+        await act.Should().ThrowAsync<GuildAlreadyExistsException>()
+            .Where(e => e.TenantId == tid && e.DiscordGuildId == "1234567890123456789");
     }
 
     [Fact]

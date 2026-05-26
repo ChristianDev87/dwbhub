@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Plan 0.8.1 — e2e: spin up dev stack via compose, wait, run Playwright.
 #
 # Exit codes:
@@ -79,7 +79,10 @@ echo "=== e2e: pre-build api image (with explicit TARGETARCH build-arg) ==="
 # docker compose up --build passes no --build-arg for ARGs without a default;
 # Dockerfile.api requires TARGETARCH for `dotnet restore/publish --arch`. Pre-build
 # the image with the correct arg, then start the stack with --no-build to reuse it.
-docker build \
+# `--progress=plain` forces BuildKit to stream each step live. Dockerfile.e2e
+# ships docker-ce + docker-buildx-plugin so this flag is supported.
+export BUILDKIT_PROGRESS=plain
+docker build --progress=plain \
     -f deploy/docker/Dockerfile.api \
     --build-arg "TARGETARCH=$TARGETARCH" \
     -t dwbhub-api:local \
@@ -129,6 +132,33 @@ if [ "$WEB_READY" = "0" ]; then
     exit 2
 fi
 
+echo "=== e2e: starting live dev-stack log tail (api / web / postgres / mailhog) ==="
+# Tail dev-stack containers in the background so operators see api/web/postgres
+# output live during the Playwright run (instead of only after the run via the
+# post-run scan below). Each line is prefixed with the service name by `docker
+# compose logs`, so `api  | [INF] ...`, `web  | vite v...`, etc. The tail is
+# killed in cleanup() on EXIT so it never outlives the job.
+# Service names match docker-compose.yml: postgres, mailhog (legacy name —
+# axllent/mailpit image but service is still called mailhog), api, web.
+docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_DEV" -f "$COMPOSE_E2E_OVERLAY" \
+    logs --follow --no-color --timestamps --tail=0 api web postgres mailhog 2>&1 \
+    | sed 's/^/[devstack] /' &
+DEVSTACK_TAIL_PID=$!
+# Re-define cleanup() to ALSO stop the live tail before tearing down the stack.
+# (Replaces the original cleanup() defined above; same `trap cleanup EXIT`
+# registration still applies — bash resolves the function name at trap-fire time.)
+cleanup() {
+    # `|| true` guards: trap fires on EXIT regardless of set -e state, but the
+    # commands inside still need explicit guards or they themselves will leak
+    # non-zero exits up the chain.
+    if [ -n "$DEVSTACK_TAIL_PID" ]; then
+        kill "$DEVSTACK_TAIL_PID" 2>/dev/null || true
+        wait "$DEVSTACK_TAIL_PID" 2>/dev/null || true
+    fi
+    echo "=== e2e: cleanup ==="
+    docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_DEV" -f "$COMPOSE_E2E_OVERLAY" down -v 2>&1 | tee -a "$RESULTS/teardown.log" || true
+}
+
 echo "=== e2e: playwright test ==="
 # Two reporters in one invocation:
 #   - junit emits an XML file dorny/test-reporter + EnricoMi can consume for
@@ -143,5 +173,67 @@ PLAYWRIGHT_JUNIT_OUTPUT_NAME="$RESULTS/playwright.xml" \
         --reporter=junit,json \
         --output="$RESULTS/traces" \
         > "$RESULTS/playwright.json"
+
+# Stop the live dev-stack tail now that Playwright has finished.
+# `|| true` is essential: `set -e` would otherwise abort here because
+#   * kill returns 1 if the PID already exited (race with docker compose down)
+#   * wait returns 128+SIGTERM (=143) when the bg process was killed by us
+# Either of these would mask a successful Playwright run with an unrelated
+# cleanup-exit-code (observed: e2e exit=1 while all 48 tests passed).
+kill "$DEVSTACK_TAIL_PID" 2>/dev/null || true
+wait "$DEVSTACK_TAIL_PID" 2>/dev/null || true
+DEVSTACK_TAIL_PID=
+
+# Plan 1.0 Task 14.5: capture dev-stack docker logs as ephemeral runner-side
+# files + scan for server-side errors that Playwright assertions might not
+# catch (e.g. the Plan 1.0 Task 14 duplicate-key UNIQUE violation that lived
+# only in api logs for hours before being noticed).
+#
+# Privacy:
+#   - Logs stay on the runner (ephemeral — runner cleans up later).
+#   - We NEVER print log CONTENT in CI mode. Counts only.
+#   - Locally (no CI env var) we print first 10 lines per category for
+#     developer convenience. Test-results dir is overwritten next run.
+#   - No artifacts uploaded anywhere.
+echo "=== e2e: capturing dev-stack logs ==="
+docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_DEV" -f "$COMPOSE_E2E_OVERLAY" \
+    logs api      > "$RESULTS/api.log"      2>&1 || true
+docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_DEV" -f "$COMPOSE_E2E_OVERLAY" \
+    logs postgres > "$RESULTS/postgres.log" 2>&1 || true
+
+# Patterns:
+#   API (Serilog): [ERR] / [FATAL] / "Unhandled exception" / *Exception types
+#   Allowlist: bot-401-with-fake-mode is expected when DWBHUB_DISCORD_TEST_MODE=fake-rest
+#              (the bot cannot connect to real Discord with a fake-shape token)
+API_ERRS=$(grep -E '\[ERR\]|\[FATAL\]|Unhandled exception|PostgresException|NpgsqlException' "$RESULTS/api.log" 2>/dev/null \
+    | grep -vE 'Bot disconnected.*401: Unauthorized' \
+    | wc -l | tr -d ' ')
+
+# Postgres ERROR/FATAL with hangfire-schema-first-boot allowlisted.
+PG_ERRS=$(grep -E 'ERROR:|FATAL:' "$RESULTS/postgres.log" 2>/dev/null \
+    | grep -vE 'hangfire\.schema.*does not exist|"hangfire"\."schema"' \
+    | wc -l | tr -d ' ')
+
+if [ "$API_ERRS" -gt 0 ] || [ "$PG_ERRS" -gt 0 ]; then
+    echo "[e2e] SERVER-SIDE ERRORS DETECTED (api=$API_ERRS pg=$PG_ERRS)"
+
+    # Local-only convenience output. In CI (env CI or GITHUB_ACTIONS set)
+    # we print NO content to keep job logs clean of any sensitive data.
+    if [ -z "$CI" ] && [ -z "$GITHUB_ACTIONS" ]; then
+        echo "--- api: first 10 matching lines ---"
+        grep -E '\[ERR\]|\[FATAL\]|Unhandled exception|PostgresException|NpgsqlException' "$RESULTS/api.log" 2>/dev/null \
+            | grep -vE 'Bot disconnected.*401: Unauthorized' \
+            | head -10
+        echo "--- postgres: first 10 matching lines ---"
+        grep -E 'ERROR:|FATAL:' "$RESULTS/postgres.log" 2>/dev/null \
+            | grep -vE 'hangfire\.schema.*does not exist|"hangfire"\."schema"' \
+            | head -10
+    fi
+
+    # Sentinel — entrypoint.sh upgrades exit 0 → 3 when this file exists.
+    # Naming the marker conveys the new exit-code convention without needing
+    # the job script itself to know how to exit 3.
+    touch "$RESULTS/.scan-exit3"
+fi
 
 echo "=== e2e.sh: complete ==="

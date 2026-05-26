@@ -298,8 +298,53 @@ def parse_playwright(path: Path, base_display_name: str) -> SuiteResult:
 # Markdown renderer
 # ---------------------------------------------------------------------------
 
-def render_markdown(suites: List[SuiteResult]) -> str:
-    """Render the locked DWBHUB_TEST_SUMMARY markdown from a list of suites."""
+@dataclass
+class ServerSideErrorReport:
+    """Counts of server-side errors detected during a job run (Plan 1.0 Task 14.5).
+
+    The job-script (e.g. jobs/e2e.sh) scans api + postgres docker logs after
+    Playwright finishes and emits a line in the form
+        [<job>] SERVER-SIDE ERRORS DETECTED (api=<N> pg=<M>)
+    into run.log. We parse that line back out here to surface counts (NOT
+    content) in the PR summary.
+    """
+    job: str
+    api: int
+    pg: int
+
+
+def find_server_side_errors(results_dir: Path) -> List[ServerSideErrorReport]:
+    """Scan all <results_dir>/<job>/run.log files for the SERVER-SIDE ERRORS
+    DETECTED marker. Returns one report per job that flagged errors. Counts
+    only — no log content is parsed or exposed.
+    """
+    import re
+    pattern = re.compile(
+        r"\[(?P<job>[a-z0-9_-]+)\] SERVER-SIDE ERRORS DETECTED "
+        r"\(api=(?P<api>\d+) pg=(?P<pg>\d+)\)"
+    )
+    reports: List[ServerSideErrorReport] = []
+    for run_log in sorted(results_dir.rglob("run.log")):
+        try:
+            text = run_log.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for m in pattern.finditer(text):
+            reports.append(ServerSideErrorReport(
+                job=m.group("job"),
+                api=int(m.group("api")),
+                pg=int(m.group("pg")),
+            ))
+    return reports
+
+
+def render_markdown(suites: List[SuiteResult], server_errors: Optional[List[ServerSideErrorReport]] = None) -> str:
+    """Render the locked DWBHUB_TEST_SUMMARY markdown from a list of suites.
+
+    `server_errors` is an optional list from find_server_side_errors() — if
+    non-empty a "Server-side errors detected" section is appended showing
+    counts only. NO log line content is rendered (PR comments are public).
+    """
     total_runs    = sum(s.runs for s in suites)
     total_cases   = sum(s.cases for s in suites)
     total_passed  = sum(s.passed for s in suites)
@@ -404,6 +449,25 @@ def render_markdown(suites: List[SuiteResult]) -> str:
             "Drill into details via the per-job check-runs in the PR Checks tab."
         )
 
+    # ---------------------------------------------------------------------- #
+    # Server-side error counts (Plan 1.0 Task 14.5)
+    #
+    # Counts ONLY. No log content here — this comment is public on the PR,
+    # log content stays on the (ephemeral) runner. To investigate, reproduce
+    # the failing job locally with the same docker compose run command.
+    # ---------------------------------------------------------------------- #
+    if server_errors:
+        lines.append("")
+        lines.append("### ⚠️ Server-side errors detected")
+        lines.append("")
+        for r in server_errors:
+            lines.append(f"- **{r.job}**: api={r.api}, postgres={r.pg}")
+        lines.append("")
+        lines.append(
+            "Counts only — log content is not surfaced here. "
+            "Reproduce the failing job locally to investigate."
+        )
+
     return "\n".join(lines)
 
 
@@ -460,11 +524,19 @@ def main() -> None:
         sys.exit(2)
 
     suites = load_suites(results_dir)
-    markdown = render_markdown(suites)
+    server_errors = find_server_side_errors(results_dir)
+    markdown = render_markdown(suites, server_errors)
     print(markdown)
 
     total_failed = sum(s.failed for s in suites)
-    sys.exit(1 if total_failed > 0 else 0)
+    # Exit 1 on Playwright/Vitest/xunit failures OR on server-side errors —
+    # both should block PR merge. Server-side errors alone (test suites green
+    # but api/pg logs flagged) propagate as exit=3 from the job script via
+    # entrypoint.sh, which CI already treats as failure. This script's own
+    # exit code follows the same logic for local invocation.
+    if total_failed > 0 or server_errors:
+        sys.exit(1)
+    sys.exit(0)
 
 
 if __name__ == "__main__":

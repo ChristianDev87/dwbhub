@@ -1,12 +1,20 @@
 # Plan 0.8.1 — frontend test runner (eslint + prettier + tsc + vitest + vite build).
-# Base: official Node 22 LTS on Alpine (small, fast cold-start).
-FROM node:22-alpine
+# Base: official Node 22 LTS on Ubuntu 24.04 (noble).
+#
+# Why Ubuntu (not alpine):
+#   * Consistency with the other three test-runner images (backend / e2e / security
+#     all use ubuntu-noble — either via dotnet/sdk:10.0 or playwright:*-noble).
+#     Same shell (bash), same coreutils, same apt-get layout — one mental model.
+#   * bash is the default /bin/sh on ubuntu, so entrypoint.sh's `#!/bin/bash`
+#     shebang resolves correctly without an explicit apk add.
+FROM node:22-bookworm-slim
 
-# bash is not required by entrypoint.sh (POSIX-portable) but is retained for
-# ad-hoc interactive debugging inside the container. ~5 MB cost. Drop if size matters.
-# git: useful for any pnpm fetches that reference github: protocol (none currently used).
-# ca-certificates: included by node:22-alpine base; explicit add is a no-op safety net.
-RUN apk add --no-cache bash git ca-certificates
+# bash is the default shell on debian/ubuntu but the slim variant doesn't include
+# git + ca-certificates by default. ca-certificates is needed for HTTPS to the
+# npm registry. git is useful for pnpm github: protocol fetches if any get added.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Pin pnpm to the same version the repo uses (package.json packageManager field).
 RUN npm install -g pnpm@11.1.3
@@ -16,5 +24,6 @@ COPY deploy/test-runners/jobs/         /opt/test-runners/jobs/
 RUN chmod +x /opt/test-runners/entrypoint.sh /opt/test-runners/jobs/*.sh 2>/dev/null || true
 
 WORKDIR /workspace
-# entrypoint.sh uses POSIX sh — works on alpine's /bin/sh (busybox).
+# entrypoint.sh uses bash for PIPESTATUS-based exit-code preservation; node:22
+# debian/ubuntu base ships bash at /bin/bash so the shebang resolves natively.
 ENTRYPOINT ["/opt/test-runners/entrypoint.sh"]

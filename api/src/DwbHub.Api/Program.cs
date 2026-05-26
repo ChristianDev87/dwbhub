@@ -229,6 +229,87 @@ builder.Services
     });
 builder.Services.AddAuthorization();
 
+// --- SignalR (Plan 1.0 Task 8) ------------------------------------------
+// Hub at /api/hubs/messages pushes 6 event types to per-tenant groups.
+builder.Services.AddSignalR(opts =>
+{
+    opts.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    opts.MaximumReceiveMessageSize = 64 * 1024; // 64 KiB — defense in depth (hub has no client-callable methods)
+});
+
+// SignalR broadcaster: implements IMessagesBroadcaster so Application services
+// stay free of SignalR types. Registered as singleton to match IHubContext lifetime.
+builder.Services.AddSingleton<DwbHub.Application.Messaging.IMessagesBroadcaster,
+                              DwbHub.Api.Messaging.SignalRMessagesBroadcaster>();
+
+// --- Plan 1.0 Messaging services ----------------------------------------
+// IChannelWebhookCipher reuses DWBHUB_ENCRYPTION_KEY (same key already
+// required for IBotTokenEncryptor above — one master key, two ciphers).
+builder.Services.AddSingleton<DwbHub.Application.Messaging.IChannelWebhookCipher>(
+    new DwbHub.Infrastructure.Messaging.AesGcmChannelWebhookCipher(encryptionKey));
+
+builder.Services.AddScoped<DwbHub.Core.Repositories.IMessageRepository,
+                           DwbHub.Data.Repositories.MessageRepository>();
+builder.Services.AddScoped<DwbHub.Core.Repositories.IGuildChannelRepository,
+                           DwbHub.Data.Repositories.GuildChannelRepository>();
+builder.Services.AddScoped<DwbHub.Core.Repositories.IChannelWebhookRepository,
+                           DwbHub.Data.Repositories.ChannelWebhookRepository>();
+builder.Services.AddScoped<DwbHub.Core.Repositories.IChannelBackfillJobRepository,
+                           DwbHub.Data.Repositories.ChannelBackfillJobRepository>();
+
+builder.Services.AddScoped<DwbHub.Application.Messaging.IMessageService,
+                           DwbHub.Application.Messaging.MessageService>();
+builder.Services.AddScoped<DwbHub.Application.Messaging.IChannelSyncService,
+                           DwbHub.Application.Messaging.ChannelSyncService>();
+builder.Services.AddScoped<DwbHub.Application.Messaging.IChannelWebhookService,
+                           DwbHub.Application.Messaging.ChannelWebhookService>();
+builder.Services.AddScoped<DwbHub.Application.Messaging.IBackfillRunner,
+                           DwbHub.Application.Messaging.BackfillRunner>();
+
+// DiscordRestChannelClient needs an HttpClient for the webhook-execute path.
+// AddHttpClient<TInterface, TImplementation> registers both the typed client
+// and the IHttpClientFactory binding so DI can resolve the concrete ctor.
+//
+// When DWBHUB_DISCORD_TEST_MODE=fake-rest the scripted fake is substituted so
+// e2e tests can run without a real Discord bot. The fake is FORBIDDEN in
+// Production (double-guarded: here and inside FakeDiscordRestChannelClient ctor).
+if (Environment.GetEnvironmentVariable("DWBHUB_DISCORD_TEST_MODE") == "fake-rest")
+{
+    if (builder.Environment.IsProduction())
+        throw new InvalidOperationException(
+            "DWBHUB_DISCORD_TEST_MODE=fake-rest is forbidden when ASPNETCORE_ENVIRONMENT=Production");
+    builder.Services.AddScoped<DwbHub.Application.Messaging.IDiscordRestChannelClient,
+                               DwbHub.Infrastructure.Messaging.FakeDiscordRestChannelClient>();
+}
+else
+{
+    builder.Services.AddHttpClient<DwbHub.Application.Messaging.IDiscordRestChannelClient,
+                                   DwbHub.Infrastructure.Messaging.DiscordRestChannelClient>();
+}
+
+// JWT bearer for SignalR: the SignalR client sends the access token as
+// ?access_token=... in the WebSocket/LongPolling upgrade URL. We must extract it
+// from the query string for /api/hubs/* paths ONLY — other paths are unaffected.
+builder.Services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, opts =>
+{
+    opts.Events ??= new JwtBearerEvents();
+    var originalOnMessageReceived = opts.Events.OnMessageReceived;
+    opts.Events.OnMessageReceived = async ctx =>
+    {
+        if (originalOnMessageReceived is not null)
+            await originalOnMessageReceived(ctx);
+
+        // Only read the query-string token for hub upgrade requests.
+        if (string.IsNullOrEmpty(ctx.Token))
+        {
+            var accessToken = ctx.Request.Query["access_token"];
+            var path = ctx.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/api/hubs"))
+                ctx.Token = accessToken;
+        }
+    };
+});
+
 var app = builder.Build();
 
 // --- Apply DB migrations (Plan 0.2) ------------------------------------
@@ -296,6 +377,9 @@ Hangfire.RecurringJob.AddOrUpdate<DwbHub.Application.Background.IAuthTokenPruneJ
     "30 3 * * *", new Hangfire.RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 
 app.MapControllers();
+
+// --- SignalR hub (Plan 1.0 Task 8) --------------------------------------
+app.MapHub<DwbHub.Api.Hubs.MessagesHub>("/api/hubs/messages");
 
 Log.Information("DwbHub.Api starting. LogFile={LogFile}", logFilePath);
 

@@ -1,6 +1,23 @@
 import { readFileSync } from "node:fs";
 import type { APIRequestContext } from "@playwright/test";
 
+// ---------------------------------------------------------------------------
+// Fake Discord bot token — valid shape per BotTokenShapeAttribute:
+//   - Exactly 2 dots (3 segments)
+//   - At least 30 alphanumeric chars total
+//   - Matches ^[A-Za-z0-9._-]{50,200}$
+// This token will never reach the real Discord API because the stack uses
+// FakeDiscordRestChannelClient when DWBHUB_DISCORD_TEST_MODE=fake-rest.
+// ---------------------------------------------------------------------------
+const FAKE_BOT_TOKEN =
+  "MTAwMDAwMDAwMDAwMDAwMDAwMDAwMDA.GFakeToken.AbCdEfGhIjKlMnOpQrStUvWxYzAb-fake";
+
+// Deterministic fake Discord guild snowflake used by seedActiveGuild.
+// The value is stable across runs so the guild upsert is idempotent IF the
+// database volume is preserved between test sessions. Individual test cases
+// that need isolation should generate their own unique IDs.
+const FAKE_GUILD_DISCORD_ID = "100200300400500600";
+
 const BOOTSTRAP_TOKEN_PATH = "/api-bootstrap-ro/bootstrap-token.txt";
 
 /**
@@ -195,4 +212,158 @@ export async function ensureSetupCompleted(
       `POST /api/auth/verify-email/confirm failed with ${confirmRes.status()}: ${body.slice(0, 400)}`,
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// seedActiveGuild
+// ---------------------------------------------------------------------------
+
+export interface SeedGuildResult {
+  guildPublicId: string;
+  /** First text channel publicId returned by the fake client after sync */
+  firstTextChannelPublicId: string | null;
+}
+
+/**
+ * Login as the tenant owner, create a Discord guild record, configure a fake
+ * bot token, activate the bot connection, and sync channels from the fake
+ * Discord REST client.
+ *
+ * Prerequisites:
+ *   - ensureSetupCompleted() must have been called first (or the stack must
+ *     already be bootstrapped).
+ *   - DWBHUB_DISCORD_TEST_MODE=fake-rest must be active on the API container
+ *     so the channel sync succeeds without real Discord credentials.
+ *
+ * Returns { guildPublicId, firstTextChannelPublicId } for use in test assertions.
+ *
+ * If a guild with `discordGuildId` already exists (HTTP 409), the function
+ * treats it as idempotent and fetches the existing guild list to return the
+ * matching publicId.
+ */
+export async function seedActiveGuild(
+  request: APIRequestContext,
+  opts?: {
+    discordGuildId?: string;
+    displayName?: string;
+  },
+): Promise<SeedGuildResult> {
+  const slug = SETUP_DEFAULTS.tenantSlug;
+  const discordGuildId = opts?.discordGuildId ?? FAKE_GUILD_DISCORD_ID;
+  const displayName = opts?.displayName ?? "E2E Fake Guild";
+
+  // 1. Login as owner to get access token (cookie-based sessions).
+  // The login endpoint is /api/tenants/{slug}/auth/login (tenant-scoped).
+  const loginRes = await request.post(`/api/tenants/${slug}/auth/login`, {
+    data: {
+      email: SETUP_DEFAULTS.ownerEmail,
+      password: SETUP_DEFAULTS.ownerPassword,
+    },
+  });
+  if (!loginRes.ok()) {
+    const body = await loginRes.text();
+    throw new Error(
+      `seedActiveGuild: login failed with ${loginRes.status()}: ${body.slice(0, 400)}`,
+    );
+  }
+  const loginBody = (await loginRes.json()) as { accessToken: string };
+  const accessToken = loginBody.accessToken;
+  const authHeader = { Authorization: `Bearer ${accessToken}` };
+
+  // 2. Add guild (idempotent — 409 treated as success).
+  let guildPublicId: string;
+
+  const addRes = await request.post(`/api/t/${slug}/guilds`, {
+    headers: authHeader,
+    data: { discordGuildId, displayName },
+  });
+
+  if (addRes.ok()) {
+    const body = (await addRes.json()) as { publicId: string };
+    guildPublicId = body.publicId;
+  } else if (addRes.status() === 409) {
+    // Already exists — find it in the list
+    const listRes = await request.get(`/api/t/${slug}/guilds`, {
+      headers: authHeader,
+    });
+    if (!listRes.ok()) {
+      throw new Error(
+        `seedActiveGuild: GET guilds failed ${listRes.status()} after 409 on add`,
+      );
+    }
+    const listBody = (await listRes.json()) as {
+      guilds: Array<{ publicId: string; discordGuildId: string }>;
+    };
+    const existing = listBody.guilds.find(
+      (g) => g.discordGuildId === discordGuildId,
+    );
+    if (!existing) {
+      throw new Error(
+        `seedActiveGuild: got 409 but could not find guild ${discordGuildId} in list`,
+      );
+    }
+    guildPublicId = existing.publicId;
+  } else {
+    const body = await addRes.text();
+    throw new Error(
+      `seedActiveGuild: POST guilds failed with ${addRes.status()}: ${body.slice(0, 400)}`,
+    );
+  }
+
+  // 3. PUT bot credentials (idempotent upsert).
+  const credRes = await request.put(
+    `/api/t/${slug}/guilds/${guildPublicId}/bot-credentials`,
+    {
+      headers: authHeader,
+      data: { token: FAKE_BOT_TOKEN },
+    },
+  );
+  // 204 = set; 404 = guild not found (shouldn't happen at this point)
+  if (!credRes.ok()) {
+    const body = await credRes.text();
+    throw new Error(
+      `seedActiveGuild: PUT bot-credentials failed ${credRes.status()}: ${body.slice(0, 300)}`,
+    );
+  }
+
+  // 4. Activate the bot connection (idempotent — guild is already active by default).
+  //    The GuildsController.Activate route is POST /api/t/{slug}/guilds/{publicId}/activate.
+  //    New guilds are active=true on creation, so this is a no-op — but we call it
+  //    to ensure OnGuildActivatedAsync runs and the BotConnectionManager picks up creds.
+  await request.post(`/api/t/${slug}/guilds/${guildPublicId}/activate`, {
+    headers: authHeader,
+  });
+
+  // Brief pause to allow BotConnectionManager to process credentials asynchronously.
+  await new Promise((r) => setTimeout(r, 800));
+
+  // 5. Sync channels from FakeDiscordRestChannelClient.
+  const syncRes = await request.post(
+    `/api/t/${slug}/guilds/${guildPublicId}/channels/sync`,
+    { headers: authHeader },
+  );
+  if (!syncRes.ok() && syncRes.status() !== 204) {
+    const body = await syncRes.text();
+    throw new Error(
+      `seedActiveGuild: POST channels/sync failed ${syncRes.status()}: ${body.slice(0, 400)}`,
+    );
+  }
+
+  // 6. Fetch channel list to find the first text channel public ID.
+  const channelRes = await request.get(
+    `/api/t/${slug}/guilds/${guildPublicId}/channels`,
+    { headers: authHeader },
+  );
+  if (!channelRes.ok()) {
+    throw new Error(
+      `seedActiveGuild: GET channels failed ${channelRes.status()}`,
+    );
+  }
+  const channelBody = (await channelRes.json()) as {
+    channels: Array<{ publicId: string; channelType: number }>;
+  };
+  const firstText =
+    channelBody.channels.find((c) => c.channelType === 0)?.publicId ?? null;
+
+  return { guildPublicId, firstTextChannelPublicId: firstText };
 }
