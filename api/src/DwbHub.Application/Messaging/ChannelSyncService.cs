@@ -38,6 +38,7 @@ public sealed class ChannelSyncService : IChannelSyncService
         _logger = logger;
     }
 
+    /// <inheritdoc/>
     public async Task SyncFromDiscordAsync(
         long tenantId,
         Guid guildPublicId,

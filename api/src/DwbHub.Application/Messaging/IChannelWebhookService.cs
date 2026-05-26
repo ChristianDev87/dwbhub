@@ -3,7 +3,7 @@ namespace DwbHub.Application.Messaging;
 /// <summary>
 /// Manages the lifecycle of Discord webhook credentials for bridged channels.
 ///
-/// Security invariant: the raw webhook token is NEVER returned to callers or
+/// Security invariant: the raw webhook token is never returned to callers or
 /// exposed in any DTO or log line. It lives in memory only during the outbound
 /// HTTP call to Discord and is immediately discarded.
 /// </summary>
@@ -34,7 +34,7 @@ public interface IChannelWebhookService
 
     /// <summary>
     /// Decrypts the stored webhook token for internal callers.
-    /// This method MUST NOT be called from any HTTP controller or DTO projection.
+    /// Only call this from internal service code — HTTP controllers and DTO projections must not touch the raw token.
     /// </summary>
     Task<string> DecryptTokenAsync(
         long tenantId,

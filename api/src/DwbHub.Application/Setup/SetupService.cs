@@ -8,6 +8,9 @@ using Npgsql;
 
 namespace DwbHub.Application.Setup;
 
+/// <summary>
+/// Implements the one-time setup wizard defined by <see cref="ISetupService"/>.
+/// </summary>
 public sealed class SetupService(
     ISystemBootstrapLockRepository locks,
     ITenantRepository tenants,
@@ -19,6 +22,7 @@ public sealed class SetupService(
     ILogger<SetupService> logger,
     IAuditWriter auditWriter) : ISetupService
 {
+    /// <inheritdoc/>
     public async Task<SetupStatus> GetStatusAsync(CancellationToken ct = default)
     {
         var row = await locks.LoadAsync(ct).ConfigureAwait(false);
@@ -31,6 +35,7 @@ public sealed class SetupService(
             CompletedAt: row.ConsumedAt);
     }
 
+    /// <inheritdoc/>
     public async Task<SetupOutcome> CompleteAsync(
         SetupRequest request,
         IPAddress? ip,

@@ -5,6 +5,9 @@ using DwbHub.Core.Repositories;
 
 namespace DwbHub.Application.Auth;
 
+/// <summary>
+/// Implements email address verification via token-based confirmation emails.
+/// </summary>
 public sealed class EmailVerificationService(
     IAuthTokenRepository authTokens,
     ITenantRepository tenants,
@@ -18,6 +21,7 @@ public sealed class EmailVerificationService(
 {
     private static readonly TimeSpan Lifetime = TimeSpan.FromHours(24);
 
+    /// <inheritdoc/>
     public async Task ResendAsync(
         string tenantSlug, string email, string locale, IPAddress? ip, string? userAgent,
         CancellationToken ct = default)
@@ -59,6 +63,7 @@ public sealed class EmailVerificationService(
             IpAddress: ip, UserAgent: userAgent), ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<VerifyConfirmOutcome> ConfirmAsync(string tokenPlaintext, CancellationToken ct = default)
     {
         var hash = hasher.Hash(tokenPlaintext);

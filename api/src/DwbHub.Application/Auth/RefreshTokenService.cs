@@ -5,6 +5,11 @@ using DwbHub.Core.Repositories;
 
 namespace DwbHub.Application.Auth;
 
+/// <summary>
+/// Implements refresh-token issuance, rotation, and logout as defined by
+/// <see cref="IRefreshTokenService"/>. Handles theft detection (chain revocation)
+/// and rights-change detection (force re-login).
+/// </summary>
 public sealed class RefreshTokenService(
     IRefreshTokenRepository refreshTokens,
     IUserRepository users,
@@ -16,6 +21,7 @@ public sealed class RefreshTokenService(
 {
     private static readonly TimeSpan Lifetime = TimeSpan.FromDays(30);
 
+    /// <inheritdoc/>
     public async Task<string> IssueForLoginAsync(User user, Tenant tenant, IPAddress? ip, string? userAgent, CancellationToken ct = default)
     {
         var plaintext = generator.GenerateUrlSafeBase64();
@@ -28,6 +34,7 @@ public sealed class RefreshTokenService(
         return plaintext;
     }
 
+    /// <inheritdoc/>
     public async Task<RefreshOutcome> RefreshAsync(string refreshTokenPlaintext, IPAddress? ip, string? userAgent, CancellationToken ct = default)
     {
         var oldHash = hasher.Hash(refreshTokenPlaintext);
@@ -84,6 +91,7 @@ public sealed class RefreshTokenService(
         return new RefreshOutcome.Success(accessToken, newPlaintext);
     }
 
+    /// <inheritdoc/>
     public async Task LogoutAsync(string refreshTokenPlaintext, CancellationToken ct = default)
     {
         var hash = hasher.Hash(refreshTokenPlaintext);

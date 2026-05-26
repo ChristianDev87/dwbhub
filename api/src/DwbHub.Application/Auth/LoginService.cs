@@ -5,6 +5,9 @@ using DwbHub.Core.Repositories;
 
 namespace DwbHub.Application.Auth;
 
+/// <summary>
+/// Implements the full login flow defined by <see cref="ILoginService"/>.
+/// </summary>
 public sealed class LoginService(
     ITenantRepository tenants,
     IUserRepository users,
@@ -17,6 +20,7 @@ public sealed class LoginService(
     private const int LockoutThreshold = 5;
     private static readonly TimeSpan LockoutWindow = TimeSpan.FromMinutes(15);
 
+    /// <inheritdoc/>
     public async Task<LoginOutcome> LoginAsync(
         string tenantSlug, string email, string password, IPAddress ipAddress, CancellationToken ct = default)
     {

@@ -3,7 +3,7 @@ namespace DwbHub.Application.Messaging;
 /// <summary>
 /// Discord MessageReceived translated to a Discord-agnostic shape.
 /// Fired by IBotConnection when ANY message arrives in a guild channel — the
-/// consumer (Task 6 MessageService) filters by bridged-channel + webhook-loop.
+/// <see cref="IMessageService"/> filters by bridged-channel and webhook-loop before persisting.
 /// </summary>
 public sealed record MessageReceivedEvent
 {

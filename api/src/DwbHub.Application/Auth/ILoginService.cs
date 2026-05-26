@@ -8,5 +8,10 @@ namespace DwbHub.Application.Auth;
 /// </summary>
 public interface ILoginService
 {
+    /// <summary>
+    /// Attempt to authenticate a user. Checks lockout, tenant and user existence,
+    /// email verification, and BCrypt password match. Returns the appropriate
+    /// <see cref="LoginOutcome"/> case; never throws for expected failure paths.
+    /// </summary>
     Task<LoginOutcome> LoginAsync(string tenantSlug, string email, string password, IPAddress ipAddress, CancellationToken ct = default);
 }

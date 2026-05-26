@@ -50,6 +50,7 @@ public sealed class MessageService : IMessageService
 
     // ── Inbound ───────────────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task<Message?> PersistInboundAsync(MessageReceivedEvent evt, CancellationToken ct = default)
     {
         // 1. Resolve channel — skip if unknown or not bridged
@@ -125,6 +126,7 @@ public sealed class MessageService : IMessageService
 
     // ── Edit ──────────────────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task PersistEditAsync(MessageUpdatedEvent evt, CancellationToken ct = default)
     {
         var updated = await _messages.ApplyEditAsync(
@@ -149,6 +151,7 @@ public sealed class MessageService : IMessageService
 
     // ── Delete ────────────────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task MarkDeletedAsync(MessageDeletedEvent evt, CancellationToken ct = default)
     {
         var deleted = await _messages.MarkDeletedAsync(
@@ -172,6 +175,7 @@ public sealed class MessageService : IMessageService
 
     // ── Outbound ──────────────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task<Message> SendOutboundAsync(
         long tenantId,
         long channelId,
@@ -221,6 +225,7 @@ public sealed class MessageService : IMessageService
 
     // ── History ───────────────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<Message>> ListHistoryAsync(
         long tenantId,
         long channelId,
