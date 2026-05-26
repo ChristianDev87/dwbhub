@@ -11,6 +11,7 @@
 import type React from "react";
 import { Virtuoso } from "react-virtuoso";
 import type { ChatMessage } from "./useChannel";
+import type { MessageActionPermissions } from "./MessageActionsMenu";
 import { MessageRow } from "./MessageRow";
 
 interface MessageListProps {
@@ -18,6 +19,9 @@ interface MessageListProps {
   hasMore: boolean;
   onLoadOlder: () => void;
   onAtBottomChange: (atBottom: boolean) => void;
+  getPermissions?: (msg: ChatMessage) => MessageActionPermissions;
+  onEdit?: (messageId: number, content: string) => Promise<void>;
+  onDelete?: (messageId: number) => void;
 }
 
 export function MessageList({
@@ -25,6 +29,9 @@ export function MessageList({
   hasMore,
   onLoadOlder,
   onAtBottomChange,
+  getPermissions,
+  onEdit,
+  onDelete,
 }: MessageListProps): React.JSX.Element {
   // startReached must be omitted entirely (not passed as undefined) because
   // the project uses exactOptionalPropertyTypes: true.
@@ -40,9 +47,18 @@ export function MessageList({
       followOutput="auto"
       {...startReachedProp}
       atBottomStateChange={onAtBottomChange}
-      itemContent={(_index: number, item: ChatMessage) => (
-        <MessageRow key={item.id} message={item} />
-      )}
+      itemContent={(_index: number, item: ChatMessage) => {
+        const perms = getPermissions?.(item);
+        return (
+          <MessageRow
+            key={item.id}
+            message={item}
+            {...(perms !== undefined ? { permissions: perms } : {})}
+            {...(onEdit !== undefined ? { onEdit } : {})}
+            {...(onDelete !== undefined ? { onDelete } : {})}
+          />
+        );
+      }}
     />
   );
 }

@@ -31,6 +31,9 @@ export interface MessageUpdatedPayload {
 export interface MessageDeletedPayload {
   /** Discord snowflake id of the deleted message. Match against ChatMessage.discordMessageId. */
   messageId: number | string;
+  deletedAt?: string;
+  deletedByUserId?: number | null;
+  reason?: string | null;
 }
 
 export interface BackfillProgressPayload {

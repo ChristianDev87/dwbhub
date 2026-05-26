@@ -35,6 +35,10 @@ export interface ChatMessage {
   discordMessageId: number | string | null;
   isDeleted: boolean;
   isPending: boolean;
+  /** DwbHub user id of the message author (set for viaDwbhub messages). */
+  dwbhubUserId?: number | null;
+  /** Deletion reason string from SignalR MessageDeleted event. */
+  deletedReason?: string | null;
 }
 
 // Backend history item shape (from GET /messages)
@@ -46,6 +50,7 @@ interface MessageHistoryItem {
   editedAt: string | null;
   viaDwbhub: boolean;
   discordMessageId: number | string;
+  dwbhubUserId?: number | null;
 }
 
 interface MessageHistoryResponse {
@@ -60,6 +65,13 @@ interface SendMessageResponse {
   sentAt: string;
 }
 
+export interface EditMessageError {
+  status: number;
+  /** Backend error code, e.g. "edit_window_expired" */
+  code?: string;
+  windowSeconds?: number;
+}
+
 export interface UseChannelResult {
   messages: ChatMessage[];
   isLoading: boolean;
@@ -71,8 +83,14 @@ export interface UseChannelResult {
   newCount: number;
   /** Current SignalR hub connection state. Used by ChatPage for data-signalr-state. */
   hubState: HubConnectionState;
+  /** Id of the currently authenticated user (null if unauthenticated). */
+  currentUserId: number | null;
   loadOlder: () => void;
   sendMessage: (content: string) => Promise<void>;
+  /** Edit a message. Rejects with EditMessageError on failure. */
+  editMessage: (messageId: number, content: string) => Promise<void>;
+  /** Delete a message. Rejects with EditMessageError on failure. */
+  deleteMessage: (messageId: number) => Promise<void>;
   markAtBottom: (atBottom: boolean) => void;
 }
 
@@ -88,6 +106,7 @@ export function useChannel(
   const accessToken = state.kind === "authenticated" ? state.accessToken : null;
   const displayName =
     state.kind === "authenticated" ? state.user.displayName : "";
+  const currentUserId = state.kind === "authenticated" ? state.user.id : null;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -124,6 +143,8 @@ export function useChannel(
       discordMessageId: item.discordMessageId,
       isDeleted: false,
       isPending: false,
+      dwbhubUserId: item.dwbhubUserId ?? null,
+      deletedReason: null,
     };
   }
 
@@ -270,6 +291,9 @@ export function useChannel(
               discordMessageId: p.discordMessageId,
               isDeleted: false,
               isPending: false,
+              dwbhubUserId:
+                (p as { dwbhubUserId?: number | null }).dwbhubUserId ?? null,
+              deletedReason: null,
             };
             return updated;
           }
@@ -285,6 +309,9 @@ export function useChannel(
             discordMessageId: p.discordMessageId,
             isDeleted: false,
             isPending: false,
+            dwbhubUserId:
+              (p as { dwbhubUserId?: number | null }).dwbhubUserId ?? null,
+            deletedReason: null,
           };
 
           if (!atBottomRef.current) {
@@ -312,7 +339,11 @@ export function useChannel(
           prev.map((m) =>
             m.discordMessageId !== null &&
             String(m.discordMessageId) === String(p.messageId)
-              ? { ...m, isDeleted: true }
+              ? {
+                  ...m,
+                  isDeleted: true,
+                  deletedReason: p.reason ?? null,
+                }
               : m,
           ),
         );
@@ -348,6 +379,8 @@ export function useChannel(
         discordMessageId: null, // filled after POST responds
         isDeleted: false,
         isPending: true,
+        dwbhubUserId: currentUserId,
+        deletedReason: null,
       };
 
       setMessages((prev) => [...prev, pendingMsg]);
@@ -389,7 +422,86 @@ export function useChannel(
         setIsSending(false);
       }
     },
-    [slug, channelPublicId, accessToken, displayName],
+    [slug, channelPublicId, accessToken, displayName, currentUserId],
+  );
+
+  // ---------------------------------------------------------------------------
+  // Edit message
+  // ---------------------------------------------------------------------------
+
+  const editMessage = useCallback(
+    async (messageId: number, content: string): Promise<void> => {
+      if (!accessToken) return;
+      const url = `/api/t/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channelPublicId)}/messages/${String(messageId)}`;
+      const res = await fetch(url, {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content }),
+      });
+      if (!res.ok) {
+        let parsedCode: string | undefined;
+        let parsedWindowSeconds: number | undefined;
+        try {
+          const body = (await res.json()) as {
+            error?: string;
+            windowSeconds?: number;
+          };
+          parsedCode = body.error;
+          parsedWindowSeconds = body.windowSeconds;
+        } catch {
+          // ignore parse errors
+        }
+        const err: EditMessageError = { status: res.status };
+        if (parsedCode !== undefined) err.code = parsedCode;
+        if (parsedWindowSeconds !== undefined)
+          err.windowSeconds = parsedWindowSeconds;
+        throw err;
+      }
+      // Optimistically update local content so the edit is reflected before
+      // the SignalR MessageUpdated event arrives.
+      const editedAt = new Date().toISOString();
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, content, editedAt } : m)),
+      );
+    },
+    [slug, channelPublicId, accessToken],
+  );
+
+  // ---------------------------------------------------------------------------
+  // Delete message
+  // ---------------------------------------------------------------------------
+
+  const deleteMessage = useCallback(
+    async (messageId: number): Promise<void> => {
+      if (!accessToken) return;
+      const url = `/api/t/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channelPublicId)}/messages/${String(messageId)}`;
+      const res = await fetch(url, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        let parsedCode: string | undefined;
+        try {
+          const body = (await res.json()) as { error?: string };
+          parsedCode = body.error;
+        } catch {
+          // ignore parse errors
+        }
+        const err: EditMessageError = { status: res.status };
+        if (parsedCode !== undefined) err.code = parsedCode;
+        throw err;
+      }
+      // Optimistically mark as deleted
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, isDeleted: true } : m)),
+      );
+    },
+    [slug, channelPublicId, accessToken],
   );
 
   // ---------------------------------------------------------------------------
@@ -413,8 +525,11 @@ export function useChannel(
     sendError,
     newCount,
     hubState,
+    currentUserId,
     loadOlder,
     sendMessage,
+    editMessage,
+    deleteMessage,
     markAtBottom,
   };
 }

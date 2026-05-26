@@ -9,15 +9,29 @@
  *
  * TODO: add GET /api/t/{slug}/channels/{publicId} endpoint and fetch the
  *   channel name here so deep-links / refreshes also show the real name.
+ *
+ * Edit/Delete flow (Plan 1.1):
+ *   - Permissions computed per-message (own outbound vs. moderator)
+ *   - useChannel now exposes editMessage() and deleteMessage()
+ *   - DeleteConfirmDialog handles the two-step confirmation
+ *   - Error feedback is shown inline below the message list
  */
 
 import type React from "react";
+import { useCallback, useState } from "react";
 import { useParams, useLocation, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { HubConnectionState } from "@microsoft/signalr";
-import { useChannel } from "./useChannel";
+import { useAuth } from "../auth-context";
+import {
+  useChannel,
+  type ChatMessage,
+  type EditMessageError,
+} from "./useChannel";
 import { MessageList } from "./MessageList";
 import { SendBox } from "./SendBox";
+import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
+import type { MessageActionPermissions } from "./MessageActionsMenu";
 
 export function ChatPage(): React.JSX.Element {
   const { slug, channelPublicId } = useParams<{
@@ -26,6 +40,7 @@ export function ChatPage(): React.JSX.Element {
   }>();
   const location = useLocation();
   const { t } = useTranslation();
+  const { state: authState } = useAuth();
 
   // Channel name via router state (Option C); fall back to ID prefix
   const channelName =
@@ -42,10 +57,107 @@ export function ChatPage(): React.JSX.Element {
     sendError,
     newCount,
     hubState,
+    currentUserId,
     loadOlder,
     sendMessage,
+    editMessage,
+    deleteMessage,
     markAtBottom,
   } = useChannel(slug ?? "", channelPublicId ?? "");
+
+  // Delete confirmation state
+  const [deleteCandidateId, setDeleteCandidateId] = useState<number | null>(
+    null,
+  );
+  // Inline error for edit/delete failures
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // -------------------------------------------------------------------------
+  // Permission computation
+  // -------------------------------------------------------------------------
+
+  const isOwner =
+    authState.kind === "authenticated" && authState.user.role === "Owner";
+
+  const getPermissions = useCallback(
+    (msg: ChatMessage): MessageActionPermissions => {
+      const isOwnOutbound =
+        msg.viaDwbhub &&
+        msg.dwbhubUserId != null &&
+        msg.dwbhubUserId === currentUserId;
+      const isDeleted = msg.isDeleted;
+
+      // Edit window: 15 minutes (no server-side config exposed to frontend yet;
+      // backend enforces the real window — this is only for UI hint).
+      const EDIT_WINDOW_MS = 15 * 60 * 1000;
+      const ageSec = Date.now() - new Date(msg.sentAt).getTime();
+      const withinEditWindow = ageSec < EDIT_WINDOW_MS;
+
+      return {
+        canEdit: isOwnOutbound && !isDeleted && withinEditWindow,
+        canDeleteSelf: isOwnOutbound && !isDeleted,
+        canModDelete: isOwner && !isOwnOutbound && !isDeleted,
+      };
+    },
+    [currentUserId, isOwner],
+  );
+
+  // -------------------------------------------------------------------------
+  // Edit handler
+  // -------------------------------------------------------------------------
+
+  const handleEdit = useCallback(
+    async (messageId: number, content: string): Promise<void> => {
+      setActionError(null);
+      try {
+        await editMessage(messageId, content);
+      } catch (err: unknown) {
+        const e = err as EditMessageError;
+        if (e.status === 422 && e.code === "edit_window_expired") {
+          const minutes = Math.ceil((e.windowSeconds ?? 0) / 60) || 15;
+          setActionError(t("chat.error.editWindowExpired", { minutes }));
+        } else if (e.status === 410) {
+          setActionError(t("chat.error.alreadyDeleted"));
+        } else if (e.status === 502) {
+          setActionError(t("chat.error.discordUpstream"));
+        } else {
+          setActionError(t("chat.errorSend"));
+        }
+        // Re-throw so MessageEditMode knows the save failed and can stay open
+        throw err;
+      }
+    },
+    [editMessage, t],
+  );
+
+  // -------------------------------------------------------------------------
+  // Delete handler
+  // -------------------------------------------------------------------------
+
+  const handleDeleteRequest = useCallback((messageId: number) => {
+    setActionError(null);
+    setDeleteCandidateId(messageId);
+  }, []);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (deleteCandidateId == null) return;
+    const id = deleteCandidateId;
+    setDeleteCandidateId(null);
+    try {
+      await deleteMessage(id);
+    } catch (err: unknown) {
+      const e = err as EditMessageError;
+      if (e.status === 412) {
+        setActionError(t("chat.error.botMissingPermission"));
+      } else if (e.status === 410) {
+        setActionError(t("chat.error.alreadyDeleted"));
+      } else if (e.status === 502) {
+        setActionError(t("chat.error.discordUpstream"));
+      } else {
+        setActionError(t("chat.errorSend"));
+      }
+    }
+  }, [deleteCandidateId, deleteMessage, t]);
 
   // -------------------------------------------------------------------------
   // Render helpers
@@ -117,6 +229,9 @@ export function ChatPage(): React.JSX.Element {
             hasMore={hasMore}
             onLoadOlder={loadOlder}
             onAtBottomChange={markAtBottom}
+            getPermissions={getPermissions}
+            onEdit={handleEdit}
+            onDelete={handleDeleteRequest}
           />
         )}
 
@@ -144,10 +259,28 @@ export function ChatPage(): React.JSX.Element {
         </p>
       )}
 
+      {/* Edit / delete action error */}
+      {actionError && (
+        <p
+          role="alert"
+          className="px-4 py-1 text-sm text-red-600"
+          data-testid="chat-action-error"
+        >
+          {actionError}
+        </p>
+      )}
+
       {/* Send box */}
       <div className="shrink-0">
         <SendBox onSend={sendMessage} disabled={isSending} />
       </div>
+
+      {/* Delete confirmation dialog */}
+      <DeleteConfirmDialog
+        open={deleteCandidateId != null}
+        onClose={() => setDeleteCandidateId(null)}
+        onConfirm={() => void handleDeleteConfirm()}
+      />
     </div>
   );
 }

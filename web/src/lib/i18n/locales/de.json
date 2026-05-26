@@ -150,7 +150,34 @@
     "send": "Senden",
     "sending": "wird gesendet…",
     "viaDwbhub": "(über DwbHub)",
-    "you": "Du"
+    "you": "Du",
+    "menu": {
+      "edit": "Bearbeiten",
+      "delete": "Löschen",
+      "moderationDelete": "Löschen (Moderation)"
+    },
+    "editMode": {
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "charCount": "{{count}} / 2000"
+    },
+    "deleteDialog": {
+      "title": "Nachricht löschen?",
+      "body": "Diese Nachricht verschwindet auch auf Discord und kann nicht wiederhergestellt werden.",
+      "cancel": "Abbrechen",
+      "confirm": "Löschen"
+    },
+    "deletedPlaceholder": {
+      "discordSide": "[Auf Discord gelöscht]",
+      "self": "[Du hast diese Nachricht gelöscht]",
+      "moderation": "[Vom Moderator entfernt]"
+    },
+    "error": {
+      "editWindowExpired": "Edit-Zeit ({{minutes}} Min) abgelaufen",
+      "alreadyDeleted": "Nachricht wurde bereits gelöscht",
+      "botMissingPermission": "Bot hat keine 'Manage Messages'-Permission. Owner muss das in Discord vergeben.",
+      "discordUpstream": "Discord nicht erreichbar"
+    }
   },
   "botCredentials": {
     "configured": "Bot-Token konfiguriert",

@@ -150,7 +150,34 @@
     "send": "Send",
     "sending": "sending…",
     "viaDwbhub": "(via DwbHub)",
-    "you": "You"
+    "you": "You",
+    "menu": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "moderationDelete": "Delete (Moderation)"
+    },
+    "editMode": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "charCount": "{{count}} / 2000"
+    },
+    "deleteDialog": {
+      "title": "Delete message?",
+      "body": "This message will also disappear on Discord and cannot be restored.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
+    "deletedPlaceholder": {
+      "discordSide": "[Deleted on Discord]",
+      "self": "[You deleted this message]",
+      "moderation": "[Removed by moderator]"
+    },
+    "error": {
+      "editWindowExpired": "Edit window ({{minutes}} min) has expired",
+      "alreadyDeleted": "Message was already deleted",
+      "botMissingPermission": "Bot is missing 'Manage Messages' permission. Owner must grant it in Discord.",
+      "discordUpstream": "Discord is not reachable"
+    }
   },
   "botCredentials": {
     "configured": "Bot token configured",
