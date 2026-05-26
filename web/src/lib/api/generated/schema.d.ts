@@ -1442,6 +1442,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/t/{slug}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PatchTenantSettingsRequest"];
+                    "text/json": components["schemas"]["PatchTenantSettingsRequest"];
+                    "application/*+json": components["schemas"]["PatchTenantSettingsRequest"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/api/t/{slug}/test-only/messages/{messageId}/edit": {
         parameters: {
             query?: never;
@@ -1678,6 +1741,10 @@ export interface components {
         PasswordResetRequestRequest: {
             tenantSlug?: string | null;
             email?: string | null;
+        };
+        PatchTenantSettingsRequest: {
+            /** Format: int32 */
+            messageEditWindowSeconds?: number | null;
         };
         ProblemDetails: {
             type?: string | null;

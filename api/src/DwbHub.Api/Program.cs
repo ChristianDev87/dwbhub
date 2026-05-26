@@ -158,6 +158,8 @@ builder.Services.AddScoped<DwbHub.Application.Tenancy.IGuildContext,
                            DwbHub.Infrastructure.Tenancy.GuildContext>();
 builder.Services.AddScoped<DwbHub.Core.Repositories.IGuildRepository,
                            DwbHub.Data.Repositories.GuildRepository>();
+builder.Services.AddScoped<DwbHub.Application.Tenancy.ITenantSettingsService,
+                           DwbHub.Application.Tenancy.TenantSettingsService>();
 
 // --- Bot token encryption ----------------------------------------------
 var encryptionKey = Environment.GetEnvironmentVariable("DWBHUB_ENCRYPTION_KEY")
