@@ -28,7 +28,9 @@ public sealed class TenantSettingsController(
         _ = slug;
         var tenant = tenantContext.Current
             ?? throw new InvalidOperationException("TenantContext not populated despite /api/t/ route.");
-        var actorUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+        var actorUserId = long.Parse(
+            User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
             ?? throw new InvalidOperationException("Authorized action without user id claim."));
 
         try

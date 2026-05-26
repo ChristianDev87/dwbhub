@@ -248,7 +248,7 @@ public sealed class MessagesController(
             ?? throw new InvalidOperationException("TenantContext not populated despite /api/t/ route.");
         var actorUserId = ExtractUserId()
             ?? throw new InvalidOperationException("Authorized action without user id claim.");
-        var actorRole = User.FindFirstValue(ClaimTypes.Role) ?? "Member";
+        var actorRole = User.FindFirstValue("role") ?? "Member";
 
         var outcome = await messageService.DeleteAsync(tenant.Id, actorUserId, actorRole, messageId, ct)
             .ConfigureAwait(false);
