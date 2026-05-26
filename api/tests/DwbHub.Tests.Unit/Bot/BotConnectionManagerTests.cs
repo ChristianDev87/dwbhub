@@ -193,10 +193,122 @@ public sealed class BotConnectionManagerTests
         await mgr.OnCredentialsChangedAsync(90, CancellationToken.None);
         var first = factory.Created[90];
 
-        await mgr.OnManualReconnectAsync(90, actorUserId: 42, CancellationToken.None);
+        var outcome = await mgr.OnManualReconnectAsync(90, actorUserId: 42, CancellationToken.None);
 
+        outcome.Should().BeOfType<ManualReconnectOutcome.Triggered>();
         first.DisconnectCalls.Should().BeGreaterThan(0);
         factory.Created[90].Should().NotBeSameAs(first);
         factory.Created[90].State.Should().Be(BotConnectionState.Connected);
+    }
+
+    // --- Cool-down tests ---
+
+    [Fact]
+    public async Task OnManualReconnectAsync_first_call_returns_Triggered_and_reconnects()
+    {
+        var (mgr, factory, guilds, creds, _, _) = Build();
+        guilds.Setup(r => r.GetByIdAsync(100, It.IsAny<CancellationToken>()))
+              .ReturnsAsync(FakeGuild(100, 1));
+        creds.Setup(r => r.GetByGuildIdAsync(100, 1, It.IsAny<CancellationToken>()))
+             .ReturnsAsync(FakeCredential(100, 1));
+
+        var outcome = await mgr.OnManualReconnectAsync(100, actorUserId: 1, CancellationToken.None);
+
+        outcome.Should().BeOfType<ManualReconnectOutcome.Triggered>();
+        factory.Created.Should().ContainKey(100);
+        factory.Created[100].State.Should().Be(BotConnectionState.Connected);
+    }
+
+    [Fact]
+    public async Task OnManualReconnectAsync_second_call_within_60s_returns_CoolDownActive_with_remaining_seconds()
+    {
+        var (mgr, factory, guilds, creds, _, _) = Build();
+        guilds.Setup(r => r.GetByIdAsync(110, It.IsAny<CancellationToken>()))
+              .ReturnsAsync(FakeGuild(110, 1));
+        creds.Setup(r => r.GetByGuildIdAsync(110, 1, It.IsAny<CancellationToken>()))
+             .ReturnsAsync(FakeCredential(110, 1));
+
+        var t0 = new DateTimeOffset(2024, 1, 1, 12, 0, 0, TimeSpan.Zero);
+        mgr._now = () => t0;
+        var first = await mgr.OnManualReconnectAsync(110, actorUserId: 1, CancellationToken.None);
+        first.Should().BeOfType<ManualReconnectOutcome.Triggered>();
+
+        // Advance 30 seconds — still within the 60s window.
+        mgr._now = () => t0.AddSeconds(30);
+        var second = await mgr.OnManualReconnectAsync(110, actorUserId: 1, CancellationToken.None);
+
+        second.Should().BeOfType<ManualReconnectOutcome.CoolDownActive>();
+        var coolDown = (ManualReconnectOutcome.CoolDownActive)second;
+        coolDown.RetryAfterSeconds.Should().Be(30);
+    }
+
+    [Fact]
+    public async Task OnManualReconnectAsync_second_call_after_60s_returns_Triggered_and_reconnects_again()
+    {
+        var (mgr, factory, guilds, creds, _, _) = Build();
+        guilds.Setup(r => r.GetByIdAsync(120, It.IsAny<CancellationToken>()))
+              .ReturnsAsync(FakeGuild(120, 1));
+        creds.Setup(r => r.GetByGuildIdAsync(120, 1, It.IsAny<CancellationToken>()))
+             .ReturnsAsync(FakeCredential(120, 1));
+
+        var t0 = new DateTimeOffset(2024, 1, 1, 12, 0, 0, TimeSpan.Zero);
+        mgr._now = () => t0;
+        var first = await mgr.OnManualReconnectAsync(120, actorUserId: 1, CancellationToken.None);
+        first.Should().BeOfType<ManualReconnectOutcome.Triggered>();
+
+        // Advance exactly 61 seconds — cool-down has expired.
+        mgr._now = () => t0.AddSeconds(61);
+        var second = await mgr.OnManualReconnectAsync(120, actorUserId: 1, CancellationToken.None);
+
+        second.Should().BeOfType<ManualReconnectOutcome.Triggered>();
+        factory.Created[120].State.Should().Be(BotConnectionState.Connected);
+    }
+
+    [Fact]
+    public async Task OnManualReconnectAsync_does_not_throttle_credential_change_or_activation_paths()
+    {
+        var (mgr, factory, guilds, creds, _, _) = Build();
+        guilds.Setup(r => r.GetByIdAsync(130, It.IsAny<CancellationToken>()))
+              .ReturnsAsync(FakeGuild(130, 1));
+        creds.Setup(r => r.GetByGuildIdAsync(130, 1, It.IsAny<CancellationToken>()))
+             .ReturnsAsync(FakeCredential(130, 1));
+
+        var t0 = new DateTimeOffset(2024, 1, 1, 12, 0, 0, TimeSpan.Zero);
+        mgr._now = () => t0;
+
+        // Trigger a manual reconnect to seed the cool-down.
+        var manualOutcome = await mgr.OnManualReconnectAsync(130, actorUserId: 1, CancellationToken.None);
+        manualOutcome.Should().BeOfType<ManualReconnectOutcome.Triggered>();
+
+        // Immediately call credential-change and activate paths (NOT manual) — no throttle applies.
+        await mgr.OnCredentialsChangedAsync(130, CancellationToken.None);
+        await mgr.OnGuildActivatedAsync(130, CancellationToken.None);
+
+        // Both non-manual paths should still work — connection should exist and be connected.
+        mgr.GetState(130).Should().Be(BotConnectionState.Connected);
+    }
+
+    [Fact]
+    public async Task OnCredentialsRemovedAsync_clears_manual_reconnect_cooldown()
+    {
+        var (mgr, factory, guilds, creds, _, _) = Build();
+        guilds.Setup(r => r.GetByIdAsync(140, It.IsAny<CancellationToken>()))
+              .ReturnsAsync(FakeGuild(140, 1));
+        creds.Setup(r => r.GetByGuildIdAsync(140, 1, It.IsAny<CancellationToken>()))
+             .ReturnsAsync(FakeCredential(140, 1));
+
+        var t0 = new DateTimeOffset(2024, 1, 1, 12, 0, 0, TimeSpan.Zero);
+        mgr._now = () => t0;
+
+        // Manual reconnect seeds the cool-down.
+        var first = await mgr.OnManualReconnectAsync(140, actorUserId: 1, CancellationToken.None);
+        first.Should().BeOfType<ManualReconnectOutcome.Triggered>();
+
+        // Credentials removed — cool-down entry should be cleared.
+        await mgr.OnCredentialsRemovedAsync(140, CancellationToken.None);
+
+        // Immediate second manual reconnect (same timestamp) should now be Triggered, not CoolDownActive.
+        var second = await mgr.OnManualReconnectAsync(140, actorUserId: 1, CancellationToken.None);
+        second.Should().BeOfType<ManualReconnectOutcome.Triggered>();
     }
 }

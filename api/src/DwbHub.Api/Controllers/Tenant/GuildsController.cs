@@ -240,12 +240,14 @@ public sealed class GuildsController(
     /// <summary>
     /// Trigger a manual bot reconnect for a guild. Requires the Owner role.
     /// Returns 400 Bad Request when the guild is deactivated — activate it first.
+    /// Returns 429 Too Many Requests when a reconnect was already triggered within the last 60 seconds.
     /// </summary>
     [HttpPost("{publicId:guid}/bot/reconnect")]
     [Authorize(Roles = "Owner")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Reconnect(string slug, Guid publicId, CancellationToken ct)
     {
         _ = slug;
@@ -257,21 +259,46 @@ public sealed class GuildsController(
         if (guild is null) return NotFound(new { error = "guild_not_found" });
         if (!guild.IsActive) return BadRequest(new { error = "Guild is paused; activate first." });
 
-        await auditWriter.RecordAsync(new AuditEvent(
-            TenantId: tenant.Id,
-            ActorUserId: actorUserId,
-            EventType: AuditEventTypes.BotManualReconnect,
-            Payload: new Dictionary<string, object?>
-            {
-                ["guildPublicId"] = guild.PublicId.ToString("D"),
-                ["tenantSlug"] = tenant.Slug,
-            },
-            IpAddress: HttpContext.Connection.RemoteIpAddress,
-            UserAgent: HttpContext.Request.Headers.UserAgent.ToString()),
-            ct).ConfigureAwait(false);
+        var outcome = await connectionManager.OnManualReconnectAsync(guild.Id, actorUserId ?? 0, ct).ConfigureAwait(false);
 
-        _ = connectionManager.OnManualReconnectAsync(guild.Id, actorUserId ?? 0, CancellationToken.None);
-        return NoContent();
+        switch (outcome)
+        {
+            case ManualReconnectOutcome.Triggered:
+                await auditWriter.RecordAsync(new AuditEvent(
+                    TenantId: tenant.Id,
+                    ActorUserId: actorUserId,
+                    EventType: AuditEventTypes.BotManualReconnect,
+                    Payload: new Dictionary<string, object?>
+                    {
+                        ["guildPublicId"] = guild.PublicId.ToString("D"),
+                        ["tenantSlug"] = tenant.Slug,
+                    },
+                    IpAddress: HttpContext.Connection.RemoteIpAddress,
+                    UserAgent: HttpContext.Request.Headers.UserAgent.ToString()),
+                    ct).ConfigureAwait(false);
+                return NoContent();
+
+            case ManualReconnectOutcome.CoolDownActive(var retry):
+                await auditWriter.RecordAsync(new AuditEvent(
+                    TenantId: tenant.Id,
+                    ActorUserId: actorUserId,
+                    EventType: AuditEventTypes.BotManualReconnectThrottled,
+                    Payload: new Dictionary<string, object?>
+                    {
+                        ["guildPublicId"] = guild.PublicId.ToString("D"),
+                        ["tenantSlug"] = tenant.Slug,
+                        ["retryAfterSeconds"] = retry,
+                    },
+                    IpAddress: HttpContext.Connection.RemoteIpAddress,
+                    UserAgent: HttpContext.Request.Headers.UserAgent.ToString()),
+                    ct).ConfigureAwait(false);
+                Response.Headers["Retry-After"] = retry.ToString();
+                return StatusCode(StatusCodes.Status429TooManyRequests,
+                    new { error = "manual_reconnect_cooldown", retryAfterSeconds = retry });
+
+            default:
+                return StatusCode(StatusCodes.Status500InternalServerError);
+        }
     }
 
     private long? ExtractUserId()

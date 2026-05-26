@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text.Json;
 using Dapper;
 using DwbHub.Application.Bot;
 using DwbHub.Application.Encryption;
@@ -284,6 +285,68 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
 
         var res = await _client.PostAsync($"/api/t/acme/guilds/{publicId:D}/bot/reconnect", null);
         res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Reconnect_endpoint_returns_429_with_RetryAfter_on_second_call_within_60s()
+    {
+        var (_, guildId, publicId, ownerJwt, _) =
+            await SeedAsync("throttle1", isActive: true, hasCredentials: true);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerJwt);
+
+        // Freeze the manager's clock at a fixed point.
+        var t0 = new DateTimeOffset(2024, 6, 1, 10, 0, 0, TimeSpan.Zero);
+        var manager = _factory.Services.GetRequiredService<BotConnectionManager>();
+        manager._now = () => t0;
+
+        // First reconnect — should succeed.
+        var first = await _client.PostAsync($"/api/t/throttle1/guilds/{publicId:D}/bot/reconnect", null);
+        first.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        var reconnectAuditCount = await CountAuditEventsAsync("bot.manual_reconnect");
+        reconnectAuditCount.Should().Be(1);
+
+        // Second reconnect immediately (clock still at t0) — should be throttled.
+        var second = await _client.PostAsync($"/api/t/throttle1/guilds/{publicId:D}/bot/reconnect", null);
+        second.StatusCode.Should().Be((HttpStatusCode)429);
+
+        // Retry-After header must be present and positive.
+        second.Headers.Should().ContainKey("Retry-After");
+        var retryAfterValue = int.Parse(second.Headers.GetValues("Retry-After").First());
+        retryAfterValue.Should().BeGreaterThan(0);
+
+        // Response body must contain error discriminator.
+        var body = await second.Content.ReadAsStringAsync();
+        var json = JsonDocument.Parse(body);
+        json.RootElement.GetProperty("error").GetString().Should().Be("manual_reconnect_cooldown");
+        json.RootElement.GetProperty("retryAfterSeconds").GetInt32().Should().Be(retryAfterValue);
+
+        // Both audit events must exist.
+        var throttleAuditCount = await CountAuditEventsAsync("bot.manual_reconnect_throttled");
+        throttleAuditCount.Should().Be(1, "throttled event must be written to audit log");
+    }
+
+    [Fact]
+    public async Task Reconnect_endpoint_returns_204_again_after_cooldown_elapses()
+    {
+        var (_, guildId, publicId, ownerJwt, _) =
+            await SeedAsync("throttle2", isActive: true, hasCredentials: true);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerJwt);
+
+        var t0 = new DateTimeOffset(2024, 6, 1, 10, 0, 0, TimeSpan.Zero);
+        var manager = _factory.Services.GetRequiredService<BotConnectionManager>();
+        manager._now = () => t0;
+
+        // First reconnect.
+        var first = await _client.PostAsync($"/api/t/throttle2/guilds/{publicId:D}/bot/reconnect", null);
+        first.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        // Advance clock 61 seconds past the cool-down window.
+        manager._now = () => t0.AddSeconds(61);
+
+        // Second reconnect — cool-down expired, should succeed again.
+        var second = await _client.PostAsync($"/api/t/throttle2/guilds/{publicId:D}/bot/reconnect", null);
+        second.StatusCode.Should().Be(HttpStatusCode.NoContent,
+            "reconnect after 61 s should succeed since the 60 s cool-down has elapsed");
     }
 }
 

@@ -32,7 +32,16 @@ public sealed class BotConnectionManager(
 {
     private readonly ConcurrentDictionary<long, IBotConnection> _connections = new();
     private readonly ConcurrentDictionary<long, SemaphoreSlim> _locks = new();
+    private readonly ConcurrentDictionary<long, DateTimeOffset> _lastManualReconnectAt = new();
     private bool _disposed;
+
+    private const int ManualReconnectCoolDownSeconds = 60;
+
+    /// <summary>
+    /// Clock function used to determine the current time. Overridable in tests to advance time
+    /// without real sleeps. Defaults to DateTimeOffset.UtcNow.
+    /// </summary>
+    internal Func<DateTimeOffset> _now = () => DateTimeOffset.UtcNow;
 
     /// <summary>
     /// Query all active guilds with credentials and open bot connections concurrently
@@ -95,8 +104,22 @@ public sealed class BotConnectionManager(
         => WithLockAsync(guildId, () => DisconnectAndRemoveAsync(guildId, ct), ct);
 
     /// <summary>Called by GuildsController POST /bot/reconnect — forced cycle regardless of current state.</summary>
-    public Task OnManualReconnectAsync(long guildId, long actorUserId, CancellationToken ct)
-        => WithLockAsync(guildId, () => ReconnectOneAsync(guildId, ct), ct);
+    public async Task<ManualReconnectOutcome> OnManualReconnectAsync(long guildId, long actorUserId, CancellationToken ct)
+    {
+        var now = _now();
+        if (_lastManualReconnectAt.TryGetValue(guildId, out var last))
+        {
+            var elapsed = now - last;
+            if (elapsed < TimeSpan.FromSeconds(ManualReconnectCoolDownSeconds))
+            {
+                var remaining = (int)Math.Ceiling((TimeSpan.FromSeconds(ManualReconnectCoolDownSeconds) - elapsed).TotalSeconds);
+                return new ManualReconnectOutcome.CoolDownActive(Math.Max(1, remaining));
+            }
+        }
+        _lastManualReconnectAt[guildId] = now;
+        await WithLockAsync(guildId, () => ReconnectOneAsync(guildId, ct), ct).ConfigureAwait(false);
+        return new ManualReconnectOutcome.Triggered();
+    }
 
     // --- internals ---
 
@@ -187,6 +210,9 @@ public sealed class BotConnectionManager(
         if (!_connections.TryRemove(guildId, out var conn)) return;
         await SwallowAsync(() => conn.DisconnectAsync(ct)).ConfigureAwait(false);
         await SwallowAsync(() => conn.DisposeAsync().AsTask()).ConfigureAwait(false);
+        // Clear the manual-reconnect cool-down so a future re-activation of this guild
+        // starts with a fresh window rather than inheriting the previous tenant's state.
+        _lastManualReconnectAt.TryRemove(guildId, out _);
     }
 
     private async Task OnStateChangedAsync(Guild guild, BotConnectionStateChange change)
