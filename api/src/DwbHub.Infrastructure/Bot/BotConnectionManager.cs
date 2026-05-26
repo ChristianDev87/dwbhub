@@ -32,7 +32,16 @@ public sealed class BotConnectionManager(
 {
     private readonly ConcurrentDictionary<long, IBotConnection> _connections = new();
     private readonly ConcurrentDictionary<long, SemaphoreSlim> _locks = new();
+    private readonly ConcurrentDictionary<long, DateTimeOffset> _lastManualReconnectAt = new();
     private bool _disposed;
+
+    private const int ManualReconnectCoolDownSeconds = 60;
+
+    /// <summary>
+    /// Clock function used to determine the current time. Overridable in tests to advance time
+    /// without real sleeps. Defaults to DateTimeOffset.UtcNow.
+    /// </summary>
+    internal Func<DateTimeOffset> _now = () => DateTimeOffset.UtcNow;
 
     /// <summary>
     /// Query all active guilds with credentials and open bot connections concurrently
@@ -95,8 +104,49 @@ public sealed class BotConnectionManager(
         => WithLockAsync(guildId, () => DisconnectAndRemoveAsync(guildId, ct), ct);
 
     /// <summary>Called by GuildsController POST /bot/reconnect — forced cycle regardless of current state.</summary>
-    public Task OnManualReconnectAsync(long guildId, long actorUserId, CancellationToken ct)
-        => WithLockAsync(guildId, () => ReconnectOneAsync(guildId, ct), ct);
+    public async Task<ManualReconnectOutcome> OnManualReconnectAsync(long guildId, long actorUserId, CancellationToken ct)
+    {
+        // Acquire the per-guild semaphore directly so the cool-down check + stamp write
+        // are atomic. This prevents two concurrent HTTP requests both passing the gate.
+        var sem = _locks.GetOrAdd(guildId, _ => new SemaphoreSlim(1, 1));
+        await sem.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var now = _now();
+            if (_lastManualReconnectAt.TryGetValue(guildId, out var last))
+            {
+                var elapsed = now - last;
+                if (elapsed < TimeSpan.FromSeconds(ManualReconnectCoolDownSeconds))
+                {
+                    var remaining = (int)Math.Ceiling(
+                        (TimeSpan.FromSeconds(ManualReconnectCoolDownSeconds) - elapsed).TotalSeconds);
+                    return new ManualReconnectOutcome.CoolDownActive(Math.Max(1, remaining));
+                }
+            }
+            _lastManualReconnectAt[guildId] = now;
+        }
+        finally
+        {
+            sem.Release();
+        }
+
+        // Fire-and-forget the reconnect so the HTTP response returns immediately.
+        // WithLockAsync re-acquires the same semaphore, keeping the actual reconnect
+        // serialized against credential changes, activation, etc.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await WithLockAsync(guildId, () => ReconnectOneAsync(guildId, ct), ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Background manual reconnect failed for guild {GuildId}", guildId);
+            }
+        }, CancellationToken.None);
+
+        return new ManualReconnectOutcome.Triggered();
+    }
 
     // --- internals ---
 
@@ -184,9 +234,15 @@ public sealed class BotConnectionManager(
 
     private async Task DisconnectAndRemoveAsync(long guildId, CancellationToken ct)
     {
-        if (!_connections.TryRemove(guildId, out var conn)) return;
-        await SwallowAsync(() => conn.DisconnectAsync(ct)).ConfigureAwait(false);
-        await SwallowAsync(() => conn.DisposeAsync().AsTask()).ConfigureAwait(false);
+        if (_connections.TryRemove(guildId, out var conn))
+        {
+            await SwallowAsync(() => conn.DisconnectAsync(ct)).ConfigureAwait(false);
+            await SwallowAsync(() => conn.DisposeAsync().AsTask()).ConfigureAwait(false);
+        }
+        // Always clear the manual-reconnect cool-down. With fire-and-forget reconnects
+        // there may be no active connection yet when credentials are removed, but the
+        // stamp should still be reset so a future re-activation gets a fresh window.
+        _lastManualReconnectAt.TryRemove(guildId, out _);
     }
 
     private async Task OnStateChangedAsync(Guild guild, BotConnectionStateChange change)

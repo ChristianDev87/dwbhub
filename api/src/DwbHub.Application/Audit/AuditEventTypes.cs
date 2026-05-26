@@ -7,6 +7,7 @@ namespace DwbHub.Application.Audit;
 public static class AuditEventTypes
 {
     public const string BotManualReconnect = "bot.manual_reconnect";
+    public const string BotManualReconnectThrottled = "bot.manual_reconnect_throttled";
     public const string GuildActivated = "guild.activated";
     public const string GuildDeactivated = "guild.deactivated";
     public const string ChannelBackfillCancelled = "channel.backfill_cancelled";

@@ -929,6 +929,17 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ManualReconnectCoolDownResponse"];
+                        "application/json": components["schemas"]["ManualReconnectCoolDownResponse"];
+                        "text/json": components["schemas"]["ManualReconnectCoolDownResponse"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -1447,6 +1458,11 @@ export interface components {
         LoginRequest: {
             email?: string | null;
             password?: string | null;
+        };
+        ManualReconnectCoolDownResponse: {
+            error?: string | null;
+            /** Format: int32 */
+            retryAfterSeconds?: number;
         };
         PasswordResetConfirmRequest: {
             token?: string | null;
