@@ -163,13 +163,26 @@ test.describe("Plan 1.1 chat delete", () => {
     // Confirm dialog appears
     const confirmBtn = page.getByTestId("delete-dialog-confirm");
     await expect(confirmBtn).toBeVisible({ timeout: 5_000 });
+
+    // Synchronise on the DELETE response rather than UI render timing.
+    // Same reasoning as chat-edit.spec.ts: Virtuoso height recalculation can
+    // briefly virtualise the row out of the DOM during the delete-placeholder
+    // swap in headless Chromium.
+    const deletePromise = page.waitForResponse(
+      (res) =>
+        res.url().includes("/messages/") &&
+        res.request().method() === "DELETE" &&
+        res.status() === 204,
+      { timeout: 10_000 },
+    );
     await confirmBtn.click();
+    await deletePromise;
 
     // Message content should be replaced by the deleted placeholder.
     // The row is located by stable testid so we don't lose it when content changes.
     const content = stableRow.locator('[data-testid="message-content"]');
     // The deleted placeholder text (in English or German) should appear.
     // "You deleted this message" / "Du hast diese Nachricht gelöscht" / "[Deleted on Discord]"
-    await expect(content).not.toContainText(uniqueContent, { timeout: 10_000 });
+    await expect(content).not.toContainText(uniqueContent, { timeout: 5_000 });
   });
 });

@@ -176,24 +176,39 @@ test.describe("Plan 1.1 chat edit", () => {
     // the textarea value differs from initialContent).
     const saveBtn = page.getByTestId("message-edit-save");
     await expect(saveBtn).toBeEnabled({ timeout: 5_000 });
-    await saveBtn.click();
 
-    // After the save button is clicked the PATCH fires and, on success,
-    // setIsEditing(false) runs. The edit textarea is replaced by the normal
-    // message-content paragraph. Scroll the row into view first to ensure
-    // Virtuoso has it in the rendered window (opening the tall textarea then
-    // closing it can cause a height-recalculation that shifts the scroll offset).
+    // Synchronise the test on the actual PATCH response rather than UI render
+    // timing. Without this, the assertion chain races against Virtuoso's
+    // height-recalculation (which can briefly virtualise the edited row out
+    // of the DOM during the textarea→paragraph swap, especially in headless
+    // Chromium where renders are fast).
+    const patchPromise = page.waitForResponse(
+      (res) =>
+        res.url().includes("/messages/") &&
+        res.request().method() === "PATCH" &&
+        res.status() === 200,
+      { timeout: 10_000 },
+    );
+    await saveBtn.click();
+    await patchPromise;
+
+    // After the PATCH resolves, MessageRow.handleSave flips setIsEditing(false).
+    // Wait for the textarea to disappear — this guarantees we are past the
+    // isEditing transition before we assert the content paragraph exists.
+    await expect(
+      stableRow.locator('[data-testid="message-edit-textarea"]'),
+    ).toHaveCount(0, { timeout: 5_000 });
     await stableRow.scrollIntoViewIfNeeded();
 
     // Edited content should appear
     await expect(
       stableRow.locator('[data-testid="message-content"]'),
-    ).toContainText("hello world edited", { timeout: 15_000 });
+    ).toContainText("hello world edited", { timeout: 5_000 });
 
     // "(edited)" indicator should appear once editedAt is set by the optimistic
-    // update or by the arriving SignalR MessageUpdated event.
+    // update inside editMessage().
     await expect(
       stableRow.locator('[data-testid="message-edited"]'),
-    ).toBeVisible({ timeout: 15_000 });
+    ).toBeVisible({ timeout: 5_000 });
   });
 });
