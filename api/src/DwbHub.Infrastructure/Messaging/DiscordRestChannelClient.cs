@@ -34,6 +34,7 @@ public sealed class DiscordRestChannelClient : IDiscordRestChannelClient
 
     // ── Channel list ──────────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<DiscordChannelInfo>> ListChannelsAsync(
         string botToken,
         ulong discordGuildId,
@@ -72,6 +73,7 @@ public sealed class DiscordRestChannelClient : IDiscordRestChannelClient
 
     // ── Message history ───────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<DiscordMessageInfo>> GetMessagesAsync(
         string botToken,
         ulong discordChannelId,
@@ -123,6 +125,7 @@ public sealed class DiscordRestChannelClient : IDiscordRestChannelClient
 
     // ── Webhook create ────────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task<DiscordWebhookCreated> CreateWebhookAsync(
         string botToken,
         ulong discordChannelId,
@@ -162,6 +165,7 @@ public sealed class DiscordRestChannelClient : IDiscordRestChannelClient
 
     // ── Webhook delete ────────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task<bool> DeleteWebhookAsync(
         ulong webhookId,
         string webhookToken,
@@ -193,6 +197,7 @@ public sealed class DiscordRestChannelClient : IDiscordRestChannelClient
 
     // ── Webhook execute ───────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task<DiscordMessageInfo> ExecuteWebhookAsync(
         ulong webhookId,
         string webhookToken,
@@ -247,6 +252,7 @@ public sealed class DiscordRestChannelClient : IDiscordRestChannelClient
 
     // ── Webhook message edit ──────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task<DiscordMessageInfo> EditWebhookMessageAsync(
         ulong webhookId,
         string webhookToken,
@@ -305,6 +311,7 @@ public sealed class DiscordRestChannelClient : IDiscordRestChannelClient
 
     // ── Webhook message delete ────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task<bool> DeleteWebhookMessageAsync(
         ulong webhookId,
         string webhookToken,

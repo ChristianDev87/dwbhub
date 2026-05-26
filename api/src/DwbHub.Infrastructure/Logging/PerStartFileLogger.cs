@@ -8,6 +8,13 @@ public static class PerStartFileLogger
     public const string FilePrefix = "dwbhub-";
     public const string FileSuffix = ".log";
 
+    /// <summary>
+    /// Create a new timestamped log file in <paramref name="logDirectory"/> and prune
+    /// files beyond <paramref name="retainStartLogs"/> oldest entries.
+    /// </summary>
+    /// <param name="logDirectory">Directory to create log files in. Created if absent.</param>
+    /// <param name="retainStartLogs">Number of most-recent log files to keep. Must be at least 1.</param>
+    /// <returns>Absolute path to the newly-created log file.</returns>
     public static string Initialize(string logDirectory, int retainStartLogs)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(logDirectory);

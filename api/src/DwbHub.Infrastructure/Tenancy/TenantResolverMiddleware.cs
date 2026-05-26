@@ -9,19 +9,9 @@ using Microsoft.AspNetCore.Http;
 namespace DwbHub.Infrastructure.Tenancy;
 
 /// <summary>
-/// Resolves the tenant — and optionally the guild — for incoming
-/// /api/t/{slug}/... and /api/t/{slug}/g/{publicId}/... requests.
-///
-/// Match priority:
-///   1. TenantGuildRegex  → combined single-CTE resolution via IGuildRepository.
-///   2. TenantOnlyRegex   → tenant-only resolution via ITenantRepository.
-///   3. otherwise         → no-op pass-through.
-///
-/// Failure modes (spec §4.4):
-///   - Slug missing → 404 + auth.unknown_tenant_access.
-///   - JWT.tid mismatch → 403 + auth.cross_tenant_access_blocked.
-///   - Guild UUID not found within tenant → 404 + guild.unknown_access
-///     (info-leak: same response shape as unknown tenant).
+/// Handles <c>/api/t/{slug}/...</c> routes. Resolves the tenant from the slug,
+/// then the guild when a <c>/g/{publicId}/</c> segment is present. For paths
+/// outside that prefix the middleware is a no-op pass-through.
 /// </summary>
 public sealed class TenantResolverMiddleware(RequestDelegate next)
 {

@@ -15,6 +15,11 @@ public sealed class JwtIssuer : IJwtIssuer
     private readonly byte[] _signingKey;
     private readonly TimeSpan _lifetime = TimeSpan.FromHours(24);
 
+    /// <summary>
+    /// Initialise the issuer with a Base64-encoded signing key.
+    /// </summary>
+    /// <param name="base64Secret">Base64-encoded HMAC-SHA256 key; must decode to at least 32 bytes.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the decoded key is shorter than 32 bytes.</exception>
     public JwtIssuer(string base64Secret)
     {
         _signingKey = Convert.FromBase64String(base64Secret);
@@ -25,6 +30,7 @@ public sealed class JwtIssuer : IJwtIssuer
         }
     }
 
+    /// <inheritdoc/>
     public string Issue(User user, Tenant tenant)
     {
         var now = DateTime.UtcNow;

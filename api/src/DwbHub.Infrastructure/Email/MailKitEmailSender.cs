@@ -18,6 +18,13 @@ public sealed class MailKitEmailSender : IEmailSender
     private readonly int _port;
     private readonly MailboxAddress _from;
 
+    /// <summary>
+    /// Initialise the sender with SMTP connection parameters.
+    /// </summary>
+    /// <param name="host">SMTP server hostname (e.g. <c>localhost</c> or the relay FQDN).</param>
+    /// <param name="port">SMTP port (e.g. 1025 for Mailpit, 587 for STARTTLS).</param>
+    /// <param name="from">RFC 5321 sender address (<c>display name &lt;addr&gt;</c> or bare address).</param>
+    /// <exception cref="InvalidOperationException">Thrown when any required parameter is missing or invalid.</exception>
     public MailKitEmailSender(string host, int port, string from)
     {
         _host = !string.IsNullOrWhiteSpace(host)
@@ -31,6 +38,7 @@ public sealed class MailKitEmailSender : IEmailSender
             : throw new InvalidOperationException("DWBHUB_SMTP_FROM is required.");
     }
 
+    /// <inheritdoc/>
     public async Task SendAsync(EmailMessage message, CancellationToken ct = default)
     {
         var mime = new MimeMessage();

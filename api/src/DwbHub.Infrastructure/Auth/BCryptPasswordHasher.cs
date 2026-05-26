@@ -15,16 +15,19 @@ public sealed class BCryptPasswordHasher : IPasswordHasher
     // Cracking this reveals only the dummy plaintext, which no real user has.
     private const string DummyHash = "$2a$12$dSgI7slUjNUWjUm7XbF3juhWzgFXPKcIBUxHn6OrkNCKzQlRPSUtW";
 
+    /// <inheritdoc/>
     public string Hash(string plain)
     {
         return BCrypt.Net.BCrypt.HashPassword(plain, WorkFactor);
     }
 
+    /// <inheritdoc/>
     public bool Verify(string plain, string hash)
     {
         return BCrypt.Net.BCrypt.Verify(plain, hash);
     }
 
+    /// <inheritdoc/>
     public void VerifyDecoy(string plain)
     {
         // Discard the result — we just want the BCrypt work time to elapse.
