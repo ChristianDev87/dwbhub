@@ -247,7 +247,7 @@ public sealed class GuildsController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType(typeof(ManualReconnectCoolDownResponse), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Reconnect(string slug, Guid publicId, CancellationToken ct)
     {
         _ = slug;
@@ -294,7 +294,7 @@ public sealed class GuildsController(
                     ct).ConfigureAwait(false);
                 Response.Headers["Retry-After"] = retry.ToString();
                 return StatusCode(StatusCodes.Status429TooManyRequests,
-                    new { error = "manual_reconnect_cooldown", retryAfterSeconds = retry });
+                    new ManualReconnectCoolDownResponse("manual_reconnect_cooldown", retry));
 
             default:
                 return StatusCode(StatusCodes.Status500InternalServerError);

@@ -935,9 +935,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
+                        "text/plain": components["schemas"]["ManualReconnectCoolDownResponse"];
+                        "application/json": components["schemas"]["ManualReconnectCoolDownResponse"];
+                        "text/json": components["schemas"]["ManualReconnectCoolDownResponse"];
                     };
                 };
             };
@@ -1458,6 +1458,11 @@ export interface components {
         LoginRequest: {
             email?: string | null;
             password?: string | null;
+        };
+        ManualReconnectCoolDownResponse: {
+            error?: string | null;
+            /** Format: int32 */
+            retryAfterSeconds?: number;
         };
         PasswordResetConfirmRequest: {
             token?: string | null;
