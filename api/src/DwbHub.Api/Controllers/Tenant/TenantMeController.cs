@@ -7,14 +7,13 @@ using Microsoft.AspNetCore.Mvc;
 namespace DwbHub.Api.Controllers.Tenant;
 
 /// <summary>
-/// Tenant-scoped variant of Plan-0.3a's /api/auth/me. The TenantResolverMiddleware
-/// has already validated that the slug exists and that the JWT's tid claim matches
-/// the resolved tenant's id, so this controller can trust ITenantContext.Current.
+/// Returns caller identity scoped to a tenant. <see cref="ITenantContext.Current"/> is populated by TenantResolverMiddleware.
 /// </summary>
 [ApiController]
 [Authorize]
 public sealed class TenantMeController(ITenantContext tenantContext) : ControllerBase
 {
+    /// <summary>Return the caller's user ID, tenant ID, tenant slug, and role.</summary>
     [HttpGet("/api/t/{slug}/me")]
     public IActionResult Me(string slug)
     {

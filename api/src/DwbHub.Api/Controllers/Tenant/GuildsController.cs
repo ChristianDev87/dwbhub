@@ -22,6 +22,11 @@ public sealed class GuildsController(
     IAuditWriter auditWriter,
     BotConnectionManager connectionManager) : ControllerBase
 {
+    /// <summary>
+    /// Register a new Discord guild for the tenant. Requires the Owner role.
+    /// Returns 201 Created with the new guild's public ID, or 409 Conflict if the
+    /// Discord guild ID is already registered.
+    /// </summary>
     [HttpPost]
     [Authorize(Roles = "Owner")]
     public async Task<IActionResult> Add(string slug, [FromBody] AddGuildRequest body, CancellationToken ct)
@@ -81,6 +86,10 @@ public sealed class GuildsController(
         }
     }
 
+    /// <summary>
+    /// List all guilds registered for the tenant, including bot credential and connection status.
+    /// Accessible by any authenticated tenant user.
+    /// </summary>
     [HttpGet]
     [Authorize]
     public async Task<IActionResult> List(string slug, CancellationToken ct)
@@ -121,6 +130,10 @@ public sealed class GuildsController(
         return Ok(new GuildListResponse(responses));
     }
 
+    /// <summary>
+    /// Remove a guild from the tenant. Requires the Owner role.
+    /// Returns 204 No Content on success, 404 when the guild is not found.
+    /// </summary>
     [HttpDelete("{publicId:guid}")]
     [Authorize(Roles = "Owner")]
     public async Task<IActionResult> Remove(string slug, Guid publicId, CancellationToken ct)
@@ -153,6 +166,10 @@ public sealed class GuildsController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Activate a guild so the bot may connect to its Discord gateway. Requires the Owner role.
+    /// Idempotent — returns 204 whether the guild was previously inactive or already active.
+    /// </summary>
     [HttpPost("{publicId:guid}/activate")]
     [Authorize(Roles = "Owner")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -187,6 +204,10 @@ public sealed class GuildsController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Deactivate a guild, disconnecting its bot from the Discord gateway. Requires the Owner role.
+    /// Idempotent — returns 204 whether the guild was previously active or already inactive.
+    /// </summary>
     [HttpPost("{publicId:guid}/deactivate")]
     [Authorize(Roles = "Owner")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -221,6 +242,10 @@ public sealed class GuildsController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Trigger a manual bot reconnect for a guild. Requires the Owner role.
+    /// Returns 400 Bad Request when the guild is deactivated — activate it first.
+    /// </summary>
     [HttpPost("{publicId:guid}/bot/reconnect")]
     [Authorize(Roles = "Owner")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

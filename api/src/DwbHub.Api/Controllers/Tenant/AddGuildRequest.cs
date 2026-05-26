@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace DwbHub.Api.Controllers.Tenant;
 
+/// <summary>Request body for POST /api/t/{slug}/guilds. Registers a new Discord guild for the tenant.</summary>
 public sealed class AddGuildRequest
 {
     [Required]

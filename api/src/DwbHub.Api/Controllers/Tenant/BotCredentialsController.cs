@@ -25,6 +25,11 @@ public sealed class BotCredentialsController(
     IAuditWriter auditWriter,
     BotConnectionManager connectionManager) : ControllerBase
 {
+    /// <summary>
+    /// Store or rotate the Discord bot token for a guild. The token is AES-GCM encrypted before
+    /// persisting; the plaintext is never logged. Requires the Owner role.
+    /// Triggers an async bot reconnect after the credential is stored.
+    /// </summary>
     [HttpPut]
     [Authorize(Roles = "Owner")]
     public async Task<IActionResult> Set(
@@ -65,6 +70,10 @@ public sealed class BotCredentialsController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Remove the bot token for a guild, disconnecting the bot. Requires the Owner role.
+    /// Returns 404 when no credentials are configured for the guild.
+    /// </summary>
     [HttpDelete]
     [Authorize(Roles = "Owner")]
     public async Task<IActionResult> Remove(
