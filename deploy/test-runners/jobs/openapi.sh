@@ -37,13 +37,27 @@ run_step() {
 # entrypoint.sh still emits live "=== step ===" banners between steps so progress
 # is observable at step granularity; full output flushes when each step completes.
 
+# Regen mode (OPENAPI_REGEN=true): rewrite shared/openapi.yaml + schema.d.ts
+# instead of failing on drift. Used by closeout flows to refresh the committed
+# spec after backend endpoints change. Requires the workspace bind to be
+# mounted read-write (the default :ro overlay in docker-compose.test.yml
+# blocks writes — override via --volume on `docker compose run`).
+if [ "${OPENAPI_REGEN:-false}" = "true" ]; then
+    VERIFY_ARGS=(-Update)
+    GEN_ARGS=()
+    echo "=== openapi.sh: REGEN MODE — committed spec + client will be overwritten ==="
+else
+    VERIFY_ARGS=()
+    GEN_ARGS=(-Check)
+fi
+
 echo "=== openapi.sh: dotnet tool restore (installs swagger CLI) ==="
 dotnet tool restore
 
 echo "=== openapi.sh: verify-openapi.ps1 (boots temp pg+mailpit, dumps spec, diffs) ==="
-run_step verify-openapi pwsh -NoLogo -NonInteractive -File tools/verify-openapi.ps1
+run_step verify-openapi pwsh -NoLogo -NonInteractive -File tools/verify-openapi.ps1 "${VERIFY_ARGS[@]}"
 
-echo "=== openapi.sh: gen-openapi-client.ps1 -Check (TS client drift) ==="
+echo "=== openapi.sh: gen-openapi-client.ps1 (TS client drift / regen) ==="
 # gen-openapi-client.ps1 requires pnpm. Dockerfile.backend ships .NET+pwsh but not Node.
 # Install Node 22 + pnpm at runtime if absent (one-time; uses ephemeral container FS).
 if ! command -v pnpm >/dev/null 2>&1; then
@@ -53,6 +67,6 @@ if ! command -v pnpm >/dev/null 2>&1; then
     npm install -g pnpm@11.1.3 >/dev/null 2>&1
     echo "pnpm installed: $(pnpm --version)"
 fi
-run_step gen-client pwsh -NoLogo -NonInteractive -File tools/gen-openapi-client.ps1 -Check
+run_step gen-client pwsh -NoLogo -NonInteractive -File tools/gen-openapi-client.ps1 "${GEN_ARGS[@]}"
 
 echo "=== openapi.sh: complete ==="

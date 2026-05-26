@@ -1,0 +1,12 @@
+# Closeout override: drop :ro on the workspace bind for openapi-drift so
+# verify-openapi.ps1 -Update + gen-openapi-client.ps1 can rewrite the
+# committed spec + schema.d.ts in place. Used only by the controller during
+# plan closeouts — NEVER mount this in CI (the drift check stays read-only).
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml -f docker-compose.test.regen.yml \
+#     run --rm -e OPENAPI_REGEN=true openapi-drift
+services:
+  openapi-drift:
+    volumes:
+      - ../..:/workspace

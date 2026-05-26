@@ -329,10 +329,9 @@ test.describe("Plan 1.0 chat page", () => {
       stableRow.locator('[data-testid="message-edited"]'),
     ).toBeVisible({ timeout: 10_000 });
     // Content should reflect the new value.
-    await expect(stableRow.locator('[data-testid="message-content"]')).toContainText(
-      editedContent,
-      { timeout: 5_000 },
-    );
+    await expect(
+      stableRow.locator('[data-testid="message-content"]'),
+    ).toContainText(editedContent, { timeout: 5_000 });
   });
 
   // ── Test 7: deleted Discord message shows [deleted] placeholder ───────────
@@ -467,7 +466,9 @@ test.describe("Plan 1.0 chat page", () => {
 
     // Capture scroll position via the actual virtuoso scroller (data-attribute
     // is stable across v4 minor versions; fall back to first row's offsetParent).
-    const scroller = page.locator("[data-virtuoso-scroller], [data-test-id='virtuoso-item-list']").first();
+    const scroller = page
+      .locator("[data-virtuoso-scroller], [data-test-id='virtuoso-item-list']")
+      .first();
     let scrollBefore = 0;
     if ((await scroller.count()) > 0) {
       scrollBefore = await scroller.evaluate((el) => el.scrollTop);

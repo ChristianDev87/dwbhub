@@ -29,8 +29,14 @@ with_heartbeat() {
     local hb_pid=$!
     "$@"
     local rc=$?
-    kill "$hb_pid" 2>/dev/null
-    wait "$hb_pid" 2>/dev/null
+    # `|| true` is mandatory under `set -e`: `wait` returns the heartbeat's
+    # exit status, which is 143 (128 + SIGTERM) because we just killed it.
+    # Without the guard, `set -e` aborts the function with 143 even when
+    # trivy itself exited 0 — that's the "trivy scan exit 143 at exactly 302s"
+    # bug from Plan 1.0 closeout. `kill` is similarly guarded for the case
+    # where the heartbeat already exited (e.g. very short command).
+    kill "$hb_pid" 2>/dev/null || true
+    wait "$hb_pid" 2>/dev/null || true
     return $rc
 }
 
@@ -44,10 +50,14 @@ echo "=== security.sh: dotnet list package --vulnerable ==="
 dotnet list api/DwbHub.sln package --vulnerable --include-transitive --format json > "$RESULTS/dotnet.json" || true
 
 echo "=== security.sh: trivy fs --format json (first run downloads ~178 MB vuln DB; takes 2-3 min) ==="
-with_heartbeat "trivy json scan" trivy fs --format json --severity HIGH,CRITICAL --scanners vuln /workspace > "$RESULTS/trivy.json"
+# Trivy's default --timeout=5m self-SIGTERMs (exit 143) mid-scan on the Plan
+# 1.0 dependency graph: 6 .NET projects + transitive NuGet + pnpm workspace
+# routinely tip over 5 min on slow CI. Bump to 15m. Heartbeat tells operators
+# the process is still alive while trivy is silently chewing through .deps.json.
+with_heartbeat "trivy json scan" trivy fs --timeout 15m --format json --severity HIGH,CRITICAL --scanners vuln /workspace > "$RESULTS/trivy.json"
 
 echo "=== security.sh: trivy fs --format sarif (for GitHub Code Scanning — Plan 0.8.3 Task 7) ==="
-with_heartbeat "trivy sarif scan" trivy fs --format sarif --severity HIGH,CRITICAL --scanners vuln /workspace --output "$RESULTS/trivy.sarif"
+with_heartbeat "trivy sarif scan" trivy fs --timeout 15m --format sarif --severity HIGH,CRITICAL --scanners vuln /workspace --output "$RESULTS/trivy.sarif"
 
 echo "=== security.sh: parsing results ==="
 
