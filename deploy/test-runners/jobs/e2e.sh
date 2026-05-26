@@ -203,10 +203,10 @@ docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_DEV" -f "$COMPOSE_E2E_OVERLAY" \
 
 # Patterns:
 #   API (Serilog): [ERR] / [FATAL] / "Unhandled exception" / *Exception types
-#   Allowlist: bot-401-with-fake-mode is expected when DWBHUB_DISCORD_TEST_MODE=fake-rest
-#              (the bot cannot connect to real Discord with a fake-shape token)
+# Note: the previous "bot-401-with-fake-mode" allowlist is no longer needed.
+# DWBHUB_DISCORD_TEST_MODE=fake-rest now also swaps the bot-connection
+# factory for FakeBotConnection, so no real Discord 401 ever fires in e2e.
 API_ERRS=$(grep -E '\[ERR\]|\[FATAL\]|Unhandled exception|PostgresException|NpgsqlException' "$RESULTS/api.log" 2>/dev/null \
-    | grep -vE 'Bot disconnected.*401: Unauthorized' \
     | wc -l | tr -d ' ')
 
 # Postgres ERROR/FATAL with hangfire-schema-first-boot allowlisted.

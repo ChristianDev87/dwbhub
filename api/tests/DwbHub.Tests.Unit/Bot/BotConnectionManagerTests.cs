@@ -35,13 +35,13 @@ public sealed class BotConnectionManagerTests
             CreatedAt: DateTimeOffset.UtcNow, UpdatedAt: DateTimeOffset.UtcNow);
 
     private static (BotConnectionManager Mgr,
-                    FakeBotConnectionFactory Factory,
+                    DwbHub.Tests.Integration.Bot.FakeBotConnectionFactory Factory,
                     Mock<IGuildRepository> Guilds,
                     Mock<IGuildBotCredentialRepository> Creds,
                     Mock<IBotTokenEncryptor> Enc,
                     Mock<IAuditWriter> Audit) Build()
     {
-        var factory = new FakeBotConnectionFactory();
+        var factory = new DwbHub.Tests.Integration.Bot.FakeBotConnectionFactory();
         var guilds = new Mock<IGuildRepository>();
         var creds = new Mock<IGuildBotCredentialRepository>();
         var enc = new Mock<IBotTokenEncryptor>();

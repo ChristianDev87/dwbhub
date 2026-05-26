@@ -37,7 +37,7 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
 
     private WebApplicationFactory<Program> _factory = null!;
     private HttpClient _client = null!;
-    private FakeBotConnectionFactory _fakeFactory = null!;
+    private DwbHub.Tests.Integration.Bot.FakeBotConnectionFactory _fakeFactory = null!;
 
     public BotConnectionLifecycleTests(PostgresFixture fixture)
     {
@@ -69,11 +69,11 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
         Environment.SetEnvironmentVariable("DWBHUB_PUBLIC_BASE_URL", "http://localhost:5173");
         Environment.SetEnvironmentVariable("DWBHUB_BOOTSTRAP_TOKEN_FILE", Path.GetTempFileName());
 
-        _fakeFactory = new FakeBotConnectionFactory();
+        _fakeFactory = new DwbHub.Tests.Integration.Bot.FakeBotConnectionFactory();
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(wb => wb.ConfigureTestServices(services =>
             {
-                // Replace DiscordNetBotConnectionFactory with FakeBotConnectionFactory.
+                // Replace DiscordNetBotConnectionFactory with DwbHub.Tests.Integration.Bot.FakeBotConnectionFactory.
                 var toRemove = services
                     .Where(d => d.ServiceType == typeof(IBotConnectionFactory))
                     .ToList();
@@ -95,7 +95,7 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
         // Sync _fakeFactory field to whatever DI actually resolved — they must be the same
         // object because we registered the instance directly, but this makes it explicit.
         var resolvedFactory = _factory.Services
-            .GetRequiredService<IBotConnectionFactory>() as FakeBotConnectionFactory;
+            .GetRequiredService<IBotConnectionFactory>() as DwbHub.Tests.Integration.Bot.FakeBotConnectionFactory;
         if (resolvedFactory is not null)
             _fakeFactory = resolvedFactory;
     }
