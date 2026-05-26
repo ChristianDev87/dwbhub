@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Plan 0.8.1 — frontend job: lint + typecheck + vitest + production build.
 # Mirrors the .github/workflows/ci.yml `frontend-lint-typecheck-test` job.
 #
@@ -7,25 +7,25 @@
 #   1 = any check fails
 #   2 = infrastructure error
 
-set -e
+set -eo pipefail
 
 RESULTS=/results/frontend
 mkdir -p "$RESULTS"
 
 cd /workspace
 
-# Run a command, capture output to a temp file, print it, save to a named log,
-# preserve the command's exit code (POSIX-portable; tee always exits 0 in dash/busybox).
+# Run a command, LIVE-stream combined stdout+stderr to a named log AND to our
+# own stdout (so entrypoint.sh's tee sees it incrementally). Uses bash
+# PIPESTATUS to preserve the wrapped command's exit code through the pipe.
+# (The previous POSIX-sh implementation buffered all output to a tmp file
+# and only flushed on step exit — invisible until completion.)
 run_step() {
     LOG_NAME="$1"
     shift
-    TMP="$RESULTS/.${LOG_NAME}.tmp"
     set +e
-    "$@" > "$TMP" 2>&1
-    EXIT=$?
+    "$@" 2>&1 | tee "$RESULTS/${LOG_NAME}.log"
+    EXIT=${PIPESTATUS[0]}
     set -e
-    cat "$TMP" | tee "$RESULTS/${LOG_NAME}.log"
-    rm -f "$TMP"
     if [ "$EXIT" -ne 0 ]; then
         echo "=== frontend.sh: ${LOG_NAME} FAILED with exit ${EXIT} ==="
         exit "$EXIT"

@@ -1,4 +1,5 @@
 using DwbHub.Application.Bot;
+using DwbHub.Application.Messaging;
 
 namespace DwbHub.Tests.Integration.Bot;
 
@@ -14,6 +15,9 @@ public sealed class FakeBotConnection : IBotConnection
     public DateTimeOffset? LastConnectedAt { get; private set; }
 
     public event Func<BotConnectionStateChange, Task>? StateChanged;
+    public event Func<MessageReceivedEvent, Task>? MessageReceived;
+    public event Func<MessageUpdatedEvent, Task>? MessageUpdated;
+    public event Func<MessageDeletedEvent, Task>? MessageDeleted;
 
     // Test-recording fields
     public List<string> ConnectCallsWithTokens { get; } = new();
@@ -58,6 +62,16 @@ public sealed class FakeBotConnection : IBotConnection
     // Test-controlled trigger for unsolicited state changes (e.g. Discord side disconnect).
     public Task TriggerStateAsync(BotConnectionState newState, string? errorClass = null)
         => TransitionAsync(newState, errorClass);
+
+    // Test-only Raise* helpers so tests can synthesise inbound message events.
+    public Task RaiseMessageReceivedAsync(MessageReceivedEvent evt) =>
+        MessageReceived?.Invoke(evt) ?? Task.CompletedTask;
+
+    public Task RaiseMessageUpdatedAsync(MessageUpdatedEvent evt) =>
+        MessageUpdated?.Invoke(evt) ?? Task.CompletedTask;
+
+    public Task RaiseMessageDeletedAsync(MessageDeletedEvent evt) =>
+        MessageDeleted?.Invoke(evt) ?? Task.CompletedTask;
 
     private async Task TransitionAsync(BotConnectionState newState, string? errorClass)
     {

@@ -123,6 +123,35 @@
       "confirm": "Pause"
     }
   },
+  "channels": {
+    "title": "Channels",
+    "back": "← Back to Guilds",
+    "resync": "Re-sync",
+    "loading": "Loading channels…",
+    "error": "Failed to load channels.",
+    "empty": "No channels found. Try re-syncing.",
+    "notBridgeable": "not a text channel — cannot bridge",
+    "backfillProgress": "{{count}} messages fetched…",
+    "openChat": "Open chat",
+    "toggleError": "Could not update bridge ({{code}}). Please try again.",
+    "guildsLink": "Channels →"
+  },
+  "chat": {
+    "back": "← Back",
+    "composeAria": "Compose message",
+    "deleted": "[deleted]",
+    "deletedAria": "This message was deleted",
+    "edited": "edited",
+    "empty": "No messages yet.",
+    "errorLoad": "Failed to load chat.",
+    "errorSend": "Failed to send. Try again.",
+    "newMessages": "{{count}} new",
+    "placeholder": "Type a message…",
+    "send": "Send",
+    "sending": "sending…",
+    "viaDwbhub": "(via DwbHub)",
+    "you": "You"
+  },
   "botCredentials": {
     "configured": "Bot token configured",
     "notConfigured": "Bot token not configured",

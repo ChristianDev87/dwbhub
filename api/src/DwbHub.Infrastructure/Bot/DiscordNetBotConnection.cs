@@ -1,6 +1,7 @@
 using Discord;
 using Discord.WebSocket;
 using DwbHub.Application.Bot;
+using DwbHub.Application.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace DwbHub.Infrastructure.Bot;
@@ -27,7 +28,10 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
         _logger = logger;
         _client = new DiscordSocketClient(new DiscordSocketConfig
         {
-            GatewayIntents = GatewayIntents.Guilds,
+            GatewayIntents = GatewayIntents.Guilds
+                          | GatewayIntents.GuildMessages
+                          | GatewayIntents.MessageContent      // privileged — see docs/SETUP-MESSAGE-CONTENT-INTENT.md
+                          | GatewayIntents.GuildWebhooks,
             LogLevel = LogSeverity.Warning,
             MessageCacheSize = 0,
             AlwaysDownloadUsers = false,
@@ -36,6 +40,9 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
         _client.Ready += OnReadyAsync;
         _client.Disconnected += OnDisconnectedAsync;
         _client.LoggedOut += OnLoggedOutAsync;
+        _client.MessageReceived += OnMessageReceivedAsync;
+        _client.MessageUpdated += OnMessageUpdatedAsync;
+        _client.MessageDeleted += OnMessageDeletedAsync;
     }
 
     public long GuildId => _guildId;
@@ -44,6 +51,9 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
     public DateTimeOffset? LastConnectedAt { get { lock (_stateLock) return _lastConnectedAt; } }
 
     public event Func<BotConnectionStateChange, Task>? StateChanged;
+    public event Func<MessageReceivedEvent, Task>? MessageReceived;
+    public event Func<MessageUpdatedEvent, Task>? MessageUpdated;
+    public event Func<MessageDeletedEvent, Task>? MessageDeleted;
 
     public async Task ConnectAsync(string botToken, CancellationToken ct)
     {
@@ -127,6 +137,101 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
         return Task.CompletedTask;
     }
 
+    private Task OnMessageReceivedAsync(SocketMessage msg)
+    {
+        // Skip DMs — only handle guild channel messages.
+        if (msg.Channel is not SocketGuildChannel guildChannel)
+            return Task.CompletedTask;
+
+        // Skip self-echo — messages we sent ourselves.
+        if (msg.Author.Id == _client.CurrentUser?.Id)
+            return Task.CompletedTask;
+
+        var evt = new MessageReceivedEvent
+        {
+            TenantId = _tenantId,
+            GuildId = _guildId,
+            DiscordChannelId = (long)guildChannel.Id,
+            DiscordMessageId = (long)msg.Id,
+            DiscordAuthorId = (long)msg.Author.Id,
+            DiscordAuthorName = msg.Author.Username,
+            AuthorIsWebhook = msg.Author.IsWebhook,
+            WebhookSourceId = msg.Author.IsWebhook ? msg.Author.Id : null,
+            Content = msg.Content ?? "",
+            SentAt = msg.Timestamp,           // Discord-supplied; NEVER UtcNow
+        };
+
+        var handler = MessageReceived;
+        if (handler is null) return Task.CompletedTask;
+        _ = Task.Run(async () =>
+        {
+            try { await handler(evt); }
+            catch (Exception ex) { _logger.LogError(ex, "MessageReceived handler threw for guild {GuildId}", _guildId); }
+        });
+        return Task.CompletedTask;
+    }
+
+    private Task OnMessageUpdatedAsync(
+        Cacheable<IMessage, ulong> _before,
+        SocketMessage updated,
+        ISocketMessageChannel channel)
+    {
+        // Discord fires this event for embed-resolution even when the user didn't
+        // edit the text. Skip if there is no actual EditedTimestamp.
+        if (updated.EditedTimestamp is null)
+            return Task.CompletedTask;
+
+        if (channel is not SocketGuildChannel guildChannel)
+            return Task.CompletedTask;
+
+        var evt = new MessageUpdatedEvent
+        {
+            TenantId = _tenantId,
+            GuildId = _guildId,
+            DiscordChannelId = (long)guildChannel.Id,
+            DiscordMessageId = (long)updated.Id,
+            Content = updated.Content ?? "",
+            EditedAt = updated.EditedTimestamp.Value,   // Discord-supplied; NEVER UtcNow
+        };
+
+        var handler = MessageUpdated;
+        if (handler is null) return Task.CompletedTask;
+        _ = Task.Run(async () =>
+        {
+            try { await handler(evt); }
+            catch (Exception ex) { _logger.LogError(ex, "MessageUpdated handler threw for guild {GuildId}", _guildId); }
+        });
+        return Task.CompletedTask;
+    }
+
+    private Task OnMessageDeletedAsync(
+        Cacheable<IMessage, ulong> cached,
+        Cacheable<IMessageChannel, ulong> channelCacheable)
+    {
+        // Resolve the channel from the cacheable; if it's not a guild channel, skip.
+        if (channelCacheable.HasValue && channelCacheable.Value is not SocketGuildChannel)
+            return Task.CompletedTask;
+
+        // We may not have the channel value if it wasn't cached — use the raw ID and
+        // let the consumer handle unknown-channel gracefully.
+        var evt = new MessageDeletedEvent
+        {
+            TenantId = _tenantId,
+            GuildId = _guildId,
+            DiscordChannelId = (long)channelCacheable.Id,
+            DiscordMessageId = (long)cached.Id,
+        };
+
+        var handler = MessageDeleted;
+        if (handler is null) return Task.CompletedTask;
+        _ = Task.Run(async () =>
+        {
+            try { await handler(evt); }
+            catch (Exception ex) { _logger.LogError(ex, "MessageDeleted handler threw for guild {GuildId}", _guildId); }
+        });
+        return Task.CompletedTask;
+    }
+
     private void TransitionTo(BotConnectionState newState, string? errorClass)
     {
         BotConnectionState oldState;
@@ -167,6 +272,9 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
         _client.Ready -= OnReadyAsync;
         _client.Disconnected -= OnDisconnectedAsync;
         _client.LoggedOut -= OnLoggedOutAsync;
+        _client.MessageReceived -= OnMessageReceivedAsync;
+        _client.MessageUpdated -= OnMessageUpdatedAsync;
+        _client.MessageDeleted -= OnMessageDeletedAsync;
 
         try { await DisconnectCoreAsync(); }
         catch { /* best-effort during dispose */ }

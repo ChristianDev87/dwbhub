@@ -3,14 +3,31 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0
 
 # --- System packages ---
-# curl + gpg: prerequisite for PowerShell apt repo.
+# curl + gpg: prerequisite for PowerShell + Docker apt repos.
 # ca-certificates: for HTTPS to Discord + NuGet.
-# docker.io CLI (no daemon) so container-smoke can `docker build` + `docker run`
-#   against the host's daemon via mounted /var/run/docker.sock.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         curl gnupg ca-certificates apt-transport-https \
-        docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Docker CE CLI + buildx + compose plugins (no daemon) ---
+# Installed from Docker's official apt repo (NOT debian's `docker.io` package).
+# Why: docker.io is the legacy builder — no buildx plugin, no compose plugin,
+# and `docker build` rejects `--progress=plain`, so BuildKit's live step-by-step
+# output mode is unavailable. The official Docker CE CLI bundles buildx +
+# compose v2 as native plugins, giving us:
+#   * `docker build --progress=plain` -> live streaming of every RUN step
+#   * `docker compose` (v2) without runtime installer hackery in jobs/e2e.sh
+# All three jobs that exec `docker` (container-smoke, e2e, discord-live) talk to
+# the host daemon via mounted /var/run/docker.sock — no docker daemon runs here.
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+        > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        docker-ce-cli docker-buildx-plugin docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
 # --- PowerShell 7 ---

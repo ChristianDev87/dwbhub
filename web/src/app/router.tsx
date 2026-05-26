@@ -9,6 +9,8 @@ import { VerifyEmailPromptPage } from "./VerifyEmailPromptPage";
 import { DashboardPage } from "./DashboardPage";
 import { GuildsPage } from "./GuildsPage";
 import { AuthGuard } from "./AuthGuard";
+import { ChannelsPage } from "./messaging/ChannelsPage";
+import { ChatPage } from "./messaging/ChatPage";
 
 export function AppRouter(): React.JSX.Element {
   return (
@@ -35,6 +37,22 @@ export function AppRouter(): React.JSX.Element {
         element={
           <AuthGuard>
             <GuildsPage />
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/t/:slug/guilds/:guildPublicId/channels"
+        element={
+          <AuthGuard>
+            <ChannelsPage />
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/t/:slug/channels/:channelPublicId"
+        element={
+          <AuthGuard>
+            <ChatPage />
           </AuthGuard>
         }
       />

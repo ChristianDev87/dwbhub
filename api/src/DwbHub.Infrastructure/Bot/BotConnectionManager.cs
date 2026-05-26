@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using DwbHub.Application.Audit;
 using DwbHub.Application.Bot;
 using DwbHub.Application.Encryption;
+using DwbHub.Application.Messaging;
 using DwbHub.Core.Encryption;
 using DwbHub.Core.Entities;
 using DwbHub.Core.Repositories;
@@ -152,6 +153,9 @@ public sealed class BotConnectionManager(
         var conn = connectionFactory.Create(guildId, guild.TenantId);
         // Subscribe BEFORE adding to map so the first StateChanged is observed.
         conn.StateChanged += change => OnStateChangedAsync(guild, change);
+        // Attach message event handlers so every inbound gateway event is routed
+        // to IMessageService before the first READY fires from ConnectAsync.
+        AttachMessageEventHandlers(conn);
         _connections[guildId] = conn;
 
         try
@@ -239,6 +243,66 @@ public sealed class BotConnectionManager(
             logger.LogWarning(ex, "Failed to handle state-change for guild {GuildId} → {State}",
                 guild.Id, change.To);
         }
+    }
+
+    /// <summary>
+    /// Subscribes the three Discord message events on a newly-created connection to
+    /// <see cref="IMessageService"/> via a per-event DI scope.
+    ///
+    /// Each handler creates a fresh scope so MessageService (scoped) gets its own
+    /// DbConnection — mirrors the AuditWriter pattern in Plan 0.4.
+    ///
+    /// Handlers swallow all exceptions: an unhandled exception inside a Discord.NET
+    /// event handler would crash the gateway worker thread, silently dropping all
+    /// subsequent events for that guild.
+    ///
+    /// Memory: the connection is disposed by <see cref="DisconnectAndRemoveAsync"/>
+    /// when a guild is deactivated. The event-handler delegates are captured on the
+    /// connection object and are collected with it — no explicit detach needed.
+    /// </summary>
+    private void AttachMessageEventHandlers(IBotConnection conn)
+    {
+        conn.MessageReceived += async evt =>
+        {
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var svc = scope.ServiceProvider.GetRequiredService<IMessageService>();
+                await svc.PersistInboundAsync(evt).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "PersistInboundAsync failed for guild {GuildId}", evt.GuildId);
+            }
+        };
+
+        conn.MessageUpdated += async evt =>
+        {
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var svc = scope.ServiceProvider.GetRequiredService<IMessageService>();
+                await svc.PersistEditAsync(evt).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "PersistEditAsync failed for guild {GuildId}", evt.GuildId);
+            }
+        };
+
+        conn.MessageDeleted += async evt =>
+        {
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var svc = scope.ServiceProvider.GetRequiredService<IMessageService>();
+                await svc.MarkDeletedAsync(evt).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "MarkDeletedAsync failed for guild {GuildId}", evt.GuildId);
+            }
+        };
     }
 
     private static async Task SwallowAsync(Func<Task> action)

@@ -21,16 +21,23 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# `--progress=plain` forces BuildKit to write each step's stdout/stderr to our
+# stdout as it happens (one line per directive + every RUN command's output)
+# instead of the default auto-detect TTY/silent table mode. Dockerfile.backend
+# ships docker-ce + docker-buildx-plugin so this flag works (the old apt
+# docker.io package didn't ship buildx and rejected the flag).
+export BUILDKIT_PROGRESS=plain
+
 echo "=== container-smoke: build api ==="
 # Resolve TARGETARCH in the .NET convention (x64 / arm64) from the runner's uname.
 # Dockerfile.api passes this to `dotnet restore --arch $TARGETARCH`; without it
 # the ARG is empty and dotnet restore fails with "Required argument missing".
 DOTNET_ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/;s/armv7l/arm/')
-docker build -f deploy/docker/Dockerfile.api --build-arg TARGETARCH="$DOTNET_ARCH" -t dwbhub-api:smoke .
+docker build --progress=plain -f deploy/docker/Dockerfile.api --build-arg TARGETARCH="$DOTNET_ARCH" -t dwbhub-api:smoke .
 CLEANUP_IMAGES="$CLEANUP_IMAGES dwbhub-api:smoke"
 
 echo "=== container-smoke: build web ==="
-docker build -f deploy/docker/Dockerfile.web -t dwbhub-web:smoke .
+docker build --progress=plain -f deploy/docker/Dockerfile.web -t dwbhub-web:smoke .
 CLEANUP_IMAGES="$CLEANUP_IMAGES dwbhub-web:smoke"
 
 echo "=== container-smoke: verify images instantiate ==="

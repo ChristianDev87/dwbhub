@@ -1,3 +1,5 @@
+using DwbHub.Application.Messaging;
+
 namespace DwbHub.Application.Bot;
 
 /// <summary>
@@ -37,4 +39,23 @@ public interface IBotConnection : IAsyncDisposable
     /// events and update guilds.last_connected_at on Connected transitions.
     /// </summary>
     event Func<BotConnectionStateChange, Task>? StateChanged;
+
+    /// <summary>
+    /// Raised when a new message arrives in any guild channel.
+    /// The consumer (Task 6 MessageService) is responsible for bridged-channel
+    /// filtering and webhook-loop prevention — those require DB access.
+    /// </summary>
+    event Func<MessageReceivedEvent, Task>? MessageReceived;
+
+    /// <summary>
+    /// Raised when a guild channel message is edited.
+    /// Only fired when <see cref="MessageReceivedEvent"/> has an actual
+    /// EditedTimestamp; embed-resolution non-edits are suppressed.
+    /// </summary>
+    event Func<MessageUpdatedEvent, Task>? MessageUpdated;
+
+    /// <summary>
+    /// Raised when a guild channel message is deleted.
+    /// </summary>
+    event Func<MessageDeletedEvent, Task>? MessageDeleted;
 }
