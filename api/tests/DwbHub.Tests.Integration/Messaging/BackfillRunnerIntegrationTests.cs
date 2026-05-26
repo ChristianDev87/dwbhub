@@ -114,6 +114,15 @@ public sealed class BackfillRunnerIntegrationTests : IAsyncLifetime
             ulong webhookId, string webhookToken, string username,
             string content, CancellationToken ct = default) =>
             Task.FromResult(new DiscordMessageInfo(0UL, 0UL, "", false, "", DateTimeOffset.UtcNow, null));
+
+        public Task<DiscordMessageInfo> EditWebhookMessageAsync(
+            ulong webhookId, string webhookToken, ulong messageId,
+            string newContent, CancellationToken ct = default) =>
+            Task.FromResult(new DiscordMessageInfo(messageId, 0UL, "", false, newContent, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
+
+        public Task<bool> DeleteWebhookMessageAsync(
+            ulong webhookId, string webhookToken, ulong messageId, CancellationToken ct = default) =>
+            Task.FromResult(true);
     }
 
     /// <summary>

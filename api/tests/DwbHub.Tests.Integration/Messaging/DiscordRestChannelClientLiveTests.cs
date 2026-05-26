@@ -102,4 +102,101 @@ public sealed class DiscordRestChannelClientLiveTests
 
         Assert.NotNull(messages);
     }
+
+    [SkippableFact]
+    public async Task Webhook_full_lifecycle_create_send_edit_delete_cleanup()
+    {
+        // This test exercises the FULL user-facing message round-trip against
+        // real Discord exactly as a dwbhub end-user would experience it:
+        //
+        //   1. CreateWebhookAsync         — bot provisions a webhook on the channel
+        //   2. ExecuteWebhookAsync (SEND) — webhook posts a message; capture msgId
+        //   3. EditWebhookMessageAsync    — modify the message content
+        //   4. DeleteWebhookMessageAsync  — remove the message
+        //   5. DeleteWebhookAsync         — tear down the test webhook
+        //
+        // Every step is mandatory because cleanup runs in a try/finally so the
+        // user's Discord channel never accumulates test artifacts: a partial
+        // run still removes the webhook + any message it managed to create.
+        //
+        // The message content uses a clear "[dwbhub-live-test]" prefix so that
+        // if the cleanup ever silently fails (network timeout between SEND and
+        // DELETE etc.), the leftover is unmistakable in the channel history.
+        var env = ReadEnv();
+        Skip.If(env is null,
+            "DISCORD_DEV_BOT_TOKEN / DISCORD_DEV_GUILD_ID / DISCORD_DEV_CHANNEL_ID not all set");
+
+        var client = CreateClient();
+        var runId = Guid.NewGuid().ToString("N").Substring(0, 8);
+        var initialContent = $"[dwbhub-live-test:{runId}] initial — send";
+        var editedContent = $"[dwbhub-live-test:{runId}] edited — patch verified";
+
+        DiscordWebhookCreated? webhook = null;
+        ulong? sentMessageId = null;
+        try
+        {
+            // ── 1. Create webhook ─────────────────────────────────────────────
+            webhook = await client.CreateWebhookAsync(
+                env!.Value.token,
+                env.Value.channelId,
+                name: "dwbhub-live-test",
+                CancellationToken.None);
+            Assert.NotEqual(0UL, webhook.WebhookId);
+            Assert.False(string.IsNullOrWhiteSpace(webhook.WebhookToken));
+
+            // ── 2. Send message via webhook ───────────────────────────────────
+            var sent = await client.ExecuteWebhookAsync(
+                webhook.WebhookId,
+                webhook.WebhookToken,
+                username: "dwbhub-test",
+                content: initialContent,
+                CancellationToken.None);
+            sentMessageId = sent.Id;
+            Assert.Equal(initialContent, sent.Content);
+            Assert.True(sent.AuthorIsWebhook);
+            Assert.NotEqual(0UL, sent.Id);
+
+            // ── 3. Edit message ───────────────────────────────────────────────
+            var edited = await client.EditWebhookMessageAsync(
+                webhook.WebhookId,
+                webhook.WebhookToken,
+                sent.Id,
+                editedContent,
+                CancellationToken.None);
+            Assert.Equal(sent.Id, edited.Id); // same message snowflake
+            Assert.Equal(editedContent, edited.Content);
+
+            // ── 4. Delete message ─────────────────────────────────────────────
+            var deleted = await client.DeleteWebhookMessageAsync(
+                webhook.WebhookId,
+                webhook.WebhookToken,
+                sent.Id,
+                CancellationToken.None);
+            Assert.True(deleted);
+            sentMessageId = null; // message is gone — skip the finally-cleanup
+        }
+        finally
+        {
+            // Best-effort cleanup. Any single step failing must NOT mask the
+            // assertion that the previous successful step verified.
+            if (sentMessageId is { } leftoverMsgId && webhook is { } wh1)
+            {
+                try
+                {
+                    await client.DeleteWebhookMessageAsync(
+                        wh1.WebhookId, wh1.WebhookToken, leftoverMsgId, CancellationToken.None);
+                }
+                catch { /* swallow — channel may need manual cleanup if this also fails */ }
+            }
+            if (webhook is { } wh2)
+            {
+                try
+                {
+                    await client.DeleteWebhookAsync(
+                        wh2.WebhookId, wh2.WebhookToken, CancellationToken.None);
+                }
+                catch { /* swallow — webhook may need manual cleanup if this also fails */ }
+            }
+        }
+    }
 }

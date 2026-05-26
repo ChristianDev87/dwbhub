@@ -160,4 +160,26 @@ public sealed class FakeDiscordRestChannelClient : IDiscordRestChannelClient
             SentAt: DateTimeOffset.UtcNow,
             EditedAt: null));
     }
+
+    public Task<DiscordMessageInfo> EditWebhookMessageAsync(
+        ulong webhookId,
+        string webhookToken,
+        ulong messageId,
+        string newContent,
+        CancellationToken ct = default)
+        => Task.FromResult(new DiscordMessageInfo(
+            Id: messageId,
+            AuthorId: 900000000000000002UL,
+            AuthorName: "webhook",
+            AuthorIsWebhook: true,
+            Content: newContent,
+            SentAt: DateTimeOffset.UtcNow.AddMinutes(-1), // pretend the message was sent a moment ago
+            EditedAt: DateTimeOffset.UtcNow));
+
+    public Task<bool> DeleteWebhookMessageAsync(
+        ulong webhookId,
+        string webhookToken,
+        ulong messageId,
+        CancellationToken ct = default)
+        => Task.FromResult(true); // no-op: fake messages are never stored externally
 }

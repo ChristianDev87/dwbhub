@@ -58,6 +58,32 @@ public interface IDiscordRestChannelClient
         string username,
         string content,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Edit a message previously posted by this webhook. Discord supports
+    /// only the content field for webhook-message edits (username, avatar,
+    /// embeds, attachments are not editable post-hoc). Returns the updated
+    /// message metadata. Throws <see cref="WebhookGoneException"/> when
+    /// Discord returns 404 (either the webhook or the message was deleted).
+    /// </summary>
+    Task<DiscordMessageInfo> EditWebhookMessageAsync(
+        ulong webhookId,
+        string webhookToken,
+        ulong messageId,
+        string newContent,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Delete a message previously posted by this webhook. Returns true iff
+    /// the delete succeeded; false if the message was already gone (Discord
+    /// 404 treated as idempotent success — same convention as
+    /// <see cref="DeleteWebhookAsync"/>).
+    /// </summary>
+    Task<bool> DeleteWebhookMessageAsync(
+        ulong webhookId,
+        string webhookToken,
+        ulong messageId,
+        CancellationToken ct = default);
 }
 
 /// <summary>Discord channel metadata returned from the channel-list sync.</summary>

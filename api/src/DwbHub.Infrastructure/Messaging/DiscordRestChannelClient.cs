@@ -245,6 +245,96 @@ public sealed class DiscordRestChannelClient : IDiscordRestChannelClient
             EditedAt: null);
     }
 
+    // ── Webhook message edit ──────────────────────────────────────────────────
+
+    public async Task<DiscordMessageInfo> EditWebhookMessageAsync(
+        ulong webhookId,
+        string webhookToken,
+        ulong messageId,
+        string newContent,
+        CancellationToken ct = default)
+    {
+        // PATCH /webhooks/{id}/{token}/messages/{message_id}
+        var url = $"{WebhookBaseUrl}/webhooks/{webhookId}/{webhookToken}/messages/{messageId}";
+        var body = new { content = newContent };
+
+        using var request = new HttpRequestMessage(HttpMethod.Patch, url)
+        {
+            Content = JsonContent.Create(body, options: JsonSerializerOptions.Default),
+        };
+
+        var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            throw new WebhookGoneException(webhookId);
+
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            var retryAfter = response.Headers.RetryAfter?.Delta is { } d
+                ? (int)Math.Ceiling(d.TotalSeconds)
+                : 5;
+            throw new DiscordRateLimitException(retryAfter,
+                $"Discord rate-limited when editing webhook message {messageId}");
+        }
+
+        if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+            throw new DiscordPermissionException(
+                $"Discord returned {(int)response.StatusCode} when editing webhook message {messageId}");
+
+        response.EnsureSuccessStatusCode();
+
+        using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        var msg = await JsonSerializer
+            .DeserializeAsync<WebhookMessageResponse>(stream, cancellationToken: ct)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Discord returned null message body for webhook edit.");
+
+        return new DiscordMessageInfo(
+            Id: ulong.Parse(msg.Id),
+            AuthorId: msg.Author?.Id is { } authorId ? ulong.Parse(authorId) : webhookId,
+            AuthorName: msg.Author?.Username ?? "webhook",
+            AuthorIsWebhook: true,
+            Content: msg.Content ?? newContent,
+            SentAt: DateTimeOffset.Parse(msg.Timestamp),
+            // Discord returns edited_timestamp on edits — we treat "now" as the
+            // edited time since the JSON model above doesn't track it. Callers
+            // that need precise edited_at use Discord's MessageUpdated gateway
+            // event instead (which carries the authoritative timestamp).
+            EditedAt: DateTimeOffset.UtcNow);
+    }
+
+    // ── Webhook message delete ────────────────────────────────────────────────
+
+    public async Task<bool> DeleteWebhookMessageAsync(
+        ulong webhookId,
+        string webhookToken,
+        ulong messageId,
+        CancellationToken ct = default)
+    {
+        // DELETE /webhooks/{id}/{token}/messages/{message_id}
+        var url = $"{WebhookBaseUrl}/webhooks/{webhookId}/{webhookToken}/messages/{messageId}";
+        using var request = new HttpRequestMessage(HttpMethod.Delete, url);
+        var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return false; // already gone — idempotent success
+
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            var retryAfter = response.Headers.RetryAfter?.Delta is { } d
+                ? (int)Math.Ceiling(d.TotalSeconds)
+                : 5;
+            throw new DiscordRateLimitException(retryAfter,
+                $"Discord rate-limited when deleting webhook message {messageId}");
+        }
+
+        if (!response.IsSuccessStatusCode)
+            throw new DiscordPermissionException(
+                $"Discord returned {(int)response.StatusCode} when deleting webhook message {messageId}");
+
+        return true;
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private static async Task<DiscordRestClient> CreateRestClientAsync(
