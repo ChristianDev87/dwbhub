@@ -196,9 +196,11 @@ public sealed class BotConnectionManagerTests
         var outcome = await mgr.OnManualReconnectAsync(90, actorUserId: 42, CancellationToken.None);
 
         outcome.Should().BeOfType<ManualReconnectOutcome.Triggered>();
+        // Background reconnect is fire-and-forget — wait for it to complete before asserting state.
+        var conn = await factory.WaitForConnectAsync(90, TimeSpan.FromSeconds(2));
         first.DisconnectCalls.Should().BeGreaterThan(0);
-        factory.Created[90].Should().NotBeSameAs(first);
-        factory.Created[90].State.Should().Be(BotConnectionState.Connected);
+        conn.Should().NotBeSameAs(first);
+        conn.State.Should().Be(BotConnectionState.Connected);
     }
 
     // --- Cool-down tests ---
@@ -215,8 +217,9 @@ public sealed class BotConnectionManagerTests
         var outcome = await mgr.OnManualReconnectAsync(100, actorUserId: 1, CancellationToken.None);
 
         outcome.Should().BeOfType<ManualReconnectOutcome.Triggered>();
-        factory.Created.Should().ContainKey(100);
-        factory.Created[100].State.Should().Be(BotConnectionState.Connected);
+        // Background reconnect is fire-and-forget — wait for it to complete before asserting state.
+        var conn = await factory.WaitForConnectAsync(100, TimeSpan.FromSeconds(2));
+        conn.State.Should().Be(BotConnectionState.Connected);
     }
 
     [Fact]
@@ -261,7 +264,9 @@ public sealed class BotConnectionManagerTests
         var second = await mgr.OnManualReconnectAsync(120, actorUserId: 1, CancellationToken.None);
 
         second.Should().BeOfType<ManualReconnectOutcome.Triggered>();
-        factory.Created[120].State.Should().Be(BotConnectionState.Connected);
+        // Background reconnect is fire-and-forget — wait for it to complete before asserting state.
+        var conn = await factory.WaitForConnectAsync(120, TimeSpan.FromSeconds(2));
+        conn.State.Should().Be(BotConnectionState.Connected);
     }
 
     [Fact]
