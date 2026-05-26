@@ -4,7 +4,7 @@ namespace DwbHub.Core.Messaging;
 /// Tracks the state of a Hangfire-backed backfill run for one bridged channel.
 /// One active job per channel enforced by the UNIQUE(channel_id) constraint
 /// in migration 016. `OldestFetchedSnowflake` is the Discord snowflake cursor
-/// passed to `before=` in subsequent REST page requests (Plan 1.0 §3.2).
+/// passed to `before=` in subsequent REST page requests.
 /// </summary>
 public sealed record ChannelBackfillJob
 {

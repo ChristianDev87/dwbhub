@@ -11,23 +11,24 @@ public sealed class BCryptPasswordHasher : IPasswordHasher
 {
     private const int WorkFactor = 12;
 
-    // Pre-computed BCrypt hash of "DWBHUB_DECOY_PASSWORD_DO_NOT_USE" at work factor 12.
-    // Cracking this reveals only the dummy plaintext, which no real user has.
+    // Pre-computed BCrypt hash of the decoy plaintext. Cracking it reveals no real user credential.
     private const string DummyHash = "$2a$12$dSgI7slUjNUWjUm7XbF3juhWzgFXPKcIBUxHn6OrkNCKzQlRPSUtW";
 
+    /// <inheritdoc/>
     public string Hash(string plain)
     {
         return BCrypt.Net.BCrypt.HashPassword(plain, WorkFactor);
     }
 
+    /// <inheritdoc/>
     public bool Verify(string plain, string hash)
     {
         return BCrypt.Net.BCrypt.Verify(plain, hash);
     }
 
+    /// <inheritdoc/>
     public void VerifyDecoy(string plain)
     {
-        // Discard the result — we just want the BCrypt work time to elapse.
         _ = BCrypt.Net.BCrypt.Verify(plain, DummyHash);
     }
 }

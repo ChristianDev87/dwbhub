@@ -6,6 +6,11 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DwbHub.Api.Controllers.Auth;
 
+/// <summary>
+/// Authentication endpoints: login, logout, token refresh, email verification,
+/// and password reset. The refresh token is stored as an HttpOnly cookie;
+/// the access token is returned in the response body.
+/// </summary>
 [ApiController]
 public sealed class AuthController(
     ILoginService loginService,
@@ -17,6 +22,11 @@ public sealed class AuthController(
     private const string RefreshCookiePath = "/api/auth";
     private static readonly TimeSpan RefreshCookieLifetime = TimeSpan.FromDays(30);
 
+    /// <summary>
+    /// Log in a user for a tenant identified by slug. Returns a JWT access token and sets the
+    /// <c>dwbhub_refresh</c> HttpOnly cookie. Returns 423 Locked with a Retry-After header when
+    /// the account is rate-limited, 403 when the email is not yet verified.
+    /// </summary>
     [HttpPost("/api/tenants/{slug}/auth/login")]
     [AllowAnonymous]
     public async Task<IActionResult> Login(string slug, [FromBody] LoginRequest body, CancellationToken ct)
@@ -35,6 +45,10 @@ public sealed class AuthController(
         };
     }
 
+    /// <summary>
+    /// Resend the email-verification message for a user. Always returns 200 OK regardless of
+    /// whether the address is known, to avoid user enumeration.
+    /// </summary>
     [HttpPost("/api/auth/verify-email/resend")]
     [AllowAnonymous]
     public async Task<IActionResult> VerifyEmailResend([FromBody] VerifyEmailResendRequest body, CancellationToken ct)
@@ -46,6 +60,10 @@ public sealed class AuthController(
         return Ok(new { ok = true });
     }
 
+    /// <summary>
+    /// Confirm email verification using the one-time token from the verification email.
+    /// Returns 400 when the token is invalid or expired.
+    /// </summary>
     [HttpPost("/api/auth/verify-email/confirm")]
     [AllowAnonymous]
     public async Task<IActionResult> VerifyEmailConfirm([FromBody] VerifyEmailConfirmRequest body, CancellationToken ct)
@@ -59,6 +77,10 @@ public sealed class AuthController(
         };
     }
 
+    /// <summary>
+    /// Request a password-reset email. Always returns 200 OK regardless of whether the
+    /// address is known, to avoid user enumeration.
+    /// </summary>
     [HttpPost("/api/auth/password-reset/request")]
     [AllowAnonymous]
     public async Task<IActionResult> PasswordResetRequest([FromBody] PasswordResetRequestRequest body, CancellationToken ct)
@@ -70,6 +92,10 @@ public sealed class AuthController(
         return Ok(new { ok = true });
     }
 
+    /// <summary>
+    /// Confirm a password reset using the one-time token and the new password.
+    /// Returns 400 for an invalid/expired token or a weak password.
+    /// </summary>
     [HttpPost("/api/auth/password-reset/confirm")]
     [AllowAnonymous]
     public async Task<IActionResult> PasswordResetConfirm([FromBody] PasswordResetConfirmRequest body, CancellationToken ct)
@@ -84,6 +110,11 @@ public sealed class AuthController(
         };
     }
 
+    /// <summary>
+    /// Rotate the refresh token. Reads the <c>dwbhub_refresh</c> HttpOnly cookie, issues a new
+    /// access token and rotates the cookie. Returns 401 and clears the cookie on any invalid,
+    /// replayed, or rights-changed token.
+    /// </summary>
     [HttpPost("/api/auth/refresh")]
     [AllowAnonymous]
     public async Task<IActionResult> Refresh(CancellationToken ct)
@@ -119,6 +150,10 @@ public sealed class AuthController(
         }
     }
 
+    /// <summary>
+    /// Log out the current session. Revokes the refresh token in the database and clears the
+    /// <c>dwbhub_refresh</c> cookie. Always returns 204 No Content, even when no cookie is present.
+    /// </summary>
     [HttpPost("/api/auth/logout")]
     [AllowAnonymous]
     public async Task<IActionResult> Logout(CancellationToken ct)

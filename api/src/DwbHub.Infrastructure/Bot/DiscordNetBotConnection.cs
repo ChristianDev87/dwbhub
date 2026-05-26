@@ -45,16 +45,32 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
         _client.MessageDeleted += OnMessageDeletedAsync;
     }
 
+    /// <inheritdoc/>
     public long GuildId => _guildId;
+    /// <inheritdoc/>
     public long TenantId => _tenantId;
+    /// <inheritdoc/>
     public BotConnectionState State { get { lock (_stateLock) return _state; } }
+    /// <inheritdoc/>
     public DateTimeOffset? LastConnectedAt { get { lock (_stateLock) return _lastConnectedAt; } }
 
+    /// <inheritdoc/>
     public event Func<BotConnectionStateChange, Task>? StateChanged;
+    /// <inheritdoc/>
     public event Func<MessageReceivedEvent, Task>? MessageReceived;
+    /// <inheritdoc/>
     public event Func<MessageUpdatedEvent, Task>? MessageUpdated;
+    /// <inheritdoc/>
     public event Func<MessageDeletedEvent, Task>? MessageDeleted;
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Starts the Discord.NET gateway login and socket. State becomes
+    /// <see cref="BotConnectionState.Connected"/> asynchronously when the
+    /// Discord READY event fires, not when this method returns.
+    /// Invalid tokens surface via the async 4004 close code handled in
+    /// <c>OnDisconnectedAsync</c> rather than as a synchronous 401.
+    /// </remarks>
     public async Task ConnectAsync(string botToken, CancellationToken ct)
     {
         ThrowIfDisposed();
@@ -67,9 +83,7 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
         }
         catch (Discord.Net.HttpException ex) when (ex.HttpCode == System.Net.HttpStatusCode.Unauthorized)
         {
-            // Defensive: Discord.NET 3.16 does not actually throw here for invalid tokens —
-            // the primary invalid-token path is the async 4004 close handled in OnDisconnectedAsync.
-            // Kept in case a future Discord.NET version resumes synchronous 401 behaviour.
+            // Discord.NET 3.16: invalid tokens surface as 4004 close in OnDisconnectedAsync, not here. Kept for future compat.
             _logger.LogWarning("Discord rejected bot token (401 Unauthorized) for guild {GuildId} — token must be rotated", _guildId);
             TransitionTo(BotConnectionState.TokenInvalid, errorClass: "token_invalid");
             throw;
@@ -82,6 +96,7 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
         }
     }
 
+    /// <inheritdoc/>
     public async Task DisconnectAsync(CancellationToken ct)
     {
         if (_disposed) return;
@@ -261,6 +276,10 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
         if (_disposed) throw new ObjectDisposedException(nameof(DiscordNetBotConnection));
     }
 
+    /// <summary>
+    /// Unsubscribe all Discord.NET event handlers, disconnect gracefully, and dispose
+    /// the underlying <see cref="Discord.WebSocket.DiscordSocketClient"/>.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;

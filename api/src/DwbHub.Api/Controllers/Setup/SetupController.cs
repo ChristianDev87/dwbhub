@@ -6,9 +6,18 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DwbHub.Api.Controllers.Setup;
 
+/// <summary>
+/// First-run setup wizard endpoints. All actions are anonymous because no tenant
+/// or user exists before setup completes. Both endpoints return 410 Gone once
+/// setup has already been completed.
+/// </summary>
 [ApiController]
 public sealed class SetupController(ISetupService setupService) : ControllerBase
 {
+    /// <summary>
+    /// Return the current setup status. Clients poll this before showing the
+    /// setup wizard to decide whether to redirect to the login page instead.
+    /// </summary>
     [HttpGet("/api/setup/status")]
     [AllowAnonymous]
     public async Task<IActionResult> Status(CancellationToken ct)
@@ -17,6 +26,11 @@ public sealed class SetupController(ISetupService setupService) : ControllerBase
         return Ok(new SetupStatusResponse(status.Completed, status.CompletedAt));
     }
 
+    /// <summary>
+    /// Complete the first-run setup. Creates the first tenant and owner account using the
+    /// one-time bootstrap token. Returns 201 Created on success, 401 for an invalid token,
+    /// 410 Gone if already completed, 400 for validation failures, and 409 if the slug is taken.
+    /// </summary>
     [HttpPost("/api/setup/complete")]
     [AllowAnonymous]
     public async Task<IActionResult> Complete([FromBody] SetupCompleteRequest body, CancellationToken ct)

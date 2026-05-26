@@ -20,6 +20,7 @@ public static class CanonicalJsonSerializer
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
+    /// <summary>Serialize a payload dictionary to canonical JSON (alphabetical keys, no whitespace).</summary>
     public static string Serialize(IReadOnlyDictionary<string, object?> payload)
     {
         using var ms = new MemoryStream();
@@ -30,6 +31,7 @@ public static class CanonicalJsonSerializer
         return Encoding.UTF8.GetString(ms.ToArray());
     }
 
+    /// <summary>Compute the SHA-256 hash of a canonical JSON string (UTF-8 encoded).</summary>
     public static byte[] Hash(string canonicalJson)
         => SHA256.HashData(Encoding.UTF8.GetBytes(canonicalJson));
 

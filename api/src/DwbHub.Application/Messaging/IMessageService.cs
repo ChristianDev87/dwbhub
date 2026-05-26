@@ -4,13 +4,7 @@ namespace DwbHub.Application.Messaging;
 
 /// <summary>
 /// Application service that handles all Discord message lifecycle events and
-/// outbound message sending.  This is the single owner of the inbound-filter
-/// logic that Task 5 deferred:
-/// <list type="bullet">
-///   <item><description>Bridged-channel gate (is_bridged check)</description></item>
-///   <item><description>Webhook-loop prevention (our own webhook id check)</description></item>
-///   <item><description>DM-channel safety net (channel_type == 1)</description></item>
-/// </list>
+/// outbound message sending.
 /// </summary>
 public interface IMessageService
 {

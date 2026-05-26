@@ -4,8 +4,12 @@ using DwbHub.Core.Repositories;
 
 namespace DwbHub.Data.Repositories;
 
+/// <summary>
+/// Dapper-backed implementation of <see cref="ILoginAttemptRepository"/>.
+/// </summary>
 public sealed class LoginAttemptRepository(IDbConnectionFactory connectionFactory) : ILoginAttemptRepository
 {
+    /// <inheritdoc/>
     public async Task RecordAsync(string email, IPAddress ipAddress, bool success, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -18,6 +22,7 @@ public sealed class LoginAttemptRepository(IDbConnectionFactory connectionFactor
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<int> CountFailedSinceAsync(string email, IPAddress ipAddress, DateTimeOffset since, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);

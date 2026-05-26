@@ -64,7 +64,6 @@ public sealed class MessagesController(
         if (user is null)
             return Unauthorized(new { error = "user_not_found" });
 
-        // Resolve channel — scoped by tenant_id for info-leak prevention.
         var channel = await channels.GetByPublicIdAsync(tenant.Id, channelPublicId, ct).ConfigureAwait(false);
         if (channel is null)
             return NotFound(new { error = "channel_not_found" });
@@ -150,13 +149,11 @@ public sealed class MessagesController(
     {
         _ = slug;
 
-        // Clamp limit to [1, 100]; invalid values silently reset to 50.
         if (limit < 1 || limit > 100) limit = 50;
 
         var tenant = tenantContext.Current
             ?? throw new InvalidOperationException("TenantContext not populated despite /api/t/ route.");
 
-        // Resolve channel — scoped by tenant_id.
         var channel = await channels.GetByPublicIdAsync(tenant.Id, channelPublicId, ct).ConfigureAwait(false);
         if (channel is null)
             return NotFound(new { error = "channel_not_found" });

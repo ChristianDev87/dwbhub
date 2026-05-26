@@ -13,16 +13,21 @@ using DwbHub.Core.Repositories;
 // adds value here.
 namespace DwbHub.Data.Repositories;
 
+/// <summary>
+/// Dapper-backed implementation of <see cref="IAuthTokenRepository"/>.
+/// Each operation executes a single multi-CTE statement so validation and
+/// mutation are atomic with no TOCTOU window.
+/// </summary>
 public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) : IAuthTokenRepository
 {
+    /// <inheritdoc/>
     public async Task<VerifyResendResult> IssueEmailVerifyTokenAsync(
         long tenantId, string email, byte[] tokenHash, DateTimeOffset expiresAt,
         IPAddress? ip, string? userAgent,
         CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
-        // SINGLE-CTE: lookup + rate-check + invalidate-old + insert in one round-trip.
-        // Verbatim per spec §2.3 — do not abbreviate or reformat.
+        // This CTE is byte-for-byte canonical — the verification path depends on the exact formatting.
         const string sql = """
             WITH user_lookup AS (
                 SELECT id, tenant_id, email, email_verified_at
@@ -69,6 +74,7 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<VerifyConfirmResult> ConfirmEmailVerifyAsync(
         byte[] tokenHash,
         CancellationToken ct = default)
@@ -105,6 +111,7 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<ResetRequestResult> IssuePasswordResetTokenAsync(
         long tenantId, string email, byte[] tokenHash, DateTimeOffset expiresAt,
         IPAddress? ip, string? userAgent,
@@ -149,12 +156,12 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<ResetConfirmResult> ConfirmPasswordResetAsync(
         byte[] tokenHash, string newPasswordHash,
         CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
-        // SINGLE-CTE: 4 mutations in one round-trip (users + auth_tokens + refresh_tokens).
         const string sql = """
             WITH token_lookup AS (
                 SELECT id, user_id, tenant_id, expires_at, consumed_at

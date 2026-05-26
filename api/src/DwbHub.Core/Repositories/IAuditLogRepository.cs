@@ -3,6 +3,11 @@ using DwbHub.Core.Entities;
 
 namespace DwbHub.Core.Repositories;
 
+/// <summary>
+/// Append-only audit log storage. Rows are hash-chained (each row's hash covers
+/// its payload plus the previous row's hash) so any tampering or gap is detectable
+/// by <see cref="IAuditVerifyStateRepository"/> during the integrity-check job.
+/// </summary>
 public interface IAuditLogRepository
 {
     /// <summary>

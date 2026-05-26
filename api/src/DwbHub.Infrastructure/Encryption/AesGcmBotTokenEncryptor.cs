@@ -5,6 +5,13 @@ using DwbHub.Core.Encryption;
 
 namespace DwbHub.Infrastructure.Encryption;
 
+/// <summary>
+/// AES-256-GCM-backed implementation of <see cref="IBotTokenEncryptor"/>.
+/// Each call to <see cref="Encrypt"/> generates a fresh 96-bit nonce via
+/// <see cref="System.Security.Cryptography.RandomNumberGenerator"/>; the resulting
+/// <see cref="DwbHub.Core.Encryption.CipherEnvelope"/> (nonce + ciphertext + 128-bit tag)
+/// is the only form persisted to the database.
+/// </summary>
 public sealed class AesGcmBotTokenEncryptor : IBotTokenEncryptor
 {
     private const int NonceSize = 12;
@@ -12,6 +19,11 @@ public sealed class AesGcmBotTokenEncryptor : IBotTokenEncryptor
 
     private readonly byte[] _key;
 
+    /// <summary>
+    /// Initialise the encryptor with the project's AES-256 key.
+    /// </summary>
+    /// <param name="base64Key">Base64-encoded 256-bit key (exactly 32 bytes after decode).</param>
+    /// <exception cref="ArgumentException">Thrown when the decoded key is not exactly 32 bytes.</exception>
     public AesGcmBotTokenEncryptor(string base64Key)
     {
         _key = Convert.FromBase64String(base64Key);
@@ -23,6 +35,7 @@ public sealed class AesGcmBotTokenEncryptor : IBotTokenEncryptor
         }
     }
 
+    /// <inheritdoc/>
     public CipherEnvelope Encrypt(string plaintext)
     {
         var plaintextBytes = Encoding.UTF8.GetBytes(plaintext);
@@ -39,6 +52,11 @@ public sealed class AesGcmBotTokenEncryptor : IBotTokenEncryptor
         return new CipherEnvelope(nonce, ciphertext, tag);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Throws <see cref="System.Security.Cryptography.CryptographicException"/> if the
+    /// GCM authentication tag does not match (tampered ciphertext or wrong key).
+    /// </remarks>
     public string Decrypt(CipherEnvelope envelope)
     {
         var plaintextBytes = new byte[envelope.Ciphertext.Length];

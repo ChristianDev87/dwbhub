@@ -30,7 +30,7 @@ public interface IGuildBotCredentialRepository
 
     /// <summary>
     /// Loads the encrypted credential for a guild. Returns null if no credential
-    /// is configured. Used by Plan 0.8 BotConnectionManager. 1 round-trip.
+    /// is configured. Used by BotConnectionManager. 1 round-trip.
     /// </summary>
     Task<GuildBotCredential?> GetByGuildIdAsync(
         long guildId, long tenantId, CancellationToken ct = default);

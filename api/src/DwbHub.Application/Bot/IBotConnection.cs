@@ -42,7 +42,7 @@ public interface IBotConnection : IAsyncDisposable
 
     /// <summary>
     /// Raised when a new message arrives in any guild channel.
-    /// The consumer (Task 6 MessageService) is responsible for bridged-channel
+    /// <see cref="IMessageService"/> is responsible for bridged-channel
     /// filtering and webhook-loop prevention — those require DB access.
     /// </summary>
     event Func<MessageReceivedEvent, Task>? MessageReceived;

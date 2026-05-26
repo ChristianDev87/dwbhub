@@ -5,6 +5,9 @@ using DwbHub.Core.Repositories;
 
 namespace DwbHub.Application.Auth;
 
+/// <summary>
+/// Implements the password reset flow defined by <see cref="IPasswordResetService"/>.
+/// </summary>
 public sealed class PasswordResetService(
     IAuthTokenRepository authTokens,
     ITenantRepository tenants,
@@ -19,6 +22,7 @@ public sealed class PasswordResetService(
 {
     private static readonly TimeSpan Lifetime = TimeSpan.FromHours(1);
 
+    /// <inheritdoc/>
     public async Task RequestAsync(
         string tenantSlug, string email, string locale, IPAddress? ip, string? userAgent,
         CancellationToken ct = default)
@@ -60,6 +64,7 @@ public sealed class PasswordResetService(
             IpAddress: ip, UserAgent: userAgent), ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<ResetConfirmOutcome> ConfirmAsync(string tokenPlaintext, string newPassword, CancellationToken ct = default)
     {
         if (PasswordStrength.Validate(newPassword) != PasswordStrengthResult.Strong)

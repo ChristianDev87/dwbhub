@@ -54,7 +54,6 @@ public sealed class ChannelsController(
         _ = slug;
         var tenant = ResolveTenant();
 
-        // Resolve guild — scoped by tenant_id for info-leak prevention.
         var guild = await guildRepo.GetByPublicIdAsync(guildPublicId, tenant.Id, ct)
             .ConfigureAwait(false);
         if (guild is null)
@@ -110,7 +109,6 @@ public sealed class ChannelsController(
         var tenant = ResolveTenant();
         var userId = ExtractUserId();
 
-        // Validate guild belongs to this tenant before sync.
         var guild = await guildRepo.GetByPublicIdAsync(guildPublicId, tenant.Id, ct)
             .ConfigureAwait(false);
         if (guild is null)
@@ -173,7 +171,6 @@ public sealed class ChannelsController(
         if (userId is null)
             return Unauthorized(new { error = "missing_sub_claim" });
 
-        // Resolve channel — scoped by tenant_id.
         var channel = await channelRepo.GetByPublicIdAsync(tenant.Id, channelPublicId, ct)
             .ConfigureAwait(false);
         if (channel is null)
@@ -205,7 +202,6 @@ public sealed class ChannelsController(
             return Conflict(new { error = "bot_credentials_missing", detail = "Configure the bot token first." });
         }
 
-        // Mark channel as bridged.
         await channelRepo.SetBridgedAsync(tenant.Id, channelPublicId, isBridged: true, ct)
             .ConfigureAwait(false);
 
@@ -221,7 +217,6 @@ public sealed class ChannelsController(
         await backfillJobRepo.SetHangfireJobIdAsync(tenant.Id, backfillJob.Id, hangfireJobId, ct)
             .ConfigureAwait(false);
 
-        // Audit.
         await audit.RecordAsync(new AuditEvent(
             TenantId: tenant.Id,
             ActorUserId: userId,
@@ -263,7 +258,6 @@ public sealed class ChannelsController(
         var tenant = ResolveTenant();
         var userId = ExtractUserId();
 
-        // Resolve channel — scoped by tenant_id.
         var channel = await channelRepo.GetByPublicIdAsync(tenant.Id, channelPublicId, ct)
             .ConfigureAwait(false);
         if (channel is null)
@@ -297,16 +291,13 @@ public sealed class ChannelsController(
                 .ConfigureAwait(false);
         }
 
-        // Delete Discord webhook + remove DB row (idempotent).
         await webhookService.DeleteForChannelAsync(tenant.Id, channel.Id, ct)
             .ConfigureAwait(false);
 
-        // Mark channel as unbridged.
         // NOTE: messages rows are NOT deleted — history is preserved.
         await channelRepo.SetBridgedAsync(tenant.Id, channelPublicId, isBridged: false, ct)
             .ConfigureAwait(false);
 
-        // Audit.
         await audit.RecordAsync(new AuditEvent(
             TenantId: tenant.Id,
             ActorUserId: userId,
@@ -342,7 +333,6 @@ public sealed class ChannelsController(
         _ = slug;
         var tenant = ResolveTenant();
 
-        // Resolve channel — scoped by tenant_id.
         var channel = await channelRepo.GetByPublicIdAsync(tenant.Id, channelPublicId, ct)
             .ConfigureAwait(false);
         if (channel is null)
@@ -376,19 +366,16 @@ public sealed class ChannelsController(
         var tenant = ResolveTenant();
         var userId = ExtractUserId();
 
-        // Resolve channel — scoped by tenant_id.
         var channel = await channelRepo.GetByPublicIdAsync(tenant.Id, channelPublicId, ct)
             .ConfigureAwait(false);
         if (channel is null)
             return NotFound(new { error = "channel_not_found" });
 
-        // Load the job — verify it belongs to this tenant + channel.
         var job = await backfillJobRepo.GetByIdAsync(tenant.Id, jobId, ct)
             .ConfigureAwait(false);
         if (job is null || job.ChannelId != channel.Id)
             return NotFound(new { error = "backfill_job_not_found" });
 
-        // Cancel in Hangfire (best-effort).
         if (job.HangfireJobId is not null)
         {
             try
@@ -404,11 +391,9 @@ public sealed class ChannelsController(
             }
         }
 
-        // Mark cancelled in DB.
         await backfillJobRepo.MarkCancelledAsync(tenant.Id, jobId, ct)
             .ConfigureAwait(false);
 
-        // Audit.
         await audit.RecordAsync(new AuditEvent(
             TenantId: tenant.Id,
             ActorUserId: userId,

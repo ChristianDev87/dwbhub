@@ -61,21 +61,17 @@ public sealed class BackfillRunner : IBackfillRunner
     /// <inheritdoc/>
     public async Task RunAsync(long tenantId, long jobId, CancellationToken ct = default)
     {
-        // ── 1. Load job ───────────────────────────────────────────────────────
         var job = await _jobs.GetByIdAsync(tenantId, jobId, ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException(
                 $"Backfill job {jobId} not found for tenant {tenantId}.");
 
-        // ── 2. Transition to Running ──────────────────────────────────────────
         await _jobs.MarkRunningAsync(tenantId, jobId, ct).ConfigureAwait(false);
 
-        // ── 3. Resolve channel ────────────────────────────────────────────────
         var bridged = await _channels.ListBridgedAsync(tenantId, ct).ConfigureAwait(false);
         var channel = bridged.FirstOrDefault(c => c.Id == job.ChannelId)
             ?? throw new InvalidOperationException(
                 $"Bridged channel {job.ChannelId} not found for tenant {tenantId}.");
 
-        // ── 4. Decrypt bot token ──────────────────────────────────────────────
         var credential = await _credentials.GetByGuildIdAsync(channel.GuildId, tenantId, ct)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException(
@@ -106,7 +102,6 @@ public sealed class BackfillRunner : IBackfillRunner
                 ["channel_id"] = job.ChannelId,
             }), ct).ConfigureAwait(false);
 
-        // ── 5. Pagination loop ────────────────────────────────────────────────
         var cursor = job.OldestFetchedSnowflake; // null = start from most recent
         var totalFetched = job.FetchedCount;      // resume from last persisted count
 
@@ -182,7 +177,6 @@ public sealed class BackfillRunner : IBackfillRunner
                 await Task.Delay(BatchDelay, ct).ConfigureAwait(false);
             }
 
-            // ── 6. Mark complete ───────────────────────────────────────────────
             await _jobs.MarkCompleteAsync(tenantId, jobId, totalFetched, ct)
                 .ConfigureAwait(false);
 

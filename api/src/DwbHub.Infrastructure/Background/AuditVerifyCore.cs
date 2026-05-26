@@ -11,13 +11,21 @@ namespace DwbHub.Infrastructure.Background;
 /// hash, and returns Ok or Broken. The caller is responsible for state-row updates
 /// (incremental) or skipping them (full).
 ///
-/// NOTE: row.PayloadJson is the postgres-formatted `payload_json::text` output
+/// row.PayloadJson is the postgres-formatted `payload_json::text` output
 /// (with spaces after colons). This is passed AS-IS to HashEvent — the SQL insert
 /// in AuditLogRepository computes the hash using the same Postgres-formatted text
 /// embedded in the wrapper, so the C# wrapper here matches byte-for-byte.
 /// </summary>
 public sealed class AuditVerifyCore(IAuditLogRepository auditLog)
 {
+    /// <summary>
+    /// Walk audit_log rows in ascending order starting after <paramref name="startAfterId"/>,
+    /// recompute each row's expected hash, and return <see cref="AuditChainResult.Ok"/> or
+    /// <see cref="AuditChainResult.Broken"/> depending on whether the chain is intact.
+    /// </summary>
+    /// <param name="startAfterId">Walk rows with <c>id &gt; startAfterId</c>. Pass 0 for a full scan.</param>
+    /// <param name="startingPrevHash">Hash of the row at <paramref name="startAfterId"/>, used as the chain seed. Pass <c>null</c> for a full scan from the beginning.</param>
+    /// <param name="ct">Cancellation token.</param>
     public async Task<AuditChainResult> WalkAsync(
         long startAfterId, byte[]? startingPrevHash,
         CancellationToken ct = default)

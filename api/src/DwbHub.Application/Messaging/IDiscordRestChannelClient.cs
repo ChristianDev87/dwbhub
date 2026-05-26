@@ -87,9 +87,20 @@ public interface IDiscordRestChannelClient
 }
 
 /// <summary>Discord channel metadata returned from the channel-list sync.</summary>
+/// <param name="Id">Discord snowflake ID of the channel.</param>
+/// <param name="Name">Display name of the channel.</param>
+/// <param name="Type">Discord channel type integer (0 = text, 2 = voice, etc.).</param>
+/// <param name="Position">Zero-based sort position within the guild channel list.</param>
 public sealed record DiscordChannelInfo(ulong Id, string Name, short Type, int Position);
 
 /// <summary>Discord message metadata for backfill and history queries.</summary>
+/// <param name="Id">Discord snowflake ID of the message.</param>
+/// <param name="AuthorId">Discord snowflake ID of the message author.</param>
+/// <param name="AuthorName">Display name of the message author at send time.</param>
+/// <param name="AuthorIsWebhook">True when the message was posted by a webhook rather than a real user.</param>
+/// <param name="Content">Plain-text content of the message.</param>
+/// <param name="SentAt">UTC timestamp when the message was originally sent.</param>
+/// <param name="EditedAt">UTC timestamp of the most-recent edit, or <c>null</c> if never edited.</param>
 public sealed record DiscordMessageInfo(
     ulong Id,
     ulong AuthorId,
@@ -100,6 +111,8 @@ public sealed record DiscordMessageInfo(
     DateTimeOffset? EditedAt);
 
 /// <summary>Webhook id and plaintext token returned by Discord on webhook creation.</summary>
+/// <param name="WebhookId">Discord snowflake ID of the newly created webhook.</param>
+/// <param name="WebhookToken">Plaintext webhook token; must be encrypted before storage.</param>
 public sealed record DiscordWebhookCreated(ulong WebhookId, string WebhookToken);
 
 /// <summary>

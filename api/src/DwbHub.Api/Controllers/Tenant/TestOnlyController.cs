@@ -205,11 +205,13 @@ public sealed class TestOnlyController(
 
 // ── Request DTOs ──────────────────────────────────────────────────────────────
 
+/// <summary>Request body for the test-only message edit endpoint.</summary>
 public sealed record TestEditRequest
 {
     public string? Content { get; init; }
 }
 
+/// <summary>Request body for the test-only inject-received endpoint.</summary>
 public sealed record TestInjectReceivedRequest
 {
     public Guid ChannelPublicId { get; init; }

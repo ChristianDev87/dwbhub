@@ -50,6 +50,7 @@ public sealed class MessageService : IMessageService
 
     // ── Inbound ───────────────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task<Message?> PersistInboundAsync(MessageReceivedEvent evt, CancellationToken ct = default)
     {
         // 1. Resolve channel — skip if unknown or not bridged
@@ -125,6 +126,7 @@ public sealed class MessageService : IMessageService
 
     // ── Edit ──────────────────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task PersistEditAsync(MessageUpdatedEvent evt, CancellationToken ct = default)
     {
         var updated = await _messages.ApplyEditAsync(
@@ -149,6 +151,7 @@ public sealed class MessageService : IMessageService
 
     // ── Delete ────────────────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task MarkDeletedAsync(MessageDeletedEvent evt, CancellationToken ct = default)
     {
         var deleted = await _messages.MarkDeletedAsync(
@@ -172,6 +175,7 @@ public sealed class MessageService : IMessageService
 
     // ── Outbound ──────────────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task<Message> SendOutboundAsync(
         long tenantId,
         long channelId,
@@ -205,8 +209,7 @@ public sealed class MessageService : IMessageService
         catch (WebhookGoneException)
         {
             // Discord 404 — recreate webhook and retry once.
-            // Full recreation requires bot token (held by ChannelWebhookService in Task 10).
-            // For now we surface a clear exception so Task 10 can wrap this method.
+            // TODO: Recreate the webhook here via ChannelWebhookService once that dependency is injectable.
             _logger.LogWarning(
                 "Webhook {WebhookId} gone (404) for channel {ChannelId} tenant {TenantId}; recreation required",
                 webhookRow.DiscordWebhookId, channelId, tenantId);
@@ -221,6 +224,7 @@ public sealed class MessageService : IMessageService
 
     // ── History ───────────────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<Message>> ListHistoryAsync(
         long tenantId,
         long channelId,
