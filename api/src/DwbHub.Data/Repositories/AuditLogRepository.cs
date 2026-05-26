@@ -11,8 +11,19 @@ using Npgsql;
 // header + spec §3.2. Allowlisted in tools/check-tenant-filter.ps1 in Task 13.
 namespace DwbHub.Data.Repositories;
 
+/// <summary>
+/// Dapper-backed implementation of <see cref="IAuditLogRepository"/>.
+/// </summary>
 public sealed class AuditLogRepository(IDbConnectionFactory connectionFactory) : IAuditLogRepository
 {
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Acquires <c>pg_advisory_xact_lock(7341)</c> inside an explicit transaction
+    /// so concurrent inserts are serialised and the prev_hash always points to the
+    /// current chain tip. The stored hash is derived from the JSONB text as
+    /// persisted by PostgreSQL — not from the C#-serialised form — so chain
+    /// verification reproduces the same value when re-reading the column.
+    /// </remarks>
     public async Task<(long Id, byte[] CurrentHash)> InsertAsync(
         long? tenantId, long? actorUserId, string eventType,
         string payloadJson, byte[] payloadHash, DateTimeOffset occurredAt,
@@ -93,6 +104,7 @@ public sealed class AuditLogRepository(IDbConnectionFactory connectionFactory) :
         return row;
     }
 
+    /// <inheritdoc/>
     public async IAsyncEnumerable<AuditLogEntry> StreamAscAsync(
         long startAfterId, [EnumeratorCancellation] CancellationToken ct = default)
     {

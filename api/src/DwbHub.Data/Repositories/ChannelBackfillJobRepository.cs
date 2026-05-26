@@ -31,6 +31,7 @@ public sealed class ChannelBackfillJobRepository(IDbConnectionFactory connection
         created_at, updated_at
         """;
 
+    /// <inheritdoc/>
     public async Task<ChannelBackfillJob?> GetByChannelAsync(
         long tenantId,
         long channelId,
@@ -51,6 +52,7 @@ public sealed class ChannelBackfillJobRepository(IDbConnectionFactory connection
         return row is null ? null : MapRow(row);
     }
 
+    /// <inheritdoc/>
     public async Task<ChannelBackfillJob?> GetByIdAsync(
         long tenantId,
         long jobId,
@@ -71,6 +73,12 @@ public sealed class ChannelBackfillJobRepository(IDbConnectionFactory connection
         return row is null ? null : MapRow(row);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Uses UPSERT semantics (<c>ON CONFLICT (channel_id) DO UPDATE</c>) so
+    /// re-bridging a previously-backfilled channel resets the existing row to
+    /// Pending rather than failing with a unique-constraint violation.
+    /// </remarks>
     public async Task<ChannelBackfillJob> InsertPendingAsync(
         long tenantId,
         long channelId,
@@ -121,6 +129,7 @@ public sealed class ChannelBackfillJobRepository(IDbConnectionFactory connection
         return MapRow(row);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> SetHangfireJobIdAsync(
         long tenantId,
         long jobId,
@@ -143,6 +152,7 @@ public sealed class ChannelBackfillJobRepository(IDbConnectionFactory connection
         return affected > 0;
     }
 
+    /// <inheritdoc/>
     public async Task<bool> AdvanceCursorAsync(
         long tenantId,
         long jobId,
@@ -173,6 +183,11 @@ public sealed class ChannelBackfillJobRepository(IDbConnectionFactory connection
         return affected > 0;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Uses <c>COALESCE(started_at, now())</c> so that Hangfire retries
+    /// (status = 'running' or 'failed') preserve the original start timestamp.
+    /// </remarks>
     public async Task<bool> MarkRunningAsync(
         long tenantId,
         long jobId,
@@ -197,6 +212,7 @@ public sealed class ChannelBackfillJobRepository(IDbConnectionFactory connection
         return affected > 0;
     }
 
+    /// <inheritdoc/>
     public async Task<bool> MarkCompleteAsync(
         long tenantId,
         long jobId,
@@ -221,6 +237,7 @@ public sealed class ChannelBackfillJobRepository(IDbConnectionFactory connection
         return affected > 0;
     }
 
+    /// <inheritdoc/>
     public async Task<bool> MarkFailedAsync(
         long tenantId,
         long jobId,
@@ -245,6 +262,7 @@ public sealed class ChannelBackfillJobRepository(IDbConnectionFactory connection
         return affected > 0;
     }
 
+    /// <inheritdoc/>
     public async Task<bool> MarkCancelledAsync(
         long tenantId,
         long jobId,

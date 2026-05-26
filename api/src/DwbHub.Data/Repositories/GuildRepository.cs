@@ -4,8 +4,17 @@ using DwbHub.Core.Repositories;
 
 namespace DwbHub.Data.Repositories;
 
+/// <summary>
+/// Dapper-backed implementation of <see cref="IGuildRepository"/>.
+/// </summary>
 public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IGuildRepository
 {
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Uses <c>ON CONFLICT DO NOTHING</c> so PostgreSQL does not log a 23505 ERROR
+    /// for expected duplicate-guild attempts. A zero-row result is detected in C#
+    /// and re-raised as <see cref="GuildAlreadyExistsException"/>.
+    /// </remarks>
     public async Task<(long Id, Guid PublicId)> CreateAsync(
         long tenantId,
         string discordGuildId,
@@ -45,6 +54,7 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
         return row;
     }
 
+    /// <inheritdoc/>
     public async Task<Guild?> GetByPublicIdAsync(Guid publicId, long tenantId, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -62,6 +72,7 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<Guild>> ListByTenantAsync(long tenantId, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -79,6 +90,7 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
         return rows.AsList();
     }
 
+    /// <inheritdoc/>
     public async Task<bool> DeleteAsync(Guid publicId, long tenantId, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -94,6 +106,12 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
         return affected > 0;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Uses a single combined CTE that selects tenant and guild in one round-trip.
+    /// Npgsql returns <c>DateTime</c> (UTC) for TIMESTAMPTZ on dynamic rows, so
+    /// <see cref="ToDateTimeOffset"/> normalises the value before constructing the records.
+    /// </remarks>
     public async Task<(Tenant? Tenant, Guild? Guild)> ResolveTenantAndGuildAsync(
         string slug, Guid guildPublicId, CancellationToken ct = default)
     {
@@ -161,6 +179,7 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
         return (tenant, guild);
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<GuildListItem>> ListByTenantWithStatusAsync(
         long tenantId, CancellationToken ct = default)
     {
@@ -205,6 +224,7 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
 
     // ── Plan 0.8 Task 5 implementations ──
 
+    /// <inheritdoc/>
     public async Task<Guild?> GetByIdAsync(long guildId, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -223,6 +243,7 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<GuildIdTenantPair>> ListActiveWithCredentialsAsync(CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -239,6 +260,7 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
         return rows.AsList();
     }
 
+    /// <inheritdoc/>
     public async Task<bool> SetActiveAsync(long guildId, long tenantId, bool isActive, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -258,6 +280,7 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
         return affected > 0;
     }
 
+    /// <inheritdoc/>
     public async Task UpdateLastConnectedAtAsync(long guildId, DateTimeOffset timestamp, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);

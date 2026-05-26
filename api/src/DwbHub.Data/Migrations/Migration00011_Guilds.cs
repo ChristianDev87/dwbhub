@@ -2,6 +2,10 @@ using FluentMigrator;
 
 namespace DwbHub.Data.Migrations;
 
+/// <summary>
+/// Creates the <c>guilds</c> table enabling multi-guild
+/// support with per-tenant Discord guild registration.
+/// </summary>
 [Migration(11, "Create guilds table (multi-guild schema, Plan 0.6)")]
 public sealed class Migration00011_Guilds : ForwardOnlyMigration
 {

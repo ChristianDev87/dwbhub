@@ -4,8 +4,12 @@ using DwbHub.Core.Repositories;
 
 namespace DwbHub.Data.Repositories;
 
+/// <summary>
+/// Dapper-backed implementation of <see cref="ITenantRepository"/>.
+/// </summary>
 public sealed class TenantRepository(IDbConnectionFactory connectionFactory) : ITenantRepository
 {
+    /// <inheritdoc/>
     public async Task<Tenant?> GetByIdAsync(long id, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -19,6 +23,7 @@ public sealed class TenantRepository(IDbConnectionFactory connectionFactory) : I
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<Tenant?> GetBySlugAsync(string slug, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -32,6 +37,7 @@ public sealed class TenantRepository(IDbConnectionFactory connectionFactory) : I
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<long> CreateAsync(string name, string slug, string locale = "de", CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -45,6 +51,7 @@ public sealed class TenantRepository(IDbConnectionFactory connectionFactory) : I
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<Tenant>> ListAsync(CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);

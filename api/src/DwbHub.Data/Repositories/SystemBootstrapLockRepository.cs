@@ -7,8 +7,12 @@ using DwbHub.Core.Repositories;
 // table, not per-tenant. Lookups by id or token_hash are exhaustive on their own.
 namespace DwbHub.Data.Repositories;
 
+/// <summary>
+/// Dapper-backed implementation of <see cref="ISystemBootstrapLockRepository"/>.
+/// </summary>
 public sealed class SystemBootstrapLockRepository(IDbConnectionFactory connectionFactory) : ISystemBootstrapLockRepository
 {
+    /// <inheritdoc/>
     public async Task<SystemBootstrapLock?> LoadAsync(CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -23,6 +27,7 @@ public sealed class SystemBootstrapLockRepository(IDbConnectionFactory connectio
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task InsertAsync(byte[] tokenHash, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -35,6 +40,7 @@ public sealed class SystemBootstrapLockRepository(IDbConnectionFactory connectio
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> TryConsumeAsync(byte[] tokenHash, long consumedByUserId, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);

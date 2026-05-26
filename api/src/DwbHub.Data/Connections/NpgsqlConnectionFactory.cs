@@ -10,6 +10,7 @@ namespace DwbHub.Data.Connections;
 /// </summary>
 public sealed class NpgsqlConnectionFactory(NpgsqlDataSource dataSource) : IDbConnectionFactory
 {
+    /// <inheritdoc/>
     public async Task<IDbConnection> OpenAsync(CancellationToken ct = default)
     {
         return await dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);

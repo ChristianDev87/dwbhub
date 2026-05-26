@@ -13,8 +13,14 @@ using DwbHub.Core.Repositories;
 // adds value here.
 namespace DwbHub.Data.Repositories;
 
+/// <summary>
+/// Dapper-backed implementation of <see cref="IAuthTokenRepository"/>.
+/// Each operation executes a single multi-CTE statement so validation and
+/// mutation are atomic with no TOCTOU window.
+/// </summary>
 public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) : IAuthTokenRepository
 {
+    /// <inheritdoc/>
     public async Task<VerifyResendResult> IssueEmailVerifyTokenAsync(
         long tenantId, string email, byte[] tokenHash, DateTimeOffset expiresAt,
         IPAddress? ip, string? userAgent,
@@ -69,6 +75,7 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<VerifyConfirmResult> ConfirmEmailVerifyAsync(
         byte[] tokenHash,
         CancellationToken ct = default)
@@ -105,6 +112,7 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<ResetRequestResult> IssuePasswordResetTokenAsync(
         long tenantId, string email, byte[] tokenHash, DateTimeOffset expiresAt,
         IPAddress? ip, string? userAgent,
@@ -149,6 +157,7 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<ResetConfirmResult> ConfirmPasswordResetAsync(
         byte[] tokenHash, string newPasswordHash,
         CancellationToken ct = default)
