@@ -70,6 +70,8 @@ public sealed class BotConnectionManagerMessageEventsTests
         public Task<(Tenant? Tenant, Guild? Guild)> ResolveTenantAndGuildAsync(
             string slug, Guid guildPublicId, CancellationToken ct = default)
             => throw new NotSupportedException();
+        public Task UpdateBotPermissionsAsync(long gid, long tid, bool canManageMessages, CancellationToken ct = default)
+            => throw new NotSupportedException();
     }
 
     private sealed class StubCredRepo(long guildId) : IGuildBotCredentialRepository
@@ -106,6 +108,8 @@ public sealed class BotConnectionManagerMessageEventsTests
         public Task<long> CreateAsync(string name, string slug, string locale = "de", CancellationToken ct = default)
             => throw new NotSupportedException();
         public Task<IReadOnlyList<Tenant>> ListAsync(CancellationToken ct = default)
+            => throw new NotSupportedException();
+        public Task UpdateMessageEditWindowAsync(long tenantId, int? windowSeconds, CancellationToken ct = default)
             => throw new NotSupportedException();
     }
 

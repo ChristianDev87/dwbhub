@@ -56,7 +56,7 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
         const string sql = """
             SELECT id, public_id, tenant_id, discord_guild_id, display_name,
                    is_active, registered_by_user_id, registered_at, last_connected_at,
-                   created_at, updated_at
+                   created_at, updated_at, bot_can_manage_messages
             FROM guilds
             WHERE public_id = @PublicId AND tenant_id = @TenantId;
             """;
@@ -74,7 +74,7 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
         const string sql = """
             SELECT id, public_id, tenant_id, discord_guild_id, display_name,
                    is_active, registered_by_user_id, registered_at, last_connected_at,
-                   created_at, updated_at
+                   created_at, updated_at, bot_can_manage_messages
             FROM guilds
             WHERE tenant_id = @TenantId
             ORDER BY display_name ASC, id ASC;
@@ -113,13 +113,15 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
         const string sql = """
             WITH t AS (
-                SELECT id, name, slug, locale, created_at, updated_at
+                SELECT id, name, slug, locale, created_at, updated_at,
+                       message_edit_window_seconds
                 FROM tenants WHERE slug = @Slug::citext
             ),
             g AS (
                 SELECT id, public_id, tenant_id, discord_guild_id, display_name,
                        is_active, registered_by_user_id, registered_at,
-                       last_connected_at, created_at, updated_at
+                       last_connected_at, created_at, updated_at,
+                       bot_can_manage_messages
                 FROM guilds
                 WHERE tenant_id = (SELECT id FROM t)
                   AND public_id = @PublicId
@@ -131,6 +133,7 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
                 (SELECT locale FROM t)     AS tenant_locale,
                 (SELECT created_at FROM t) AS tenant_created_at,
                 (SELECT updated_at FROM t) AS tenant_updated_at,
+                (SELECT message_edit_window_seconds FROM t) AS tenant_message_edit_window_seconds,
                 (SELECT id FROM g)                 AS guild_id,
                 (SELECT public_id FROM g)          AS guild_public_id,
                 (SELECT tenant_id FROM g)          AS guild_tenant_id,
@@ -141,7 +144,8 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
                 (SELECT registered_at FROM g)      AS guild_registered_at,
                 (SELECT last_connected_at FROM g)  AS guild_last_connected_at,
                 (SELECT created_at FROM g)         AS guild_created_at,
-                (SELECT updated_at FROM g)         AS guild_updated_at;
+                (SELECT updated_at FROM g)         AS guild_updated_at,
+                (SELECT bot_can_manage_messages FROM g) AS guild_bot_can_manage_messages;
             """;
 
         var row = (IDictionary<string, object?>)await conn.QuerySingleAsync<dynamic>(
@@ -156,7 +160,8 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
             Slug: (string)row["tenant_slug"]!,
             Locale: (string)row["tenant_locale"]!,
             CreatedAt: ToDateTimeOffset(row["tenant_created_at"]!),
-            UpdatedAt: ToDateTimeOffset(row["tenant_updated_at"]!));
+            UpdatedAt: ToDateTimeOffset(row["tenant_updated_at"]!),
+            MessageEditWindowSeconds: row["tenant_message_edit_window_seconds"] is null ? null : (int?)Convert.ToInt32(row["tenant_message_edit_window_seconds"]!));
 
         Guild? guild = row["guild_id"] is null ? null : new Guild(
             Id: (long)row["guild_id"]!,
@@ -169,7 +174,8 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
             RegisteredAt: ToDateTimeOffset(row["guild_registered_at"]!),
             LastConnectedAt: row["guild_last_connected_at"] is null ? null : ToDateTimeOffset(row["guild_last_connected_at"]!),
             CreatedAt: ToDateTimeOffset(row["guild_created_at"]!),
-            UpdatedAt: ToDateTimeOffset(row["guild_updated_at"]!));
+            UpdatedAt: ToDateTimeOffset(row["guild_updated_at"]!),
+            BotCanManageMessages: row["guild_bot_can_manage_messages"] is null ? null : (bool?)row["guild_bot_can_manage_messages"]);
 
         return (tenant, guild);
     }
@@ -183,6 +189,7 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
             SELECT g.id, g.public_id, g.tenant_id, g.discord_guild_id, g.display_name,
                    g.is_active, g.registered_by_user_id, g.registered_at,
                    g.last_connected_at, g.created_at, g.updated_at,
+                   g.bot_can_manage_messages,
                    (bc.id IS NOT NULL) AS bot_credentials_configured
             FROM guilds g
             LEFT JOIN guild_bot_credentials bc ON bc.guild_id = g.id
@@ -210,7 +217,8 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
                     ? null
                     : ToDateTimeOffset(row["last_connected_at"]!),
                 CreatedAt: ToDateTimeOffset(row["created_at"]!),
-                UpdatedAt: ToDateTimeOffset(row["updated_at"]!));
+                UpdatedAt: ToDateTimeOffset(row["updated_at"]!),
+                BotCanManageMessages: row["bot_can_manage_messages"] is null ? null : (bool?)row["bot_can_manage_messages"]);
             var configured = (bool)row["bot_credentials_configured"]!;
             result.Add(new GuildListItem(guild, configured));
         }
@@ -225,7 +233,8 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
             -- DWBHUB-NO-TENANT-FILTER: BotConnectionManager already validated tenant in caller scope;
             -- this lookup is keyed by internal guild_id PK only.
             SELECT id, public_id, tenant_id, discord_guild_id, display_name, is_active,
-                   registered_by_user_id, registered_at, last_connected_at, created_at, updated_at
+                   registered_by_user_id, registered_at, last_connected_at, created_at, updated_at,
+                   bot_can_manage_messages
             FROM guilds
             WHERE id = @GuildId;
             """;
@@ -290,6 +299,21 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
                 new { GuildId = guildId, Timestamp = timestamp },
                 cancellationToken: ct))
             .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task UpdateBotPermissionsAsync(long guildId, long tenantId, bool canManageMessages, CancellationToken ct = default)
+    {
+        const string sql = """
+            UPDATE guilds
+               SET bot_can_manage_messages = @canManageMessages,
+                   updated_at = NOW()
+             WHERE id = @guildId
+               AND tenant_id = @tenantId;
+            """;
+        using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
+        await conn.ExecuteAsync(new CommandDefinition(sql,
+            new { guildId, tenantId, canManageMessages }, cancellationToken: ct)).ConfigureAwait(false);
     }
 
     /// <summary>

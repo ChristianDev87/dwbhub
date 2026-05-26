@@ -14,7 +14,8 @@ public sealed class TenantRepository(IDbConnectionFactory connectionFactory) : I
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
         const string sql = """
-            SELECT id, name, slug, locale, created_at, updated_at
+            SELECT id, name, slug, locale, created_at, updated_at,
+                   message_edit_window_seconds
             FROM tenants
             WHERE id = @Id;
             """;
@@ -28,7 +29,8 @@ public sealed class TenantRepository(IDbConnectionFactory connectionFactory) : I
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
         const string sql = """
-            SELECT id, name, slug, locale, created_at, updated_at
+            SELECT id, name, slug, locale, created_at, updated_at,
+                   message_edit_window_seconds
             FROM tenants
             WHERE slug = @Slug::citext;
             """;
@@ -56,7 +58,8 @@ public sealed class TenantRepository(IDbConnectionFactory connectionFactory) : I
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
         const string sql = """
-            SELECT id, name, slug, locale, created_at, updated_at
+            SELECT id, name, slug, locale, created_at, updated_at,
+                   message_edit_window_seconds
             FROM tenants
             ORDER BY created_at ASC, id ASC;
             """;
@@ -64,5 +67,19 @@ public sealed class TenantRepository(IDbConnectionFactory connectionFactory) : I
             new CommandDefinition(sql, cancellationToken: ct))
             .ConfigureAwait(false);
         return rows.AsList();
+    }
+
+    /// <inheritdoc/>
+    public async Task UpdateMessageEditWindowAsync(long tenantId, int? windowSeconds, CancellationToken ct = default)
+    {
+        const string sql = """
+            UPDATE tenants
+               SET message_edit_window_seconds = @windowSeconds,
+                   updated_at = NOW()
+             WHERE id = @tenantId;
+            """;
+        using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
+        await conn.ExecuteAsync(new CommandDefinition(sql,
+            new { tenantId, windowSeconds }, cancellationToken: ct)).ConfigureAwait(false);
     }
 }

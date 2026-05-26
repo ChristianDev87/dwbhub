@@ -15,10 +15,15 @@ namespace DwbHub.Core.Entities;
 /// <param name="Locale">BCP 47 language tag for default email locale (e.g. <c>"de"</c>, <c>"en"</c>).</param>
 /// <param name="CreatedAt">Row creation timestamp (TIMESTAMPTZ).</param>
 /// <param name="UpdatedAt">Last modification timestamp (TIMESTAMPTZ).</param>
+/// <param name="MessageEditWindowSeconds">
+/// Per-tenant edit window in seconds. <c>null</c> means unlimited (no time-gate on edits).
+/// Maps to <c>tenants.message_edit_window_seconds</c>.
+/// </param>
 public sealed record Tenant(
     long Id,
     string Name,
     string Slug,
     string Locale,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    int? MessageEditWindowSeconds = null);

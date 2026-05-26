@@ -82,4 +82,10 @@ public interface IGuildRepository
     /// successful state-transition to Connected. Fire-and-forget OK.
     /// </summary>
     Task UpdateLastConnectedAtAsync(long guildId, DateTimeOffset timestamp, CancellationToken ct = default);
+
+    /// <summary>
+    /// Persist the result of a Discord GET /guilds/{id}/members/@me permission check.
+    /// Tenant-scoped to prevent cross-tenant updates.
+    /// </summary>
+    Task UpdateBotPermissionsAsync(long guildId, long tenantId, bool canManageMessages, CancellationToken ct = default);
 }

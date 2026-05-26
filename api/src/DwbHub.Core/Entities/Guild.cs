@@ -17,6 +17,11 @@ namespace DwbHub.Core.Entities;
 /// <param name="LastConnectedAt">Timestamp of the most recent successful bot gateway connection, or null.</param>
 /// <param name="CreatedAt">Row creation timestamp (TIMESTAMPTZ).</param>
 /// <param name="UpdatedAt">Last modification timestamp (TIMESTAMPTZ).</param>
+/// <param name="BotCanManageMessages">
+/// Cached result of the Discord GET /guilds/{id}/members/@me permission check.
+/// <c>null</c> means the check has not been performed yet (treated as lacking the permission).
+/// Maps to <c>guilds.bot_can_manage_messages</c>.
+/// </param>
 public sealed record Guild(
     long Id,
     Guid PublicId,
@@ -28,4 +33,5 @@ public sealed record Guild(
     DateTimeOffset RegisteredAt,
     DateTimeOffset? LastConnectedAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    bool? BotCanManageMessages = null);
