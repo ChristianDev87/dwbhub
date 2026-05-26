@@ -179,6 +179,23 @@
       "discordUpstream": "Discord is not reachable"
     }
   },
+  "settings": {
+    "title": "Tenant Settings",
+    "accessDenied": "Access denied — Owner role required.",
+    "saved": "Settings saved",
+    "messageEditWindow": {
+      "label": "Edit window for own messages",
+      "description": "How long users can edit their own messages after sending.",
+      "unlimited": "Unlimited",
+      "fifteenMin": "15 minutes",
+      "oneHour": "1 hour",
+      "twentyFourHours": "24 hours",
+      "custom": "Custom (minutes)",
+      "customLabel": "Minutes (1–525600)",
+      "customRangeError": "Please enter a value between 1 and 525600 minutes.",
+      "save": "Save"
+    }
+  },
   "botCredentials": {
     "configured": "Bot token configured",
     "notConfigured": "Bot token not configured",

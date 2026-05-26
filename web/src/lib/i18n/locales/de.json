@@ -179,6 +179,23 @@
       "discordUpstream": "Discord nicht erreichbar"
     }
   },
+  "settings": {
+    "title": "Tenant-Einstellungen",
+    "accessDenied": "Zugriff verweigert — Owner-Rolle erforderlich.",
+    "saved": "Einstellungen gespeichert",
+    "messageEditWindow": {
+      "label": "Edit-Fenster für eigene Nachrichten",
+      "description": "Wie lange Nutzer ihre eigenen Nachrichten nachträglich bearbeiten können.",
+      "unlimited": "Unbegrenzt",
+      "fifteenMin": "15 Minuten",
+      "oneHour": "1 Stunde",
+      "twentyFourHours": "24 Stunden",
+      "custom": "Custom (Minuten)",
+      "customLabel": "Minuten (1–525600)",
+      "customRangeError": "Bitte einen Wert zwischen 1 und 525600 Minuten eingeben.",
+      "save": "Speichern"
+    }
+  },
   "botCredentials": {
     "configured": "Bot-Token konfiguriert",
     "notConfigured": "Bot-Token nicht konfiguriert",
