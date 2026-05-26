@@ -170,7 +170,24 @@ builder.Services.AddScoped<DwbHub.Core.Repositories.IGuildBotCredentialRepositor
                            DwbHub.Data.Repositories.GuildBotCredentialRepository>();
 
 // --- BotConnectionManager ----------------------------------------------
-builder.Services.AddSingleton<IBotConnectionFactory, DiscordNetBotConnectionFactory>();
+// In e2e (DWBHUB_DISCORD_TEST_MODE=fake-rest) we also swap the bot-connection
+// factory. The real Discord.NET factory would auto-reconnect against the
+// gateway forever when given a fake-shape token, which used to flood the API
+// log with "401 Unauthorized" (one per retry, ~95 in 4 minutes per guild).
+// The fake factory hands out an in-process stub that transitions through the
+// state machine without touching Discord. Both fakes are guarded inside
+// their ctors against ASPNETCORE_ENVIRONMENT=Production.
+if (Environment.GetEnvironmentVariable("DWBHUB_DISCORD_TEST_MODE") == "fake-rest")
+{
+    if (builder.Environment.IsProduction())
+        throw new InvalidOperationException(
+            "DWBHUB_DISCORD_TEST_MODE=fake-rest is forbidden when ASPNETCORE_ENVIRONMENT=Production");
+    builder.Services.AddSingleton<IBotConnectionFactory, DwbHub.Infrastructure.Bot.FakeBotConnectionFactory>();
+}
+else
+{
+    builder.Services.AddSingleton<IBotConnectionFactory, DiscordNetBotConnectionFactory>();
+}
 builder.Services.AddSingleton<BotConnectionManager>();
 builder.Services.AddHostedService(sp =>
     sp.GetRequiredService<BotConnectionManager>());
