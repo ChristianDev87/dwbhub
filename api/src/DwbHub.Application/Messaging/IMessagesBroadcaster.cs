@@ -39,4 +39,5 @@ public sealed record MessageBroadcastDto(
     string Content,
     DateTimeOffset SentAt,
     bool ViaDwbhub,
-    long DiscordMessageId);
+    long DiscordMessageId,
+    long? DwbhubUserId = null);

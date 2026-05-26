@@ -130,7 +130,8 @@ public sealed class MessageService : IMessageService
                 Content: inserted.Content,
                 SentAt: inserted.SentAt,
                 ViaDwbhub: inserted.ViaDwbhub,
-                DiscordMessageId: inserted.DiscordMessageId),
+                DiscordMessageId: inserted.DiscordMessageId,
+                DwbhubUserId: inserted.DwbhubUserId),
             channel.PublicId, ct).ConfigureAwait(false);
 
         return inserted;
@@ -508,7 +509,8 @@ public sealed class MessageService : IMessageService
                 Content: inserted.Content,
                 SentAt: inserted.SentAt,
                 ViaDwbhub: inserted.ViaDwbhub,
-                DiscordMessageId: inserted.DiscordMessageId),
+                DiscordMessageId: inserted.DiscordMessageId,
+                DwbhubUserId: inserted.DwbhubUserId),
             channel.PublicId, ct).ConfigureAwait(false);
 
         return inserted;
