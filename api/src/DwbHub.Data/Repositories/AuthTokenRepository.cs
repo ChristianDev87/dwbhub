@@ -27,8 +27,7 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
         CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
-        // SINGLE-CTE: lookup + rate-check + invalidate-old + insert in one round-trip.
-        // Verbatim per spec §2.3 — do not abbreviate or reformat.
+        // This CTE is byte-for-byte canonical — the verification path depends on the exact formatting.
         const string sql = """
             WITH user_lookup AS (
                 SELECT id, tenant_id, email, email_verified_at
@@ -163,7 +162,6 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
         CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
-        // SINGLE-CTE: 4 mutations in one round-trip (users + auth_tokens + refresh_tokens).
         const string sql = """
             WITH token_lookup AS (
                 SELECT id, user_id, tenant_id, expires_at, consumed_at

@@ -8,7 +8,7 @@ using DwbHub.Data.Connections;
 using Npgsql;
 
 // DWBHUB-NO-TENANT-FILTER: audit_log spans tenants by design — see migration 008
-// header + spec §3.2. Allowlisted in tools/check-tenant-filter.ps1 in Task 13.
+// header + spec §3.2. Allowlisted in tools/check-tenant-filter.ps1.
 namespace DwbHub.Data.Repositories;
 
 /// <summary>

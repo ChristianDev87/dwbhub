@@ -14,7 +14,6 @@ namespace DwbHub.Data.Repositories;
 public sealed class ChannelBackfillJobRepository(IDbConnectionFactory connectionFactory)
     : IChannelBackfillJobRepository
 {
-    // Maps the TEXT column back to the BackfillStatus enum.
     private static BackfillStatus ParseStatus(string s) => s switch
     {
         "pending" => BackfillStatus.Pending,
@@ -84,24 +83,9 @@ public sealed class ChannelBackfillJobRepository(IDbConnectionFactory connection
         long channelId,
         CancellationToken ct = default)
     {
-        // UPSERT semantics: `channel_backfill_jobs` has UNIQUE(channel_id), so a
-        // channel that was previously bridged + unbridged still has a backfill
-        // row (status=cancelled or complete). When the user re-bridges, we
-        // RESET the existing row to pending state instead of inserting (which
-        // would fail with a unique-constraint violation).
-        //
-        // All progress fields are cleared so the new backfill run starts fresh:
-        //   - fetched_count → 0
-        //   - oldest_fetched_snowflake → NULL (full re-scan from newest)
-        //   - started_at / completed_at → NULL
-        //   - last_error → NULL
-        //   - hangfire_job_id → NULL (Bridge action stamps the new one)
-        //
-        // Tenant guard: include tenant_id in the conflict's DO UPDATE WHERE so a
-        // cross-tenant collision (defense-in-depth) cannot overwrite another
-        // tenant's row. UNIQUE is on channel_id alone, but channel_id implies
-        // tenant_id via the foreign key — this WHERE is a belt-and-suspenders
-        // assertion that surfaces as a no-RETURNING failure if ever tripped.
+        // UPSERT semantics: re-bridging a channel resets the existing row to Pending.
+        // Cross-tenant collision guard: WHERE tenant_id = @TenantId in the DO UPDATE
+        // prevents a channel_id shared across tenants from overwriting another tenant's row.
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
         const string sql = $"""
             WITH upsert AS (
@@ -194,7 +178,6 @@ public sealed class ChannelBackfillJobRepository(IDbConnectionFactory connection
         CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
-        // COALESCE keeps the original started_at on Hangfire retries (status = 'running' / 'failed').
         const string sql = """
             UPDATE channel_backfill_jobs
                SET status     = 'running',

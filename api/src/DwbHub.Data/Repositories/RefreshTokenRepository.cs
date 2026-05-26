@@ -59,8 +59,7 @@ public sealed class RefreshTokenRepository(IDbConnectionFactory connectionFactor
         CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
-        // SINGLE-CTE rotation: lookup + validate + insert-new + revoke-old in one
-        // round-trip. Verbatim per spec §2.3 — do not abbreviate or reformat.
+        // This CTE is byte-for-byte canonical — the verification path depends on the exact formatting.
         const string sql = """
             WITH old_token AS (
                 SELECT rt.id AS rt_id, rt.revoked_at, rt.expires_at,

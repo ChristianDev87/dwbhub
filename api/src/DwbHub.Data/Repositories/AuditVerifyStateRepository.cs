@@ -4,7 +4,7 @@ using DwbHub.Core.Entities;
 using DwbHub.Core.Repositories;
 
 // DWBHUB-NO-TENANT-FILTER: singleton state row; allowlisted in
-// tools/check-tenant-filter.ps1 in Task 13.
+// tools/check-tenant-filter.ps1.
 namespace DwbHub.Data.Repositories;
 
 /// <summary>

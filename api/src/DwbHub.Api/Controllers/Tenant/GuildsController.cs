@@ -76,12 +76,7 @@ public sealed class GuildsController(
         }
         catch (GuildAlreadyExistsException)
         {
-            // Repository raises this application-level exception instead of
-            // letting Npgsql's PostgresException (SqlState 23505) bubble up —
-            // see GuildRepository.CreateAsync for the ON CONFLICT DO NOTHING
-            // pattern that keeps postgres logs clean of the constraint
-            // violation (Plan 1.0 Fix C: server-side error scanner was being
-            // drowned by ~25 expected re-add attempts per e2e suite).
+            // GuildRepository raises GuildAlreadyExistsException via ON CONFLICT DO NOTHING to avoid 23505 postgres log noise.
             return Conflict(new { error = "guild_already_registered" });
         }
     }

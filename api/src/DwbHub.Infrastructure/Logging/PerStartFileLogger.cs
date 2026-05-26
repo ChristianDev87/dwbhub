@@ -28,8 +28,7 @@ public static class PerStartFileLogger
 
         // File.Create overwrites silently on collision. Two callers in the same UTC second
         // would share one empty log file, which interleaves their entries but does not lose
-        // data. Acceptable for now — see Plan 0.6 if multi-process operator scenarios become
-        // real.
+        // data. Acceptable for single-process deployments.
         // Touch the file so callers can rely on its existence.
         using (File.Create(filePath))
         {

@@ -44,7 +44,7 @@ public sealed class RefreshTokenService(
 
         var result = await refreshTokens.RotateAsync(oldHash, newHash, newExpiresAt, ip, userAgent, ct).ConfigureAwait(false);
 
-        // Diagnostic-flag decision tree mirrors spec §2.3 last paragraph.
+        // Build the diagnostic outcome from the individual flags.
         if (!result.TokenFound)
         {
             return new RefreshOutcome.Invalid();

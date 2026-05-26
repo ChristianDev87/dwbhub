@@ -83,9 +83,7 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
         }
         catch (Discord.Net.HttpException ex) when (ex.HttpCode == System.Net.HttpStatusCode.Unauthorized)
         {
-            // Defensive: Discord.NET 3.16 does not actually throw here for invalid tokens —
-            // the primary invalid-token path is the async 4004 close handled in OnDisconnectedAsync.
-            // Kept in case a future Discord.NET version resumes synchronous 401 behaviour.
+            // Discord.NET 3.16: invalid tokens surface as 4004 close in OnDisconnectedAsync, not here. Kept for future compat.
             _logger.LogWarning("Discord rejected bot token (401 Unauthorized) for guild {GuildId} — token must be rotated", _guildId);
             TransitionTo(BotConnectionState.TokenInvalid, errorClass: "token_invalid");
             throw;

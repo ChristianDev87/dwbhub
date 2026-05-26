@@ -209,8 +209,7 @@ public sealed class MessageService : IMessageService
         catch (WebhookGoneException)
         {
             // Discord 404 — recreate webhook and retry once.
-            // Full recreation requires bot token (held by ChannelWebhookService in Task 10).
-            // For now we surface a clear exception so Task 10 can wrap this method.
+            // TODO: Recreate the webhook here via ChannelWebhookService once that dependency is injectable.
             _logger.LogWarning(
                 "Webhook {WebhookId} gone (404) for channel {ChannelId} tenant {TenantId}; recreation required",
                 webhookRow.DiscordWebhookId, channelId, tenantId);

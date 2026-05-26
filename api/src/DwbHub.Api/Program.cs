@@ -49,7 +49,7 @@ if (enableSwagger)
     });
 }
 
-// --- Database wiring (Plan 0.2) ----------------------------------------
+// --- Database wiring ---------------------------------------------------
 var connectionString = Environment.GetEnvironmentVariable("DWBHUB_DB_CONNECTION")
     ?? throw new InvalidOperationException(
         "DWBHUB_DB_CONNECTION env var is required (set in compose/.env or your shell).");
@@ -73,7 +73,7 @@ builder.Services
         .ScanIn(typeof(Migration00001_Tenants).Assembly).For.EmbeddedResources())
     .AddLogging(lb => lb.AddFluentMigratorConsole());
 
-// --- Auth wiring (Plan 0.3a) -------------------------------------------
+// --- Auth wiring -------------------------------------------------------
 var jwtSecret = Environment.GetEnvironmentVariable("DWBHUB_JWT_SECRET")
     ?? throw new InvalidOperationException(
         "DWBHUB_JWT_SECRET env var is required (Base64-encoded 32+ bytes).");
@@ -87,14 +87,14 @@ builder.Services.AddScoped<DwbHub.Core.Repositories.ILoginAttemptRepository,
                            DwbHub.Data.Repositories.LoginAttemptRepository>();
 builder.Services.AddScoped<ILoginService, LoginService>();
 
-// --- Refresh tokens (Plan 0.3b) ----------------------------------------
+// --- Refresh tokens ----------------------------------------------------
 builder.Services.AddSingleton<ITokenHasher, TokenHasher>();
 builder.Services.AddSingleton<ITokenGenerator, TokenGenerator>();
 builder.Services.AddScoped<DwbHub.Core.Repositories.IRefreshTokenRepository,
                            DwbHub.Data.Repositories.RefreshTokenRepository>();
 builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 
-// --- Email + verify + reset (Plan 0.3c) --------------------------------
+// --- Email + verify + reset --------------------------------------------
 var smtpHost = Environment.GetEnvironmentVariable("DWBHUB_SMTP_HOST")
     ?? throw new InvalidOperationException("DWBHUB_SMTP_HOST env var is required.");
 var smtpPort = int.Parse(Environment.GetEnvironmentVariable("DWBHUB_SMTP_PORT")
@@ -132,7 +132,7 @@ builder.Services.AddScoped<IPasswordResetService>(sp =>
         publicBaseUrl,
         sp.GetRequiredService<DwbHub.Application.Audit.IAuditWriter>()));
 
-// --- Setup wizard (Plan 0.3d) ------------------------------------------
+// --- Setup wizard ------------------------------------------------------
 var bootstrapTokenFile = Environment.GetEnvironmentVariable("DWBHUB_BOOTSTRAP_TOKEN_FILE")
     ?? "/data/dwbhub/bootstrap-token.txt";
 
@@ -143,7 +143,7 @@ builder.Services.AddScoped<DwbHub.Core.Repositories.ISystemBootstrapLockReposito
 builder.Services.AddScoped<IBootstrapTokenProvisioner, BootstrapTokenProvisioner>();
 builder.Services.AddScoped<ISetupService, SetupService>();
 
-// --- Audit log + background jobs (Plan 0.4) -----------------------------
+// --- Audit log + background jobs ---------------------------------------
 builder.Services.AddScoped<DwbHub.Core.Repositories.IAuditLogRepository,
                            DwbHub.Data.Repositories.AuditLogRepository>();
 builder.Services.AddSingleton<DwbHub.Core.Repositories.IAuditVerifyStateRepository,
@@ -151,7 +151,7 @@ builder.Services.AddSingleton<DwbHub.Core.Repositories.IAuditVerifyStateReposito
 builder.Services.AddScoped<DwbHub.Application.Audit.IAuditWriter,
                            DwbHub.Application.Audit.AuditWriter>();
 
-// --- Tenant resolution (Plan 0.5 + 0.6) --------------------------------
+// --- Tenant resolution -------------------------------------------------
 builder.Services.AddScoped<DwbHub.Application.Tenancy.ITenantContext,
                            DwbHub.Infrastructure.Tenancy.TenantContext>();
 builder.Services.AddScoped<DwbHub.Application.Tenancy.IGuildContext,
@@ -159,7 +159,7 @@ builder.Services.AddScoped<DwbHub.Application.Tenancy.IGuildContext,
 builder.Services.AddScoped<DwbHub.Core.Repositories.IGuildRepository,
                            DwbHub.Data.Repositories.GuildRepository>();
 
-// --- Bot token encryption (Plan 0.7) ------------------------------------
+// --- Bot token encryption ----------------------------------------------
 var encryptionKey = Environment.GetEnvironmentVariable("DWBHUB_ENCRYPTION_KEY")
     ?? throw new InvalidOperationException(
         "DWBHUB_ENCRYPTION_KEY env var is required (Base64-encoded 32 bytes).");
@@ -169,9 +169,7 @@ builder.Services.AddSingleton<DwbHub.Application.Encryption.IBotTokenEncryptor>(
 builder.Services.AddScoped<DwbHub.Core.Repositories.IGuildBotCredentialRepository,
                            DwbHub.Data.Repositories.GuildBotCredentialRepository>();
 
-// --- BotConnectionManager (Plan 0.8) ------------------------------------
-// Bot connection management (Plan 0.8). The manager owns one IBotConnection per
-// active guild; the Discord.NET factory creates real Discord gateway clients.
+// --- BotConnectionManager ----------------------------------------------
 builder.Services.AddSingleton<IBotConnectionFactory, DiscordNetBotConnectionFactory>();
 builder.Services.AddSingleton<BotConnectionManager>();
 builder.Services.AddHostedService(sp =>
@@ -229,22 +227,19 @@ builder.Services
     });
 builder.Services.AddAuthorization();
 
-// --- SignalR (Plan 1.0 Task 8) ------------------------------------------
-// Hub at /api/hubs/messages pushes 6 event types to per-tenant groups.
+// --- SignalR hub -------------------------------------------------------
 builder.Services.AddSignalR(opts =>
 {
     opts.EnableDetailedErrors = builder.Environment.IsDevelopment();
     opts.MaximumReceiveMessageSize = 64 * 1024; // 64 KiB — defense in depth (hub has no client-callable methods)
 });
 
-// SignalR broadcaster: implements IMessagesBroadcaster so Application services
-// stay free of SignalR types. Registered as singleton to match IHubContext lifetime.
+// Singleton: matches IHubContext<T> lifetime.
 builder.Services.AddSingleton<DwbHub.Application.Messaging.IMessagesBroadcaster,
                               DwbHub.Api.Messaging.SignalRMessagesBroadcaster>();
 
-// --- Plan 1.0 Messaging services ----------------------------------------
-// IChannelWebhookCipher reuses DWBHUB_ENCRYPTION_KEY (same key already
-// required for IBotTokenEncryptor above — one master key, two ciphers).
+// --- Messaging services -------------------------------------------------
+// IChannelWebhookCipher reuses DWBHUB_ENCRYPTION_KEY — one master key, two ciphers.
 builder.Services.AddSingleton<DwbHub.Application.Messaging.IChannelWebhookCipher>(
     new DwbHub.Infrastructure.Messaging.AesGcmChannelWebhookCipher(encryptionKey));
 
@@ -312,7 +307,7 @@ builder.Services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.Authenticatio
 
 var app = builder.Build();
 
-// --- Apply DB migrations (Plan 0.2) ------------------------------------
+// --- Apply DB migrations -----------------------------------------------
 using (var scope = app.Services.CreateScope())
 {
     var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
@@ -320,10 +315,8 @@ using (var scope = app.Services.CreateScope())
     Log.Information("[Migrations] Applied up to current version (VersionInfo table)");
 }
 
-// --- Setup-wizard bootstrap (Plan 0.3d) ---------------------------------
-// Run the provisioner once at startup, after migrations have created the
-// system_bootstrap_lock table. Synchronous (we want startup to fail if the
-// DB is unreachable, not to silently skip).
+// --- Setup-wizard bootstrap ---------------------------------------------
+// Run after migrations (needs system_bootstrap_lock table). Synchronous — startup fails if DB is unreachable.
 using (var scope = app.Services.CreateScope())
 {
     var provisioner = scope.ServiceProvider.GetRequiredService<IBootstrapTokenProvisioner>();
@@ -339,18 +332,13 @@ if (enableSwagger)
 app.UseSerilogRequestLogging();
 app.UseAuthentication();
 
-// --- Tenant resolver middleware (Plan 0.5) ------------------------------
-// MUST come after UseAuthentication (so HttpContext.User has the JWT claims
-// and cross-tenant checks can read the 'tid' claim) and BEFORE
-// UseAuthorization so that unknown-tenant requests receive 404 rather than
-// 401 (authorization never runs for non-existent tenants).
-// For paths not matching /api/t/{slug}/... the middleware is a no-op
-// pass-through, so Hangfire and other routes are unaffected.
+// --- Tenant resolver middleware -----------------------------------------
+// After UseAuthentication (needs HttpContext.User/'tid' claim), before UseAuthorization — unknown tenants get 404 not 401 (authorization never runs for non-existent tenants).
 app.UseMiddleware<DwbHub.Infrastructure.Tenancy.TenantResolverMiddleware>();
 
 app.UseAuthorization();
 
-// --- Hangfire dashboard (Plan 0.4) --------------------------------------
+// --- Hangfire dashboard -------------------------------------------------
 // Mount AFTER UseAuthorization so httpContext.User is populated for our filter.
 app.UseHangfireDashboard("/api/admin/hangfire", new DashboardOptions
 {
@@ -378,7 +366,7 @@ Hangfire.RecurringJob.AddOrUpdate<DwbHub.Application.Background.IAuthTokenPruneJ
 
 app.MapControllers();
 
-// --- SignalR hub (Plan 1.0 Task 8) --------------------------------------
+// --- SignalR hub -------------------------------------------------------
 app.MapHub<DwbHub.Api.Hubs.MessagesHub>("/api/hubs/messages");
 
 Log.Information("DwbHub.Api starting. LogFile={LogFile}", logFilePath);
