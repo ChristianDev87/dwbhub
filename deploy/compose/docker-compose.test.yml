@@ -63,6 +63,13 @@ services:
       # the test container exits via `--rm` (Ryuk loses its parent). We disable
       # it; sibling cleanup happens when the test container's --rm fires.
       TESTCONTAINERS_RYUK_DISABLED: "true"
+      # `extra_hosts: host.docker.internal:host-gateway` installs both A and AAAA
+      # records for that name (Docker Desktop's host-gateway interface has a v6
+      # ULA in fd00::/8). .NET's address-selection occasionally picks the AAAA,
+      # but Testcontainers only NATs the random ephemeral Postgres port on IPv4,
+      # so the connection fails with `Failed to connect to [fdc4:.../...]:<port>`.
+      # Force the .NET socket layer to IPv4-only inside this container.
+      DOTNET_SYSTEM_NET_DISABLEIPV6: "1"
     networks: [test-net]
     command: ["backend"]
 
@@ -138,6 +145,9 @@ services:
     environment:
       TESTCONTAINERS_HOST_OVERRIDE: ${TESTCONTAINERS_HOST_OVERRIDE:-host.docker.internal}
       TESTCONTAINERS_RYUK_DISABLED: "true"
+      # See backend-tests for why we disable IPv6: host.docker.internal resolves
+      # dual-stack via extra_hosts, but Testcontainers only NATs IPv4.
+      DOTNET_SYSTEM_NET_DISABLEIPV6: "1"
       # verify-openapi.ps1 uses `$env:GITHUB_ACTIONS` to choose between "host-gateway"
       # (CI / DinD) and "localhost" (local dev) as the host for temp pg/mailpit containers.
       # Inside this test container, "localhost" won't reach Docker-published ports — we
