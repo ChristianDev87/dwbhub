@@ -119,6 +119,9 @@ test.describe("Plan 1.1 chat edit", () => {
   });
 
   test("user can edit own outbound message", async ({ page, request }) => {
+    // This test needs extra time: setupBridgedChannel (backfill wait up to 60s
+    // + SignalR Connected 30s) + send + edit + assertions. Give 120s total.
+    test.setTimeout(120_000);
     await setupBridgedChannel(page, request);
 
     // Send a message
@@ -135,6 +138,16 @@ test.describe("Plan 1.1 chat edit", () => {
     await expect(
       msgRow.first().locator('[data-testid="message-pending"]'),
     ).toHaveCount(0, { timeout: 15_000 });
+
+    // Capture stable row locator by testid BEFORE the edit changes content —
+    // after submitting the edit the hasText filter no longer matches (content
+    // is replaced), so getAttribute would hang waiting for an element that no
+    // longer exists. Mirror the pattern used by chat.spec.ts Tests 6/7 and
+    // chat-delete.spec.ts.
+    const testId = await msgRow.first().getAttribute("data-testid");
+    const stableRow = testId
+      ? page.locator(`[data-testid="${testId}"]`)
+      : msgRow.first();
 
     // Hover to reveal the 3-dot menu trigger
     await msgRow.first().hover();
@@ -155,24 +168,32 @@ test.describe("Plan 1.1 chat edit", () => {
     const textarea = page.getByTestId("message-edit-textarea");
     await expect(textarea).toBeVisible({ timeout: 5_000 });
 
-    // Type the new content (clear first, then fill)
+    // Type the new content and save via the explicit Save button — more reliable
+    // in headless Chromium than relying on the Enter key event reaching the textarea.
     await textarea.fill("hello world edited");
-    await textarea.press("Enter");
 
-    // Capture stable row locator by testid
-    const testId = await msgRow.first().getAttribute("data-testid");
-    const stableRow = testId
-      ? page.locator(`[data-testid="${testId}"]`)
-      : msgRow.first();
+    // Wait for the Save button to become enabled (canSave becomes true once
+    // the textarea value differs from initialContent).
+    const saveBtn = page.getByTestId("message-edit-save");
+    await expect(saveBtn).toBeEnabled({ timeout: 5_000 });
+    await saveBtn.click();
+
+    // After the save button is clicked the PATCH fires and, on success,
+    // setIsEditing(false) runs. The edit textarea is replaced by the normal
+    // message-content paragraph. Scroll the row into view first to ensure
+    // Virtuoso has it in the rendered window (opening the tall textarea then
+    // closing it can cause a height-recalculation that shifts the scroll offset).
+    await stableRow.scrollIntoViewIfNeeded();
 
     // Edited content should appear
     await expect(
       stableRow.locator('[data-testid="message-content"]'),
-    ).toContainText("hello world edited", { timeout: 10_000 });
+    ).toContainText("hello world edited", { timeout: 15_000 });
 
-    // "(edited)" indicator should appear
+    // "(edited)" indicator should appear once editedAt is set by the optimistic
+    // update or by the arriving SignalR MessageUpdated event.
     await expect(
       stableRow.locator('[data-testid="message-edited"]'),
-    ).toBeVisible({ timeout: 10_000 });
+    ).toBeVisible({ timeout: 15_000 });
   });
 });

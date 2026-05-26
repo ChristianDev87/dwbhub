@@ -119,6 +119,9 @@ test.describe("Plan 1.1 chat delete", () => {
   });
 
   test("user can delete own outbound message", async ({ page, request }) => {
+    // This test needs extra time: setupBridgedChannel (backfill wait up to 60s
+    // + SignalR Connected 30s) + send + delete + assertions. Give 120s total.
+    test.setTimeout(120_000);
     await setupBridgedChannel(page, request);
 
     // Send a message
