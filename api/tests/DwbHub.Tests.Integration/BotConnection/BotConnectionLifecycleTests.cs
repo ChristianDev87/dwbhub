@@ -12,6 +12,7 @@ using DwbHub.Infrastructure.Auth;
 using DwbHub.Infrastructure.Bot;
 using DwbHub.Tests.Integration.Bot;
 using DwbHub.Tests.Integration.Infrastructure;
+using DwbHub.Tests.Shared.Api;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -189,7 +190,7 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
             await SeedAsync("acme", isActive: false, hasCredentials: true);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerJwt);
 
-        var res = await _client.PostAsync($"/api/t/acme/guilds/{publicId:D}/activate", null);
+        var res = await _client.ActivateGuildAsync("acme", publicId);
         res.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         // Audit row must exist
@@ -214,7 +215,7 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
             await SeedAsync("acme", isActive: true, hasCredentials: false);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerJwt);
 
-        var res = await _client.PostAsync($"/api/t/acme/guilds/{publicId:D}/activate", null);
+        var res = await _client.ActivateGuildAsync("acme", publicId);
         res.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         // No audit event should have been written (idempotent no-op)
@@ -233,7 +234,7 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
             await SeedAsync("acme", isActive: true, hasCredentials: false);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerJwt);
 
-        var res = await _client.PostAsync($"/api/t/acme/guilds/{publicId:D}/deactivate", null);
+        var res = await _client.DeactivateGuildAsync("acme", publicId);
         res.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var (evtType, payloadJson) = await ReadLatestAuditEventAsync("guild.deactivated");
@@ -250,7 +251,7 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
             await SeedAsync("acme", isActive: true, hasCredentials: false);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", memberJwt);
 
-        var res = await _client.PostAsync($"/api/t/acme/guilds/{publicId:D}/deactivate", null);
+        var res = await _client.DeactivateGuildAsync("acme", publicId);
         res.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -261,7 +262,7 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
             await SeedAsync("acme", isActive: true, hasCredentials: true);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerJwt);
 
-        var res = await _client.PostAsync($"/api/t/acme/guilds/{publicId:D}/bot/reconnect", null);
+        var res = await _client.ReconnectBotAsync("acme", publicId);
         res.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var (evtType, payloadJson) = await ReadLatestAuditEventAsync("bot.manual_reconnect");
@@ -283,7 +284,7 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
             await SeedAsync("acme", isActive: false, hasCredentials: true);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerJwt);
 
-        var res = await _client.PostAsync($"/api/t/acme/guilds/{publicId:D}/bot/reconnect", null);
+        var res = await _client.ReconnectBotAsync("acme", publicId);
         res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
@@ -300,13 +301,13 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
         manager._now = () => t0;
 
         // First reconnect — should succeed.
-        var first = await _client.PostAsync($"/api/t/throttle1/guilds/{publicId:D}/bot/reconnect", null);
+        var first = await _client.ReconnectBotAsync("throttle1", publicId);
         first.StatusCode.Should().Be(HttpStatusCode.NoContent);
         var reconnectAuditCount = await CountAuditEventsAsync("bot.manual_reconnect");
         reconnectAuditCount.Should().Be(1);
 
         // Second reconnect immediately (clock still at t0) — should be throttled.
-        var second = await _client.PostAsync($"/api/t/throttle1/guilds/{publicId:D}/bot/reconnect", null);
+        var second = await _client.ReconnectBotAsync("throttle1", publicId);
         second.StatusCode.Should().Be((HttpStatusCode)429);
 
         // Retry-After header must be present and positive.
@@ -337,14 +338,14 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
         manager._now = () => t0;
 
         // First reconnect.
-        var first = await _client.PostAsync($"/api/t/throttle2/guilds/{publicId:D}/bot/reconnect", null);
+        var first = await _client.ReconnectBotAsync("throttle2", publicId);
         first.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         // Advance clock 61 seconds past the cool-down window.
         manager._now = () => t0.AddSeconds(61);
 
         // Second reconnect — cool-down expired, should succeed again.
-        var second = await _client.PostAsync($"/api/t/throttle2/guilds/{publicId:D}/bot/reconnect", null);
+        var second = await _client.ReconnectBotAsync("throttle2", publicId);
         second.StatusCode.Should().Be(HttpStatusCode.NoContent,
             "reconnect after 61 s should succeed since the 60 s cool-down has elapsed");
     }
