@@ -113,7 +113,7 @@ public sealed class MessageServiceTests
             It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         broadcaster.Setup(b => b.MessageDeletedAsync(
-            It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            It.IsAny<MessageDeletedEvent>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var svc = new MessageService(
@@ -324,7 +324,9 @@ public sealed class MessageServiceTests
         audit.Verify(a => a.RecordAsync(
             It.Is<AuditEvent>(e => e.EventType == AuditEventTypes.MessageDeleted),
             It.IsAny<CancellationToken>()), Times.Once);
-        broadcaster.Verify(b => b.MessageDeletedAsync(1L, 12345L, It.IsAny<CancellationToken>()), Times.Once);
+        broadcaster.Verify(b => b.MessageDeletedAsync(
+            It.Is<MessageDeletedEvent>(e => e.TenantId == 1L && e.DiscordMessageId == 12345L),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -343,7 +345,7 @@ public sealed class MessageServiceTests
         });
 
         audit.Verify(a => a.RecordAsync(It.IsAny<AuditEvent>(), It.IsAny<CancellationToken>()), Times.Never);
-        broadcaster.Verify(b => b.MessageDeletedAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
+        broadcaster.Verify(b => b.MessageDeletedAsync(It.IsAny<MessageDeletedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── SendOutboundAsync ──────────────────────────────────────────────────────

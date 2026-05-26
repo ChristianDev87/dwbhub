@@ -155,7 +155,7 @@ public sealed class BackfillRunnerIntegrationTests : IAsyncLifetime
         public Task MessageUpdatedAsync(long tenantId, long messageId, string content, DateTimeOffset editedAt, CancellationToken ct = default) =>
             Task.CompletedTask;
 
-        public Task MessageDeletedAsync(long tenantId, long messageId, CancellationToken ct = default) =>
+        public Task MessageDeletedAsync(MessageDeletedEvent evt, CancellationToken ct = default) =>
             Task.CompletedTask;
 
         public Task ChannelBridgeChangedAsync(long tenantId, Guid channelPublicId, bool isBridged, CancellationToken ct = default) =>

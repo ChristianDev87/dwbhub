@@ -13,8 +13,12 @@ public interface IMessagesBroadcaster
     Task MessageReceivedAsync(MessageBroadcastDto msg, Guid channelPublicId, CancellationToken ct = default);
     /// <summary>Notify clients that the content of an existing message has changed.</summary>
     Task MessageUpdatedAsync(long tenantId, long messageId, string content, DateTimeOffset editedAt, CancellationToken ct = default);
-    /// <summary>Notify clients that a message has been soft-deleted.</summary>
-    Task MessageDeletedAsync(long tenantId, long messageId, CancellationToken ct = default);
+    /// <summary>
+    /// Broadcast a message-deleted event to the tenant's SignalR group. Includes the actor
+    /// who triggered the delete (null for Discord-side deletes) and the reason enum so the
+    /// UI can render context-specific placeholder text.
+    /// </summary>
+    Task MessageDeletedAsync(MessageDeletedEvent evt, CancellationToken ct = default);
     /// <summary>Push an intermediate backfill progress update so clients can display a live count.</summary>
     Task BackfillProgressAsync(long tenantId, Guid channelPublicId, long jobId, int fetchedCount, CancellationToken ct = default);
     /// <summary>Notify clients that a backfill job has finished and the final fetched count is available.</summary>

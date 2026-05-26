@@ -652,7 +652,7 @@ file sealed class NoOpMessagesBroadcaster : DwbHub.Application.Messaging.IMessag
         CancellationToken ct = default) => Task.CompletedTask;
     public Task MessageUpdatedAsync(long tenantId, long messageId, string content,
         DateTimeOffset editedAt, CancellationToken ct = default) => Task.CompletedTask;
-    public Task MessageDeletedAsync(long tenantId, long messageId,
+    public Task MessageDeletedAsync(MessageDeletedEvent evt,
         CancellationToken ct = default) => Task.CompletedTask;
     public Task BackfillProgressAsync(long tenantId, Guid channelPublicId, long jobId,
         int fetchedCount, CancellationToken ct = default) => Task.CompletedTask;

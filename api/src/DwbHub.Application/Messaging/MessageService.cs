@@ -181,7 +181,7 @@ public sealed class MessageService : IMessageService
                 ["discord_message_id"] = evt.DiscordMessageId,
             }), ct).ConfigureAwait(false);
 
-        await _broadcaster.MessageDeletedAsync(evt.TenantId, evt.DiscordMessageId, ct)
+        await _broadcaster.MessageDeletedAsync(evt, ct)
             .ConfigureAwait(false);
     }
 
@@ -342,6 +342,9 @@ public sealed class MessageService : IMessageService
 
         string auditType;
         bool ok;
+        long discordChannelId;
+        MessageDeletedReason deleteReason;
+        long? guildInternalId;
 
         if (isAuthor)
         {
@@ -353,6 +356,13 @@ public sealed class MessageService : IMessageService
             ok = await _discord.DeleteWebhookMessageAsync(
                 (ulong)webhook.DiscordWebhookId, token, (ulong)msg.DiscordMessageId, ct).ConfigureAwait(false);
             auditType = AuditEventTypes.MessageDeleteSelf;
+            deleteReason = MessageDeletedReason.Self;
+            // Resolve the DiscordChannelId for the broadcaster event.
+            var selfChan = (await _channels.ListBridgedAsync(tenantId, ct).ConfigureAwait(false))
+                .FirstOrDefault(c => c.Id == msg.ChannelId);
+            if (selfChan is null) return new DeleteMessageOutcome.NotFound();
+            discordChannelId = selfChan.DiscordChannelId;
+            guildInternalId = selfChan.GuildId;
         }
         else if (isOwner && msg.ViaDwbhub)
         {
@@ -364,6 +374,12 @@ public sealed class MessageService : IMessageService
             ok = await _discord.DeleteWebhookMessageAsync(
                 (ulong)webhook.DiscordWebhookId, token, (ulong)msg.DiscordMessageId, ct).ConfigureAwait(false);
             auditType = AuditEventTypes.MessageDeleteModerationOutbound;
+            deleteReason = MessageDeletedReason.ModerationOutbound;
+            var modOutChan = (await _channels.ListBridgedAsync(tenantId, ct).ConfigureAwait(false))
+                .FirstOrDefault(c => c.Id == msg.ChannelId);
+            if (modOutChan is null) return new DeleteMessageOutcome.NotFound();
+            discordChannelId = modOutChan.DiscordChannelId;
+            guildInternalId = modOutChan.GuildId;
         }
         else if (isOwner && !msg.ViaDwbhub)
         {
@@ -388,6 +404,9 @@ public sealed class MessageService : IMessageService
                 return new DeleteMessageOutcome.BotMissingPermission();
             }
             auditType = AuditEventTypes.MessageDeleteModerationInbound;
+            deleteReason = MessageDeletedReason.ModerationInbound;
+            discordChannelId = chan.DiscordChannelId;
+            guildInternalId = chan.GuildId;
         }
         else
         {
@@ -412,7 +431,19 @@ public sealed class MessageService : IMessageService
                 ["originalAuthorDiscordId"] = msg.ViaDwbhub ? null : (long?)msg.DiscordAuthorId,
             }), ct).ConfigureAwait(false);
 
-        await _broadcaster.MessageDeletedAsync(msg.TenantId, msg.DiscordMessageId, ct).ConfigureAwait(false);
+        // Resolve the guild's internal id for the GuildId field. For mod-inbound it was fetched above;
+        // for self/mod-outbound we stored it in guildInternalId from the channel lookup.
+        var guildId = guildInternalId ?? 0L;
+
+        await _broadcaster.MessageDeletedAsync(new MessageDeletedEvent
+        {
+            TenantId = tenantId,
+            GuildId = guildId,
+            DiscordChannelId = discordChannelId,
+            DiscordMessageId = msg.DiscordMessageId,
+            DeletedByUserId = actorUserId,
+            Reason = deleteReason,
+        }, ct).ConfigureAwait(false);
 
         return new DeleteMessageOutcome.Success();
     }

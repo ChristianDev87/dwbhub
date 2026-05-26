@@ -2,6 +2,8 @@ using Discord;
 using Discord.WebSocket;
 using DwbHub.Application.Bot;
 using DwbHub.Application.Messaging;
+using DwbHub.Core.Repositories;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace DwbHub.Infrastructure.Bot;
@@ -15,17 +17,19 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
     private readonly long _guildId;
     private readonly long _tenantId;
     private readonly ILogger<DiscordNetBotConnection> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly DiscordSocketClient _client;
     private readonly object _stateLock = new();
     private BotConnectionState _state = BotConnectionState.Disconnected;
     private DateTimeOffset? _lastConnectedAt;
     private volatile bool _disposed;
 
-    public DiscordNetBotConnection(long guildId, long tenantId, ILogger<DiscordNetBotConnection> logger)
+    public DiscordNetBotConnection(long guildId, long tenantId, ILogger<DiscordNetBotConnection> logger, IServiceScopeFactory scopeFactory)
     {
         _guildId = guildId;
         _tenantId = tenantId;
         _logger = logger;
+        _scopeFactory = scopeFactory;
         _client = new DiscordSocketClient(new DiscordSocketConfig
         {
             GatewayIntents = GatewayIntents.Guilds
@@ -121,7 +125,32 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
     {
         lock (_stateLock) { _lastConnectedAt = DateTimeOffset.UtcNow; }
         TransitionTo(BotConnectionState.Connected, errorClass: null);
+        _ = Task.Run(async () =>
+        {
+            try { await CheckAndPersistBotPermissionsAsync().ConfigureAwait(false); }
+            catch (Exception ex) { _logger.LogWarning(ex, "CheckAndPersistBotPermissionsAsync threw for guild {GuildId}", _guildId); }
+        });
         return Task.CompletedTask;
+    }
+
+    private async Task CheckAndPersistBotPermissionsAsync()
+    {
+        var guild = _client.GetGuild((ulong)_guildId);
+        if (guild?.CurrentUser is null)
+        {
+            _logger.LogDebug(
+                "Permission check skipped for guild {GuildId} — current user not yet ready", _guildId);
+            return;
+        }
+
+        var canManage = guild.CurrentUser.GuildPermissions.ManageMessages;
+
+        using var scope = _scopeFactory.CreateScope();
+        var guildRepo = scope.ServiceProvider.GetRequiredService<IGuildRepository>();
+        await guildRepo.UpdateBotPermissionsAsync(_guildId, _tenantId, canManage, CancellationToken.None)
+            .ConfigureAwait(false);
+        _logger.LogInformation(
+            "Bot permissions for guild {GuildId}: MANAGE_MESSAGES={CanManage}", _guildId, canManage);
     }
 
     /// <summary>

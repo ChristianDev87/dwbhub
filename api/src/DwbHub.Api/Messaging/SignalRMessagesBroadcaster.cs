@@ -53,12 +53,17 @@ public sealed class SignalRMessagesBroadcaster : IMessagesBroadcaster
 
     /// <inheritdoc />
     public Task MessageDeletedAsync(
-        long tenantId,
-        long messageId,
+        MessageDeletedEvent evt,
         CancellationToken ct = default)
-        => _hub.Clients.Group(Group(tenantId)).SendAsync(
+        => _hub.Clients.Group(Group(evt.TenantId)).SendAsync(
             "MessageDeleted",
-            new { messageId },
+            new
+            {
+                messageId = evt.DiscordMessageId,
+                discordChannelId = evt.DiscordChannelId,
+                deletedByUserId = evt.DeletedByUserId,
+                reason = evt.Reason.ToString(),
+            },
             ct);
 
     /// <inheritdoc />

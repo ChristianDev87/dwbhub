@@ -1,5 +1,6 @@
 using DwbHub.Application.Bot;
 using DwbHub.Infrastructure.Bot;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -39,7 +40,8 @@ public sealed class DiscordNetBotConnectionLiveTests
         await using var conn = new DiscordNetBotConnection(
             guildId: env!.Value.guildId,
             tenantId: 1L,
-            logger: NullLogger<DiscordNetBotConnection>.Instance);
+            logger: NullLogger<DiscordNetBotConnection>.Instance,
+            scopeFactory: NoOpScopeFactory.Instance);
 
         var transitions = new List<BotConnectionStateChange>();
         var reachedConnected = new TaskCompletionSource();
@@ -72,7 +74,8 @@ public sealed class DiscordNetBotConnectionLiveTests
         await using var conn = new DiscordNetBotConnection(
             guildId: env!.Value.guildId,
             tenantId: 1L,
-            logger: NullLogger<DiscordNetBotConnection>.Instance);
+            logger: NullLogger<DiscordNetBotConnection>.Instance,
+            scopeFactory: NoOpScopeFactory.Instance);
 
         var reachedConnected = new TaskCompletionSource();
         conn.StateChanged += change =>
@@ -88,5 +91,28 @@ public sealed class DiscordNetBotConnectionLiveTests
 
         await conn.DisconnectAsync(CancellationToken.None);
         Assert.Equal(BotConnectionState.Disconnected, conn.State);
+    }
+}
+
+/// <summary>
+/// No-op IServiceScopeFactory for live tests that don't need the bot permission check
+/// to actually persist anything. The permission check is non-fatal; a thrown exception
+/// is swallowed by the fire-and-forget wrapper in OnReadyAsync.
+/// </summary>
+file sealed class NoOpScopeFactory : IServiceScopeFactory
+{
+    public static readonly NoOpScopeFactory Instance = new();
+
+    public IServiceScope CreateScope() => new NoOpScope();
+
+    private sealed class NoOpScope : IServiceScope
+    {
+        public IServiceProvider ServiceProvider { get; } = new NoOpServiceProvider();
+        public void Dispose() { }
+    }
+
+    private sealed class NoOpServiceProvider : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => null;
     }
 }
