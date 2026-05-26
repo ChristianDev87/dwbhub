@@ -83,7 +83,8 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
         }
         catch (Discord.Net.HttpException ex) when (ex.HttpCode == System.Net.HttpStatusCode.Unauthorized)
         {
-            // Discord.NET 3.16: invalid tokens surface as 4004 close in OnDisconnectedAsync, not here. Kept for future compat.
+            // Synchronous 401 path: REST identify-call rejected the token.
+            // OnDisconnectedAsync covers the async path (4004 gateway close + late-arriving 401s).
             _logger.LogWarning("Discord rejected bot token (401 Unauthorized) for guild {GuildId} — token must be rotated", _guildId);
             TransitionTo(BotConnectionState.TokenInvalid, errorClass: "token_invalid");
             throw;
@@ -123,19 +124,45 @@ public sealed class DiscordNetBotConnection : IBotConnection, IAsyncDisposable
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Classify a disconnect exception as a Discord credential rejection (token revoked / wrong).
+    /// Two paths cover the same root cause: the gateway closes with code 4004
+    /// (AUTHENTICATION_FAILED), or the REST identify-call returns 401 Unauthorized.
+    /// Either way the client should stop — Discord.NET would otherwise keep retrying
+    /// on its internal schedule and burn rate limit until the API bans the token.
+    /// </summary>
+    public static bool IsAuthFailure(Exception? ex)
+    {
+        if (ex is Discord.Net.WebSocketClosedException ws && ws.CloseCode == 4004)
+            return true;
+        if (ex is Discord.Net.HttpException http && http.HttpCode == System.Net.HttpStatusCode.Unauthorized)
+            return true;
+        return false;
+    }
+
     private Task OnDisconnectedAsync(Exception ex)
     {
         // Discord.NET fires this on transient disconnects too; it will auto-reconnect.
         // We surface the state so the UI shows a yellow indicator until Ready fires again.
         _logger.LogInformation("Bot disconnected for guild {GuildId}: {Reason}", _guildId, ex?.Message ?? "unknown");
 
-        // Discord gateway close code 4004 = AUTHENTICATION_FAILED. The token is invalid
-        // (or shape-valid but revoked / not a real bot token). Mark as TokenInvalid so
-        // the manager does NOT auto-reconnect (would burn rate limit).
-        if (ex is Discord.Net.WebSocketClosedException ws && ws.CloseCode == 4004)
+        if (IsAuthFailure(ex))
         {
-            _logger.LogWarning("Discord gateway closed connection for guild {GuildId} with code 4004 (Authentication Failed) — token must be rotated", _guildId);
+            _logger.LogWarning("Discord rejected bot credentials for guild {GuildId} ({Reason}) — token must be rotated. Stopping client to prevent reconnect loop.", _guildId, ex?.GetType().Name ?? "unknown");
             TransitionTo(BotConnectionState.TokenInvalid, errorClass: "token_invalid");
+
+            // Stop Discord.NET's internal reconnect loop. Run on a background task —
+            // calling StopAsync inside the Disconnected event handler can deadlock
+            // with Discord.NET's own dispatch lock.
+            _ = Task.Run(async () =>
+            {
+                try { await _client.StopAsync(); }
+                catch (Exception stopEx)
+                {
+                    _logger.LogDebug(stopEx, "StopAsync after auth-failure disconnect failed for guild {GuildId}", _guildId);
+                }
+            });
+
             return Task.CompletedTask;
         }
 
