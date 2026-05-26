@@ -1119,6 +1119,187 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/t/{slug}/channels/{channelPublicId}/messages/{messageId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                    channelPublicId: string;
+                    messageId: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Gone */
+                410: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Precondition Failed */
+                412: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BotMissingPermissionResponse"];
+                        "application/json": components["schemas"]["BotMissingPermissionResponse"];
+                        "text/json": components["schemas"]["BotMissingPermissionResponse"];
+                    };
+                };
+                /** @description Bad Gateway */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                    channelPublicId: string;
+                    messageId: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["EditMessageRequest"];
+                    "text/json": components["schemas"]["EditMessageRequest"];
+                    "application/*+json": components["schemas"]["EditMessageRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MessageDto"];
+                        "application/json": components["schemas"]["MessageDto"];
+                        "text/json": components["schemas"]["MessageDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Gone */
+                410: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Content */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["EditWindowExpiredResponse"];
+                        "application/json": components["schemas"]["EditWindowExpiredResponse"];
+                        "text/json": components["schemas"]["EditWindowExpiredResponse"];
+                    };
+                };
+                /** @description Bad Gateway */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        trace?: never;
+    };
     "/api/setup/status": {
         parameters: {
             query?: never;
@@ -1435,6 +1616,9 @@ export interface components {
         BackfillStatusResponse: {
             status?: components["schemas"]["BackfillStatusItem"];
         };
+        BotMissingPermissionResponse: {
+            error?: string | null;
+        };
         ChannelListItem: {
             /** Format: uuid */
             publicId?: string;
@@ -1455,6 +1639,16 @@ export interface components {
         ChannelListResponse: {
             channels?: components["schemas"]["ChannelListItem"][] | null;
         };
+        EditMessageRequest: {
+            content: string;
+        };
+        EditWindowExpiredResponse: {
+            error?: string | null;
+            /** Format: int32 */
+            ageSeconds?: number;
+            /** Format: int32 */
+            windowSeconds?: number;
+        };
         LoginRequest: {
             email?: string | null;
             password?: string | null;
@@ -1463,6 +1657,19 @@ export interface components {
             error?: string | null;
             /** Format: int32 */
             retryAfterSeconds?: number;
+        };
+        MessageDto: {
+            /** Format: int64 */
+            id?: number;
+            authorName?: string | null;
+            content?: string | null;
+            /** Format: date-time */
+            sentAt?: string;
+            /** Format: date-time */
+            editedAt?: string | null;
+            viaDwbhub?: boolean;
+            /** Format: int64 */
+            discordMessageId?: number;
         };
         PasswordResetConfirmRequest: {
             token?: string | null;

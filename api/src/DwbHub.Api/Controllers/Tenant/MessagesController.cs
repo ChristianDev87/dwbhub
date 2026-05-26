@@ -177,6 +177,94 @@ public sealed class MessagesController(
         return Ok(new MessageHistoryResponse(items, nextBefore));
     }
 
+    /// <summary>
+    /// Edit a message authored by the caller. Discord PATCH happens synchronously; response
+    /// returns once the local DB + Discord side are in sync.
+    /// </summary>
+    [HttpPatch("{messageId:long}")]
+    [Authorize]
+    [ProducesResponseType(typeof(MessageDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status410Gone)]
+    [ProducesResponseType(typeof(EditWindowExpiredResponse), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> Patch(
+        string slug,
+        Guid channelPublicId,
+        long messageId,
+        [FromBody] EditMessageRequest body,
+        CancellationToken ct)
+    {
+        _ = slug;
+        _ = channelPublicId; // route binding only; message is looked up by tenant + messageId
+
+        var tenant = tenantContext.Current
+            ?? throw new InvalidOperationException("TenantContext not populated despite /api/t/ route.");
+        var actorUserId = ExtractUserId()
+            ?? throw new InvalidOperationException("Authorized action without user id claim.");
+
+        var outcome = await messageService.EditAsync(tenant.Id, actorUserId, messageId, body.Content, ct)
+            .ConfigureAwait(false);
+
+        return outcome switch
+        {
+            EditMessageOutcome.Success s => Ok(MessageDto.From(s.Message)),
+            EditMessageOutcome.NotFound => NotFound(new { error = "not_found" }),
+            EditMessageOutcome.Forbidden => StatusCode(403, new { error = "forbidden" }),
+            EditMessageOutcome.EditWindowExpired e => StatusCode(422, new EditWindowExpiredResponse("edit_window_expired", e.AgeSeconds, e.WindowSeconds)),
+            EditMessageOutcome.AlreadyDeleted => StatusCode(410, new { error = "already_deleted" }),
+            EditMessageOutcome.EmptyContent => BadRequest(new { error = "empty_content" }),
+            EditMessageOutcome.ContentTooLong c => BadRequest(new { error = "content_too_long", length = c.Length, max = c.Max }),
+            EditMessageOutcome.DiscordError d => StatusCode(502, new { error = "discord_upstream", reason = d.Reason }),
+            _ => throw new InvalidOperationException("Unreachable")
+        };
+    }
+
+    /// <summary>
+    /// Delete a message. Self-delete is always allowed for the author of an outbound message.
+    /// Moderation-delete (other users' outbound or any inbound) requires the Owner role.
+    /// Inbound moderation-delete also requires the bot to have MANAGE_MESSAGES on the guild.
+    /// </summary>
+    [HttpDelete("{messageId:long}")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status410Gone)]
+    [ProducesResponseType(typeof(BotMissingPermissionResponse), StatusCodes.Status412PreconditionFailed)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> Delete(
+        string slug,
+        Guid channelPublicId,
+        long messageId,
+        CancellationToken ct)
+    {
+        _ = slug;
+        _ = channelPublicId;
+
+        var tenant = tenantContext.Current
+            ?? throw new InvalidOperationException("TenantContext not populated despite /api/t/ route.");
+        var actorUserId = ExtractUserId()
+            ?? throw new InvalidOperationException("Authorized action without user id claim.");
+        var actorRole = User.FindFirstValue(ClaimTypes.Role) ?? "Member";
+
+        var outcome = await messageService.DeleteAsync(tenant.Id, actorUserId, actorRole, messageId, ct)
+            .ConfigureAwait(false);
+
+        return outcome switch
+        {
+            DeleteMessageOutcome.Success => NoContent(),
+            DeleteMessageOutcome.NotFound => NotFound(new { error = "not_found" }),
+            DeleteMessageOutcome.Forbidden => StatusCode(403, new { error = "forbidden" }),
+            DeleteMessageOutcome.AlreadyDeleted => StatusCode(410, new { error = "already_deleted" }),
+            DeleteMessageOutcome.BotMissingPermission => StatusCode(412, new BotMissingPermissionResponse("bot_missing_manage_messages")),
+            DeleteMessageOutcome.DiscordError d => StatusCode(502, new { error = "discord_upstream", reason = d.Reason }),
+            _ => throw new InvalidOperationException("Unreachable")
+        };
+    }
+
     private long? ExtractUserId()
     {
         var raw = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
