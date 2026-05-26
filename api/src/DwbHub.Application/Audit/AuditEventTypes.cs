@@ -9,8 +9,6 @@ public static class AuditEventTypes
     public const string BotManualReconnect = "bot.manual_reconnect";
     public const string GuildActivated = "guild.activated";
     public const string GuildDeactivated = "guild.deactivated";
-
-    // Messaging events (Plan 1.0)
     public const string ChannelBackfillCancelled = "channel.backfill_cancelled";
     public const string ChannelBackfillCompleted = "channel.backfill_completed";
     public const string ChannelBackfillFailed = "channel.backfill_failed";

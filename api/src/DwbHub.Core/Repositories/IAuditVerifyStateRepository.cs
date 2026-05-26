@@ -3,6 +3,12 @@ using DwbHub.Core.Entities;
 
 namespace DwbHub.Core.Repositories;
 
+/// <summary>
+/// Persistence for the singleton audit-verify state row. Tracks the progress
+/// Tracks the progress of the hash-chain integrity-check background job. All methods
+/// require the caller to hold an open Npgsql transaction so the SELECT FOR UPDATE
+/// and subsequent UPDATE are atomic.
+/// </summary>
 public interface IAuditVerifyStateRepository
 {
     /// <summary>

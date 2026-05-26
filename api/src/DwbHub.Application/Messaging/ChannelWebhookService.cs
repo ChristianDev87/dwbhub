@@ -64,23 +64,17 @@ public sealed class ChannelWebhookService : IChannelWebhookService
         long userId,
         CancellationToken ct = default)
     {
-        // 1. Resolve channel + decrypt bot token.
         var (channel, botToken) = await ResolveChannelAndBotTokenAsync(
             tenantId, channelId, ct).ConfigureAwait(false);
 
-        // 2. Call Discord REST API — create the webhook.
-        //    Token is in memory only during this call.
         var created = await _discord.CreateWebhookAsync(
             botToken,
             discordChannelId: (ulong)channel.DiscordChannelId,
             name: "DwbHub",
             ct).ConfigureAwait(false);
 
-        // 3. Encrypt token immediately; raw token leaves this scope after Encrypt().
         var envelope = _cipher.Encrypt(created.WebhookToken);
 
-        // 4. INSERT channel_webhooks.
-        //    On insert failure → rollback by deleting the Discord webhook to prevent orphan.
         try
         {
             var webhookRow = new ChannelWebhook
@@ -132,7 +126,7 @@ public sealed class ChannelWebhookService : IChannelWebhookService
             throw; // re-throw original insert exception
         }
 
-        // 5. Audit: webhook_created — payload contains webhook ID, NOT the token.
+        // Payload contains webhook ID, NOT the token.
         await _audit.RecordAsync(new AuditEvent(
             TenantId: tenantId,
             ActorUserId: userId,
@@ -156,7 +150,6 @@ public sealed class ChannelWebhookService : IChannelWebhookService
         long channelId,
         CancellationToken ct = default)
     {
-        // 1. Load the webhook row.
         var row = await _repo.GetByChannelAsync(tenantId, channelId, ct).ConfigureAwait(false);
         if (row is null)
         {
@@ -210,10 +203,8 @@ public sealed class ChannelWebhookService : IChannelWebhookService
             }
         }
 
-        // 4. Delete from DB.
         await _repo.DeleteByChannelAsync(tenantId, channelId, ct).ConfigureAwait(false);
 
-        // 5. Audit.
         await _audit.RecordAsync(new AuditEvent(
             TenantId: tenantId,
             ActorUserId: null,

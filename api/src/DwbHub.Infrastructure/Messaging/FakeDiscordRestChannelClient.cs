@@ -82,12 +82,14 @@ public sealed class FakeDiscordRestChannelClient : IDiscordRestChannelClient
 
     // ── IDiscordRestChannelClient ─────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<DiscordChannelInfo>> ListChannelsAsync(
         string botToken,
         ulong discordGuildId,
         CancellationToken ct = default)
         => Task.FromResult(FakeChannels);
 
+    /// <inheritdoc/>
     public Task<IReadOnlyList<DiscordMessageInfo>> GetMessagesAsync(
         string botToken,
         ulong discordChannelId,
@@ -123,6 +125,7 @@ public sealed class FakeDiscordRestChannelClient : IDiscordRestChannelClient
             Array.Empty<DiscordMessageInfo>());
     }
 
+    /// <inheritdoc/>
     public Task<DiscordWebhookCreated> CreateWebhookAsync(
         string botToken,
         ulong discordChannelId,
@@ -133,12 +136,14 @@ public sealed class FakeDiscordRestChannelClient : IDiscordRestChannelClient
                 WebhookId: 900000000000000001UL,
                 WebhookToken: "fake-webhook-token-do-not-leak"));
 
+    /// <inheritdoc/>
     public Task<bool> DeleteWebhookAsync(
         ulong webhookId,
         string webhookToken,
         CancellationToken ct = default)
         => Task.FromResult(true); // no-op: fake webhooks are never stored externally
 
+    /// <inheritdoc/>
     public Task<DiscordMessageInfo> ExecuteWebhookAsync(
         ulong webhookId,
         string webhookToken,
@@ -161,6 +166,7 @@ public sealed class FakeDiscordRestChannelClient : IDiscordRestChannelClient
             EditedAt: null));
     }
 
+    /// <inheritdoc/>
     public Task<DiscordMessageInfo> EditWebhookMessageAsync(
         ulong webhookId,
         string webhookToken,
@@ -176,6 +182,7 @@ public sealed class FakeDiscordRestChannelClient : IDiscordRestChannelClient
             SentAt: DateTimeOffset.UtcNow.AddMinutes(-1), // pretend the message was sent a moment ago
             EditedAt: DateTimeOffset.UtcNow));
 
+    /// <inheritdoc/>
     public Task<bool> DeleteWebhookMessageAsync(
         ulong webhookId,
         string webhookToken,

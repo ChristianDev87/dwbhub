@@ -34,6 +34,10 @@ public sealed class BotConnectionManager(
     private readonly ConcurrentDictionary<long, SemaphoreSlim> _locks = new();
     private bool _disposed;
 
+    /// <summary>
+    /// Query all active guilds with credentials and open bot connections concurrently
+    /// (up to 10 at a time). Called by the ASP.NET Core host on application start.
+    /// </summary>
     public async Task StartAsync(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
@@ -45,6 +49,10 @@ public sealed class BotConnectionManager(
         await Task.WhenAll(candidates.Select(c => BootGuildAsync(c.GuildId, sem, ct))).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Disconnect all active bot connections with a 5-second deadline, then dispose them.
+    /// Called by the ASP.NET Core host on graceful shutdown.
+    /// </summary>
     public async Task StopAsync(CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -146,7 +154,6 @@ public sealed class BotConnectionManager(
         var cred = await credRepo.GetByGuildIdAsync(guildId, guild.TenantId, ct).ConfigureAwait(false);
         if (cred is null) return;
 
-        // 3. Decrypt + build new connection.
         var envelope = new CipherEnvelope(cred.Nonce, cred.Ciphertext, cred.Tag);
         var plaintext = encryptor.Decrypt(envelope);
 
@@ -199,8 +206,6 @@ public sealed class BotConnectionManager(
             using var scope = scopeFactory.CreateScope();
             var audit = scope.ServiceProvider.GetRequiredService<IAuditWriter>();
 
-            // Guild has no Slug property — slug lives on Tenant.
-            // Resolve via ITenantRepository; if lookup fails we write null rather than lose the event.
             string? tenantSlug = null;
             try
             {
@@ -249,8 +254,7 @@ public sealed class BotConnectionManager(
     /// Subscribes the three Discord message events on a newly-created connection to
     /// <see cref="IMessageService"/> via a per-event DI scope.
     ///
-    /// Each handler creates a fresh scope so MessageService (scoped) gets its own
-    /// DbConnection — mirrors the AuditWriter pattern in Plan 0.4.
+    /// Each handler creates a fresh scope so MessageService (scoped) gets its own DbConnection.
     ///
     /// Handlers swallow all exceptions: an unhandled exception inside a Discord.NET
     /// event handler would crash the gateway worker thread, silently dropping all
@@ -310,6 +314,7 @@ public sealed class BotConnectionManager(
         try { await action().ConfigureAwait(false); } catch { /* defensive — never crash the manager */ }
     }
 
+    /// <summary>Dispose all per-guild semaphores held by the lock map.</summary>
     public void Dispose()
     {
         if (_disposed) return;

@@ -8,5 +8,6 @@ namespace DwbHub.Core.Repositories;
 /// </summary>
 public interface IDbConnectionFactory
 {
+    /// <summary>Open and return a new database connection. The caller is responsible for disposing it.</summary>
     Task<IDbConnection> OpenAsync(CancellationToken ct = default);
 }

@@ -4,8 +4,12 @@ using DwbHub.Core.Repositories;
 
 namespace DwbHub.Data.Repositories;
 
+/// <summary>
+/// Dapper-backed implementation of <see cref="IUserRepository"/>.
+/// </summary>
 public sealed class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepository
 {
+    /// <inheritdoc/>
     public async Task<User?> GetByEmailAsync(long tenantId, string email, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -20,6 +24,7 @@ public sealed class UserRepository(IDbConnectionFactory connectionFactory) : IUs
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<User?> GetByIdAsync(long tenantId, long id, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -34,6 +39,7 @@ public sealed class UserRepository(IDbConnectionFactory connectionFactory) : IUs
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<long> CreateAsync(User user, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);

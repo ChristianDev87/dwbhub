@@ -21,7 +21,7 @@ public interface IBotTokenEncryptor
     /// Decrypts a previously-encrypted bot token. Throws
     /// <see cref="System.Security.Cryptography.CryptographicException"/>
     /// if the authentication tag does not match (indicates either tampered
-    /// ciphertext or a wrong key — callers MUST NOT continue with bot
+    /// ciphertext or a wrong key — callers should not continue with bot
     /// connection in that case).
     /// </summary>
     string Decrypt(CipherEnvelope envelope);

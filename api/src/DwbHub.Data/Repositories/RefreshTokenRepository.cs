@@ -10,8 +10,12 @@ using DwbHub.Core.Repositories;
 // revoke-chain are id/hash-keyed and don't need an additional tenant_id predicate.
 namespace DwbHub.Data.Repositories;
 
+/// <summary>
+/// Dapper-backed implementation of <see cref="IRefreshTokenRepository"/>.
+/// </summary>
 public sealed class RefreshTokenRepository(IDbConnectionFactory connectionFactory) : IRefreshTokenRepository
 {
+    /// <inheritdoc/>
     public async Task<long> InsertAsync(
         long tenantId, long userId, byte[] tokenHash, DateTimeOffset expiresAt,
         UserRole issuedRole, bool issuedWasActive,
@@ -42,14 +46,20 @@ public sealed class RefreshTokenRepository(IDbConnectionFactory connectionFactor
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Single-CTE: lookup + validate (not revoked, not expired, snapshot unchanged) +
+    /// insert-new + revoke-old all execute in one round-trip. The old token's
+    /// <c>replaced_by_token_id</c> is set to the new row so <c>RevokeChainAsync</c>
+    /// can walk the full chain on theft detection.
+    /// </remarks>
     public async Task<RotationResult> RotateAsync(
         byte[] oldHash, byte[] newHash, DateTimeOffset newExpiresAt,
         IPAddress? ip, string? userAgent,
         CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
-        // SINGLE-CTE rotation: lookup + validate + insert-new + revoke-old in one
-        // round-trip. Verbatim per spec §2.3 — do not abbreviate or reformat.
+        // This CTE is byte-for-byte canonical — the verification path depends on the exact formatting.
         const string sql = """
             WITH old_token AS (
                 SELECT rt.id AS rt_id, rt.revoked_at, rt.expires_at,
@@ -107,6 +117,7 @@ public sealed class RefreshTokenRepository(IDbConnectionFactory connectionFactor
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> RevokeByHashAsync(byte[] tokenHash, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -122,6 +133,7 @@ public sealed class RefreshTokenRepository(IDbConnectionFactory connectionFactor
         return id.HasValue;
     }
 
+    /// <inheritdoc/>
     public async Task RevokeChainAsync(long startTokenId, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);

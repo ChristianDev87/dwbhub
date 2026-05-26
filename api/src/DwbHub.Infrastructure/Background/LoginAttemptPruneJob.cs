@@ -6,10 +6,18 @@ using Microsoft.Extensions.Logging;
 // DWBHUB-NO-TENANT-FILTER: login_attempt_log is already allowlisted (rate-limit table).
 namespace DwbHub.Infrastructure.Background;
 
+/// <summary>
+/// Hangfire background job that hard-deletes <c>login_attempt_log</c> rows older than
+/// 90 days. The table is system-wide (no tenant scoping) and is explicitly allowlisted
+/// by the tenant-filter lint rule.
+/// </summary>
 public sealed class LoginAttemptPruneJob(
     IDbConnectionFactory connectionFactory,
     ILogger<LoginAttemptPruneJob> logger) : ILoginAttemptPruneJob
 {
+    /// <summary>
+    /// Delete <c>login_attempt_log</c> rows older than 90 days and log the deletion count.
+    /// </summary>
     public async Task RunAsync(CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);

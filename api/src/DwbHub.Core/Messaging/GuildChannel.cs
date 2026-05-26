@@ -5,7 +5,7 @@ namespace DwbHub.Core.Messaging;
 /// `PublicId` is the UUID that appears in URLs and API responses; never expose
 /// the internal `Id` in HTTP responses.
 /// `IsBridged` is owner-managed: only bridged channels receive message persistence
-/// and backfill (Plan 1.0 §2).
+/// and backfill.
 /// </summary>
 public sealed record GuildChannel
 {

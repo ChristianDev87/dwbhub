@@ -4,8 +4,12 @@ using DwbHub.Core.Repositories;
 
 namespace DwbHub.Data.Repositories;
 
+/// <summary>
+/// Dapper-backed implementation of <see cref="IGuildChannelRepository"/>.
+/// </summary>
 public sealed class GuildChannelRepository(IDbConnectionFactory connectionFactory) : IGuildChannelRepository
 {
+    /// <inheritdoc/>
     public async Task<GuildChannel?> GetByPublicIdAsync(
         long tenantId,
         Guid publicId,
@@ -27,6 +31,7 @@ public sealed class GuildChannelRepository(IDbConnectionFactory connectionFactor
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<GuildChannel?> GetByDiscordIdAsync(
         long tenantId,
         long discordChannelId,
@@ -48,6 +53,7 @@ public sealed class GuildChannelRepository(IDbConnectionFactory connectionFactor
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<GuildChannel>> ListByGuildAsync(
         long tenantId,
         long guildId,
@@ -71,6 +77,7 @@ public sealed class GuildChannelRepository(IDbConnectionFactory connectionFactor
         return rows.AsList();
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<GuildChannel>> ListBridgedAsync(
         long tenantId,
         CancellationToken ct = default)
@@ -93,6 +100,7 @@ public sealed class GuildChannelRepository(IDbConnectionFactory connectionFactor
         return rows.AsList();
     }
 
+    /// <inheritdoc/>
     public async Task<GuildChannel> UpsertFromSyncAsync(
         long tenantId,
         long guildId,
@@ -132,6 +140,7 @@ public sealed class GuildChannelRepository(IDbConnectionFactory connectionFactor
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> SetBridgedAsync(
         long tenantId,
         Guid publicId,

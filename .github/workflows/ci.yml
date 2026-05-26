@@ -197,13 +197,26 @@ jobs:
         env:
           TOKEN: ${{ secrets.DISCORD_DEV_BOT_TOKEN }}
           GUILD_ID: ${{ secrets.DISCORD_DEV_GUILD_ID }}
+          CHANNEL_ID: ${{ secrets.DISCORD_DEV_CHANNEL_ID }}
         shell: bash
         run: |
           if [ -z "$TOKEN" ] || [ -z "$GUILD_ID" ]; then
             echo "::notice::Discord live tests skipped — DISCORD_DEV_BOT_TOKEN / DISCORD_DEV_GUILD_ID not set in repo secrets"
             exit 0
           fi
-          printf '%s=%s\n%s=%s\n' DISCORD_DEV_BOT_TOKEN "$TOKEN" DISCORD_DEV_GUILD_ID "$GUILD_ID" > deploy/compose/discord.dev.env
+          # Gateway tests (DiscordNetBotConnectionLiveTests) only need TOKEN + GUILD_ID.
+          # REST tests (DiscordRestChannelClientLiveTests) additionally need CHANNEL_ID
+          # and exercise the full webhook lifecycle (create -> send -> edit -> delete).
+          # If CHANNEL_ID is missing the REST tests skip but gateway tests still run.
+          {
+            printf '%s=%s\n' DISCORD_DEV_BOT_TOKEN "$TOKEN"
+            printf '%s=%s\n' DISCORD_DEV_GUILD_ID "$GUILD_ID"
+            if [ -n "$CHANNEL_ID" ]; then
+              printf '%s=%s\n' DISCORD_DEV_CHANNEL_ID "$CHANNEL_ID"
+            else
+              echo "::warning::DISCORD_DEV_CHANNEL_ID not set in repo secrets — REST webhook lifecycle tests will skip" >&2
+            fi
+          } > deploy/compose/discord.dev.env
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh
       - name: Prepare shared-results dir

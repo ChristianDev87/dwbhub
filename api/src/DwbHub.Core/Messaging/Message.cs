@@ -3,7 +3,7 @@ namespace DwbHub.Core.Messaging;
 /// <summary>
 /// A persisted Discord message in a bridged channel.
 /// Snowflake unique-key (tenant_id, discord_message_id) prevents duplicate inserts
-/// when backfill and live gateway events race (Plan 1.0 §3.2 idempotency).
+/// when backfill and live gateway events race.
 /// </summary>
 public sealed record Message
 {

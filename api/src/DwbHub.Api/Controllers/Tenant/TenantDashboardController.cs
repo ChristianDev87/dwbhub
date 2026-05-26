@@ -4,10 +4,15 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DwbHub.Api.Controllers.Tenant;
 
+/// <summary>
+/// Tenant-scoped dashboard endpoint. Returns summary metadata for the resolved tenant.
+/// Requires a valid JWT with a matching <c>tid</c> claim.
+/// </summary>
 [ApiController]
 [Authorize]
 public sealed class TenantDashboardController(ITenantContext tenantContext) : ControllerBase
 {
+    /// <summary>Return tenant metadata (id, slug, name, locale) for the authenticated user's tenant.</summary>
     [HttpGet("/api/t/{slug}/dashboard")]
     public IActionResult Get(string slug)
     {

@@ -36,6 +36,7 @@ public sealed class TemplateEmailRenderer : IEmailTemplateRenderer
                 });
     }
 
+    /// <inheritdoc/>
     public EmailMessage Render(string templateKey, string locale, string toAddress, IReadOnlyDictionary<string, string> model)
     {
         var norm = locale is "en" ? "en" : "de"; // fallback to de

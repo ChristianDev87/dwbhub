@@ -10,8 +10,10 @@ namespace DwbHub.Infrastructure.Setup;
 /// </summary>
 public sealed class FileBootstrapTokenWriter(string filePath) : IBootstrapTokenWriter
 {
+    /// <inheritdoc/>
     public string Location => filePath;
 
+    /// <inheritdoc/>
     public async Task WriteAsync(string plaintext, CancellationToken ct = default)
     {
         var dir = Path.GetDirectoryName(filePath);
@@ -23,6 +25,11 @@ public sealed class FileBootstrapTokenWriter(string filePath) : IBootstrapTokenW
         TrySetUnixOwnerOnlyPermissions(filePath);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Returns <c>false</c> on <see cref="IOException"/> — best-effort; the database
+    /// lock row is the authoritative source of truth, not the file.
+    /// </remarks>
     public Task<bool> DeleteAsync(CancellationToken ct = default)
     {
         try
@@ -40,6 +47,7 @@ public sealed class FileBootstrapTokenWriter(string filePath) : IBootstrapTokenW
         }
     }
 
+    /// <inheritdoc/>
     public Task<bool> ExistsAsync(CancellationToken ct = default)
     {
         return Task.FromResult(File.Exists(filePath));

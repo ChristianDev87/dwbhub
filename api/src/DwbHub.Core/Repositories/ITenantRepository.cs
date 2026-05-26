@@ -8,8 +8,17 @@ namespace DwbHub.Core.Repositories;
 /// </summary>
 public interface ITenantRepository
 {
+    /// <summary>Load a tenant by its internal primary key. Returns null when the id does not exist.</summary>
     Task<Tenant?> GetByIdAsync(long id, CancellationToken ct = default);
+
+    /// <summary>Load a tenant by its URL slug (case-insensitive via CITEXT). Returns null when the slug does not exist.</summary>
     Task<Tenant?> GetBySlugAsync(string slug, CancellationToken ct = default);
+
+    /// <summary>
+    /// Insert a new tenant row. Returns the generated internal id.
+    /// </summary>
     Task<long> CreateAsync(string name, string slug, string locale = "de", CancellationToken ct = default);
+
+    /// <summary>List every tenant in the system, ordered by name. Returns an empty list when none exist.</summary>
     Task<IReadOnlyList<Tenant>> ListAsync(CancellationToken ct = default);
 }

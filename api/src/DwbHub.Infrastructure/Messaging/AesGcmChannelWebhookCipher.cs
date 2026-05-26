@@ -5,11 +5,7 @@ using DwbHub.Application.Messaging;
 namespace DwbHub.Infrastructure.Messaging;
 
 /// <summary>
-/// AES-256-GCM implementation of <see cref="IChannelWebhookCipher"/>.
-/// Reuses Plan 0.7's primitive (12-byte nonce, 16-byte tag) but lives in its
-/// own Messaging namespace so the dependency graph stays explicit — bot-token
-/// and webhook-token encryption don't share an interface today (Plan 1.0
-/// spec §3 Option B). Key rotation across both will be Phase 7.
+/// AES-256-GCM implementation of <see cref="IChannelWebhookCipher"/>. Same primitive as <see cref="AesGcmBotTokenEncryptor"/> (12-byte nonce, 16-byte tag) but in a separate Messaging namespace — the two encryption surfaces don't share an interface. Key rotation across both is deferred.
 /// </summary>
 public sealed class AesGcmChannelWebhookCipher : IChannelWebhookCipher
 {
@@ -21,10 +17,7 @@ public sealed class AesGcmChannelWebhookCipher : IChannelWebhookCipher
 
     public AesGcmChannelWebhookCipher(string base64Key)
     {
-        // Guard empty/whitespace first so the failure mode is a clear ArgumentException
-        // instead of FormatException from Base64 decoding an empty string. The practical
-        // risk is identical (startup crash either way) but the error type is what
-        // operators will read in their logs.
+        // Guard empty/whitespace before Base64 decode so operators get ArgumentException, not FormatException.
         if (string.IsNullOrWhiteSpace(base64Key))
         {
             throw new ArgumentException(
@@ -49,9 +42,7 @@ public sealed class AesGcmChannelWebhookCipher : IChannelWebhookCipher
         var ciphertext = new byte[plaintextBytes.Length];
         var tag = new byte[TagSize];
 
-        // AesGcm.Encrypt writes the encrypted bytes into the `ciphertext` and `tag`
-        // buffers in-place (destination-span pattern). The buffers must be
-        // pre-allocated by the caller with the correct sizes.
+        // Encrypt writes ciphertext + tag in-place; both buffers must be pre-allocated.
         using var aes = new AesGcm(_key, TagSize);
         aes.Encrypt(nonce, plaintextBytes, ciphertext, tag);
 
@@ -68,8 +59,7 @@ public sealed class AesGcmChannelWebhookCipher : IChannelWebhookCipher
         }
 
         var plaintextBytes = new byte[envelope.Ciphertext.Length];
-        // AesGcm.Decrypt writes the decrypted bytes into the `plaintextBytes`
-        // buffer in-place. Throws CryptographicException if the tag does not match.
+        // Decrypt writes plaintext in-place; CryptographicException on tag mismatch.
         using var aes = new AesGcm(_key, TagSize);
         aes.Decrypt(envelope.Nonce, envelope.Ciphertext, envelope.AuthTag, plaintextBytes);
         return Encoding.UTF8.GetString(plaintextBytes);

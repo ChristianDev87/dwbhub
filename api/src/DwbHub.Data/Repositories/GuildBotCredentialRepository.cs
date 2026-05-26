@@ -5,9 +5,13 @@ using DwbHub.Core.Repositories;
 
 namespace DwbHub.Data.Repositories;
 
+/// <summary>
+/// Dapper-backed implementation of <see cref="IGuildBotCredentialRepository"/>.
+/// </summary>
 public sealed class GuildBotCredentialRepository(IDbConnectionFactory connectionFactory)
     : IGuildBotCredentialRepository
 {
+    /// <inheritdoc/>
     public async Task<bool> ExistsForGuildAsync(long guildId, long tenantId, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -24,6 +28,7 @@ public sealed class GuildBotCredentialRepository(IDbConnectionFactory connection
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task UpsertAsync(
         long guildId, long tenantId, CipherEnvelope envelope, CancellationToken ct = default)
     {
@@ -52,6 +57,7 @@ public sealed class GuildBotCredentialRepository(IDbConnectionFactory connection
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<GuildBotCredential?> GetByGuildIdAsync(
         long guildId, long tenantId, CancellationToken ct = default)
     {
@@ -68,6 +74,7 @@ public sealed class GuildBotCredentialRepository(IDbConnectionFactory connection
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> DeleteAsync(long guildId, long tenantId, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);

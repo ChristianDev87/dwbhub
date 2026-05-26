@@ -2,9 +2,7 @@ namespace DwbHub.Application.Messaging;
 
 /// <summary>
 /// Encrypts + decrypts Discord webhook tokens for storage in channel_webhooks.
-/// Uses AES-256-GCM under DWBHUB_ENCRYPTION_KEY (the same key Plan 0.7's
-/// bot-token encryptor uses, but via a separate Messaging-namespaced
-/// interface — see Plan 1.0 spec §3 Option B for the rationale).
+/// Uses AES-256-GCM under DWBHUB_ENCRYPTION_KEY — the same key as <see cref="IBotTokenEncryptor"/>, but via a separate Messaging-namespaced interface so the two encryption concerns don't share a type.
 /// </summary>
 public interface IChannelWebhookCipher
 {

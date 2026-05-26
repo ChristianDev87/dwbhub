@@ -8,6 +8,9 @@ using Npgsql;
 
 namespace DwbHub.Application.Setup;
 
+/// <summary>
+/// Implements the one-time setup wizard defined by <see cref="ISetupService"/>.
+/// </summary>
 public sealed class SetupService(
     ISystemBootstrapLockRepository locks,
     ITenantRepository tenants,
@@ -19,6 +22,7 @@ public sealed class SetupService(
     ILogger<SetupService> logger,
     IAuditWriter auditWriter) : ISetupService
 {
+    /// <inheritdoc/>
     public async Task<SetupStatus> GetStatusAsync(CancellationToken ct = default)
     {
         var row = await locks.LoadAsync(ct).ConfigureAwait(false);
@@ -31,13 +35,13 @@ public sealed class SetupService(
             CompletedAt: row.ConsumedAt);
     }
 
+    /// <inheritdoc/>
     public async Task<SetupOutcome> CompleteAsync(
         SetupRequest request,
         IPAddress? ip,
         string? userAgent,
         CancellationToken ct = default)
     {
-        // ---- 1. Input validation (cheap, no DB) ----
         if (request.TenantLocale is not "de" and not "en")
         {
             return new SetupOutcome.InvalidRequest("tenantLocale must be 'de' or 'en'.");
@@ -63,7 +67,6 @@ public sealed class SetupService(
             return new SetupOutcome.WeakPassword();
         }
 
-        // ---- 2. Bootstrap-token validation (1 DB hit) ----
         var tokenHashBytes = tokenHasher.Hash(request.BootstrapToken);
         var lockRow = await locks.LoadAsync(ct).ConfigureAwait(false);
         if (lockRow is null || !lockRow.TokenHash.AsSpan().SequenceEqual(tokenHashBytes))
@@ -75,7 +78,6 @@ public sealed class SetupService(
             return new SetupOutcome.AlreadyCompleted();
         }
 
-        // ---- 3. Create tenant (1 DB hit) — guarded against duplicate slug ----
         long tenantId;
         try
         {
@@ -91,7 +93,6 @@ public sealed class SetupService(
         var tenant = await tenants.GetByIdAsync(tenantId, ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Tenant vanished after insert.");
 
-        // ---- 4. Create owner user (1 DB hit) — unverified, role Owner, active ----
         var ownerUserId = await users.CreateAsync(new User(
             Id: 0,
             TenantId: tenantId,
@@ -104,7 +105,6 @@ public sealed class SetupService(
             CreatedAt: default,
             UpdatedAt: default), ct).ConfigureAwait(false);
 
-        // ---- 5. Trigger verification email (1 DB hit + SMTP) ----
         var verificationEmailSent = true;
         try
         {
@@ -119,7 +119,6 @@ public sealed class SetupService(
                 "[Setup] Verification email failed during wizard. Operator can re-trigger via /api/auth/verify-email/resend.");
         }
 
-        // ---- 6. Atomically consume the lock (1 DB hit, race-safe) ----
         var consumed = await locks.TryConsumeAsync(tokenHashBytes, ownerUserId, ct).ConfigureAwait(false);
         if (!consumed)
         {
@@ -129,7 +128,6 @@ public sealed class SetupService(
             return new SetupOutcome.AlreadyCompleted();
         }
 
-        // ---- 7. Best-effort token-file cleanup ----
         var deleted = await tokenWriter.DeleteAsync(ct).ConfigureAwait(false);
         if (!deleted)
         {

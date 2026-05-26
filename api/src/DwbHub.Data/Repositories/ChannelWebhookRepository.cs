@@ -4,8 +4,12 @@ using DwbHub.Core.Repositories;
 
 namespace DwbHub.Data.Repositories;
 
+/// <summary>
+/// Dapper-backed implementation of <see cref="IChannelWebhookRepository"/>.
+/// </summary>
 public sealed class ChannelWebhookRepository(IDbConnectionFactory connectionFactory) : IChannelWebhookRepository
 {
+    /// <inheritdoc/>
     public async Task<ChannelWebhook?> GetByChannelAsync(
         long tenantId,
         long channelId,
@@ -27,6 +31,7 @@ public sealed class ChannelWebhookRepository(IDbConnectionFactory connectionFact
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<ChannelWebhook> InsertAsync(
         ChannelWebhook webhook,
         CancellationToken ct = default)
@@ -65,6 +70,7 @@ public sealed class ChannelWebhookRepository(IDbConnectionFactory connectionFact
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> DeleteByChannelAsync(
         long tenantId,
         long channelId,

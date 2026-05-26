@@ -3,6 +3,7 @@ using DwbHub.Application.Validation;
 
 namespace DwbHub.Api.Controllers.Tenant;
 
+/// <summary>Request body for PUT /api/t/{slug}/guilds/{guildPublicId}/bot-credentials.</summary>
 public sealed class PutBotCredentialsRequest
 {
     [Required]

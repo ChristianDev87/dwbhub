@@ -4,6 +4,10 @@ using Microsoft.Extensions.Logging;
 
 namespace DwbHub.Application.Setup;
 
+/// <summary>
+/// Implements <see cref="IBootstrapTokenProvisioner"/>: decides at startup whether to generate
+/// a new bootstrap token, skip silently, or warn about a lost token file.
+/// </summary>
 public sealed class BootstrapTokenProvisioner(
     ISystemBootstrapLockRepository locks,
     ITokenHasher hasher,
@@ -11,6 +15,7 @@ public sealed class BootstrapTokenProvisioner(
     IBootstrapTokenWriter writer,
     ILogger<BootstrapTokenProvisioner> logger) : IBootstrapTokenProvisioner
 {
+    /// <inheritdoc/>
     public async Task ProvisionAsync(CancellationToken ct = default)
     {
         var existing = await locks.LoadAsync(ct).ConfigureAwait(false);

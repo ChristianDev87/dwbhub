@@ -7,8 +7,10 @@ namespace DwbHub.Application.Auth;
 /// </summary>
 public static class PasswordStrength
 {
+    /// <summary>Minimum required password length in characters.</summary>
     public const int MinimumLength = 8;
 
+    /// <summary>Evaluate the strength of <paramref name="password"/> against the minimum-length rule.</summary>
     public static PasswordStrengthResult Validate(string? password)
     {
         if (string.IsNullOrEmpty(password) || password.Length < MinimumLength)
@@ -19,8 +21,11 @@ public static class PasswordStrength
     }
 }
 
+/// <summary>Outcome of a <see cref="PasswordStrength.Validate"/> check.</summary>
 public enum PasswordStrengthResult
 {
+    /// <summary>Password meets all requirements.</summary>
     Strong,
+    /// <summary>Password is shorter than <see cref="PasswordStrength.MinimumLength"/> characters.</summary>
     TooShort,
 }

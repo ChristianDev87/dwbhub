@@ -3,8 +3,7 @@ using DwbHub.Core.Entities;
 namespace DwbHub.Core.Repositories;
 
 /// <summary>
-/// Access to the singleton bootstrap-lock row. The provisioner (Plan 0.3d
-/// Task 6) and the setup endpoint (Task 9) are the only consumers.
+/// Access to the singleton bootstrap-lock row. The provisioner (<see cref="DwbHub.Application.Setup.BootstrapTokenProvisioner"/>) and the setup endpoint are the only consumers.
 /// </summary>
 public interface ISystemBootstrapLockRepository
 {

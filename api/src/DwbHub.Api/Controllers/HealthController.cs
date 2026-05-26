@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DwbHub.Api.Controllers;
 
+/// <summary>
+/// Liveness probe endpoint at /api/health. Returns API version and uptime.
+/// </summary>
 [ApiController]
 [Route("api/health")]
 public sealed class HealthController : ControllerBase
@@ -13,6 +16,7 @@ public sealed class HealthController : ControllerBase
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             ?.InformationalVersion ?? "0.0.0";
 
+    /// <summary>Return status, version, and uptime in seconds. No authentication required.</summary>
     [HttpGet]
     public IActionResult Get()
     {

@@ -4,8 +4,12 @@ using DwbHub.Core.Repositories;
 
 namespace DwbHub.Data.Repositories;
 
+/// <summary>
+/// Dapper-backed implementation of <see cref="IMessageRepository"/>.
+/// </summary>
 public sealed class MessageRepository(IDbConnectionFactory connectionFactory) : IMessageRepository
 {
+    /// <inheritdoc/>
     public async Task<Message?> InsertAsync(Message msg, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -46,6 +50,7 @@ public sealed class MessageRepository(IDbConnectionFactory connectionFactory) : 
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> ApplyEditAsync(
         long tenantId,
         long discordMessageId,
@@ -71,6 +76,7 @@ public sealed class MessageRepository(IDbConnectionFactory connectionFactory) : 
         return affected > 0;
     }
 
+    /// <inheritdoc/>
     public async Task<bool> MarkDeletedAsync(
         long tenantId,
         long discordMessageId,
@@ -93,6 +99,7 @@ public sealed class MessageRepository(IDbConnectionFactory connectionFactory) : 
         return affected > 0;
     }
 
+    /// <inheritdoc/>
     public async Task<Message?> GetByInternalIdAsync(long tenantId, long id, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
@@ -111,6 +118,7 @@ public sealed class MessageRepository(IDbConnectionFactory connectionFactory) : 
             .ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<Message>> ListByChannelBeforeAsync(
         long tenantId,
         long channelId,

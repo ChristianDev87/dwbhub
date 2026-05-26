@@ -5,6 +5,12 @@ using Microsoft.Extensions.Logging;
 
 namespace DwbHub.Infrastructure.Background;
 
+/// <summary>
+/// Hangfire background job that incrementally verifies new audit_log rows since the
+/// last run, advancing the audit_verify_state cursor on success and marking it broken
+/// on failure. Runs on a frequent cadence (e.g. every 5 minutes). Uses a
+/// <c>SELECT FOR UPDATE</c> lock on the state row to prevent concurrent runs.
+/// </summary>
 public sealed class AuditVerifyIncrementalJob(
     IDbConnectionFactory connectionFactory,
     IAuditVerifyStateRepository stateRepo,
@@ -12,6 +18,11 @@ public sealed class AuditVerifyIncrementalJob(
     IAuditWriter auditWriter,
     ILogger<AuditVerifyIncrementalJob> logger) : IAuditVerifyIncrementalJob
 {
+    /// <summary>
+    /// Verify audit_log rows added since the last successful run. Advances the state
+    /// cursor when the chain is intact; marks the state broken and emits an
+    /// <c>audit.chain.broken</c> event when a hash mismatch is detected.
+    /// </summary>
     public async Task RunAsync(CancellationToken ct = default)
     {
         using var conn = (Npgsql.NpgsqlConnection)await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
