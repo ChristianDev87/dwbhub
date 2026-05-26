@@ -12,12 +12,7 @@ public interface IGuildRepository
     /// Inserts a new guild. Collision on (tenant_id, discord_guild_id) raises
     /// <see cref="GuildAlreadyExistsException"/>. Returns the new internal id + public_id.
     ///
-    /// Implementation uses <c>INSERT ... ON CONFLICT DO NOTHING</c> so PostgreSQL
-    /// does NOT log a 23505 ERROR for the violation — instead the application
-    /// raises the exception explicitly when zero rows were inserted. This keeps
-    /// the postgres log clean for the Plan 1.0 Task 14.5 server-side error scan,
-    /// which was previously flooded by ~25 expected-but-noisy violations per
-    /// e2e suite (every test-seed re-attempt).
+    /// Uses <c>INSERT … ON CONFLICT DO NOTHING</c> to avoid PostgreSQL ERROR-level log noise on expected duplicate attempts.
     /// </summary>
     Task<(long Id, Guid PublicId)> CreateAsync(
         long tenantId,

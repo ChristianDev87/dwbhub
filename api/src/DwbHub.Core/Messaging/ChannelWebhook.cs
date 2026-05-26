@@ -3,9 +3,9 @@ namespace DwbHub.Core.Messaging;
 /// <summary>
 /// Per-bridged-channel encrypted Discord webhook credentials.
 /// Token shape: AES-256-GCM envelope (ciphertext + nonce + auth_tag + key_version),
-/// matching Plan 0.7's guild_bot_credentials shape for uniform future key rotation.
+/// Token shape is an AES-256-GCM envelope (ciphertext + nonce + auth_tag + key_version), matching guild_bot_credentials for uniform future key rotation.
 /// The byte arrays must never be logged or included in API responses — the only
-/// legitimate consumer is IChannelWebhookCipher.Decrypt (Plan 1.0 Task 4).
+/// The only legitimate consumer is <see cref="DwbHub.Application.Messaging.IChannelWebhookCipher.Decrypt"/>.
 /// </summary>
 public sealed record ChannelWebhook
 {
