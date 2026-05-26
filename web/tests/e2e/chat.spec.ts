@@ -112,9 +112,18 @@ async function setupBridgedChannel(
   // live broadcasts (edit/delete/inject) might fire during the connect gap
   // and be dropped silently. See useMessagesHub for the StrictMode-safe
   // lifecycle pattern.
+  //
+  // Timeout 30s (was 15s): On a cold dev-stack the first WebSocket upgrade
+  // after Vite serves the bundle + React mounts + SignalR negotiates can
+  // exceed 15s under load, especially when this helper is invoked from a
+  // later test in the file (test 8 — pagination — was observed flaking with
+  // 15s while tests 1-7 passed). Doubling the budget removes the headroom
+  // problem without addressing root cause (which would be: warm up the
+  // dev-stack before the first chat-page navigation, or instrument the API
+  // to confirm hub-init completes server-side before client connects).
   await expect(
     page.locator('[data-signalr-state="Connected"]').first(),
-  ).toBeVisible({ timeout: 15_000 });
+  ).toBeVisible({ timeout: 30_000 });
 
   return { channelPublicId: firstTextChannelPublicId, accessToken, authHeader };
 }
