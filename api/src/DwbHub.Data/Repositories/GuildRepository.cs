@@ -14,12 +14,19 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
         CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
+        // ON CONFLICT DO NOTHING swallows the unique-violation at the SQL level
+        // so PostgreSQL does NOT log a 23505 ERROR. When the row already exists
+        // QuerySingleOrDefaultAsync returns the default tuple (0, Guid.Empty);
+        // we detect that and raise GuildAlreadyExistsException so the controller
+        // can still map to HTTP 409 — the API contract is preserved, just
+        // without polluting the postgres logs (Plan 1.0 Fix C lesson).
         const string sql = """
             INSERT INTO guilds (tenant_id, discord_guild_id, display_name, registered_by_user_id)
             VALUES (@TenantId, @DiscordGuildId, @DisplayName, @RegisteredByUserId)
+            ON CONFLICT (tenant_id, discord_guild_id) DO NOTHING
             RETURNING id, public_id;
             """;
-        return await conn.QuerySingleAsync<(long Id, Guid PublicId)>(
+        var row = await conn.QuerySingleOrDefaultAsync<(long Id, Guid PublicId)>(
             new CommandDefinition(sql,
                 new
                 {
@@ -30,6 +37,12 @@ public sealed class GuildRepository(IDbConnectionFactory connectionFactory) : IG
                 },
                 cancellationToken: ct))
             .ConfigureAwait(false);
+
+        if (row.Id == 0)
+        {
+            throw new GuildAlreadyExistsException(tenantId, discordGuildId);
+        }
+        return row;
     }
 
     public async Task<Guild?> GetByPublicIdAsync(Guid publicId, long tenantId, CancellationToken ct = default)
