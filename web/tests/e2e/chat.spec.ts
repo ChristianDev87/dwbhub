@@ -388,6 +388,10 @@ test.describe("Plan 1.0 chat page", () => {
     page,
     request,
   }) => {
+    // setupBridgedChannel + backfill wait + pagination settle can exceed the
+    // default 30s budget on slower runners (especially Chromium). Same fix as
+    // chat-edit/delete specs.
+    test.setTimeout(120_000);
     await setupBridgedChannel(page, request);
 
     // Assert initial load shows messages (backfill gave us 200)
@@ -430,6 +434,9 @@ test.describe("Plan 1.0 chat page", () => {
     page,
     request,
   }) => {
+    // setupBridgedChannel + scroll-up + 2s settle + inject + 8s badge-visible
+    // can exceed the default 30s budget. Same fix as the pagination test above.
+    test.setTimeout(120_000);
     const { channelPublicId, accessToken } = await setupBridgedChannel(
       page,
       request,
