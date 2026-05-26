@@ -586,6 +586,14 @@ file sealed class DefaultFakeMessageService(IMessageRepository msgRepo) : IMessa
         long tenantId, long channelId, long? beforeSnowflake, int limit,
         CancellationToken ct = default)
         => msgRepo.ListByChannelBeforeAsync(tenantId, channelId, beforeSnowflake, limit, ct);
+
+    public Task<EditMessageOutcome> EditAsync(long tenantId, long actorUserId, long messageId,
+        string newContent, CancellationToken ct = default)
+        => throw new NotSupportedException("Not used in these tests.");
+
+    public Task<DeleteMessageOutcome> DeleteAsync(long tenantId, long actorUserId, string actorRole,
+        long messageId, CancellationToken ct = default)
+        => throw new NotSupportedException("Not used in these tests.");
 }
 
 /// <summary>
@@ -613,6 +621,14 @@ file sealed class SendSuccessStub(DwbHub.Core.Messaging.Message result) : IMessa
         CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<DwbHub.Core.Messaging.Message>>(
             Array.Empty<DwbHub.Core.Messaging.Message>());
+
+    public Task<EditMessageOutcome> EditAsync(long tenantId, long actorUserId, long messageId,
+        string newContent, CancellationToken ct = default)
+        => throw new NotSupportedException("Not used in these tests.");
+
+    public Task<DeleteMessageOutcome> DeleteAsync(long tenantId, long actorUserId, string actorRole,
+        long messageId, CancellationToken ct = default)
+        => throw new NotSupportedException("Not used in these tests.");
 }
 
 /// <summary>
@@ -641,4 +657,12 @@ file sealed class ThrowOnSendStub(Exception exToThrow) : IMessageService
         CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<DwbHub.Core.Messaging.Message>>(
             Array.Empty<DwbHub.Core.Messaging.Message>());
+
+    public Task<EditMessageOutcome> EditAsync(long tenantId, long actorUserId, long messageId,
+        string newContent, CancellationToken ct = default)
+        => throw new NotSupportedException("Not used in these tests.");
+
+    public Task<DeleteMessageOutcome> DeleteAsync(long tenantId, long actorUserId, string actorRole,
+        long messageId, CancellationToken ct = default)
+        => throw new NotSupportedException("Not used in these tests.");
 }

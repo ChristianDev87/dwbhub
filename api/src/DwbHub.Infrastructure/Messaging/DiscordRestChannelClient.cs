@@ -342,6 +342,20 @@ public sealed class DiscordRestChannelClient : IDiscordRestChannelClient
         return true;
     }
 
+    // ── Bot channel-message delete (Task 5: full implementation) ─────────────
+
+    /// <inheritdoc/>
+    /// <remarks>Full implementation is wired in Task 5 (DiscordNetBotConnection context).
+    /// This stub allows Task 4 MessageService to compile; at runtime the real implementation
+    /// will be provided before this path can be exercised.</remarks>
+    public Task<bool> DeleteChannelMessageAsync(
+        ulong discordChannelId,
+        ulong discordMessageId,
+        long guildId,
+        CancellationToken ct = default)
+        => throw new NotImplementedException(
+            "DeleteChannelMessageAsync is implemented in Task 5. This path requires a wired bot connection.");
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private static async Task<DiscordRestClient> CreateRestClientAsync(

@@ -100,6 +100,54 @@ public sealed class MessageRepository(IDbConnectionFactory connectionFactory) : 
     }
 
     /// <inheritdoc/>
+    public async Task UpdateContentAsync(
+        long tenantId,
+        long messageId,
+        string newContent,
+        DateTimeOffset editedAt,
+        CancellationToken ct = default)
+    {
+        using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
+        const string sql = """
+            UPDATE messages
+               SET content    = @NewContent,
+                   edited_at  = @EditedAt,
+                   updated_at = now()
+             WHERE id         = @MessageId
+               AND tenant_id  = @TenantId
+               AND deleted_at IS NULL;
+            """;
+        await conn.ExecuteAsync(
+            new CommandDefinition(sql,
+                new { TenantId = tenantId, MessageId = messageId, NewContent = newContent, EditedAt = editedAt },
+                cancellationToken: ct))
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task SoftDeleteByIdAsync(
+        long tenantId,
+        long messageId,
+        DateTimeOffset deletedAt,
+        CancellationToken ct = default)
+    {
+        using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
+        const string sql = """
+            UPDATE messages
+               SET deleted_at = @DeletedAt,
+                   updated_at = now()
+             WHERE id         = @MessageId
+               AND tenant_id  = @TenantId
+               AND deleted_at IS NULL;
+            """;
+        await conn.ExecuteAsync(
+            new CommandDefinition(sql,
+                new { TenantId = tenantId, MessageId = messageId, DeletedAt = deletedAt },
+                cancellationToken: ct))
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async Task<Message?> GetByInternalIdAsync(long tenantId, long id, CancellationToken ct = default)
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);

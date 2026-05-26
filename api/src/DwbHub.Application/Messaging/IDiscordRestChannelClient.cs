@@ -84,6 +84,19 @@ public interface IDiscordRestChannelClient
         string webhookToken,
         ulong messageId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Delete an arbitrary channel message using the bot token associated with
+    /// <paramref name="guildId"/>. Used for Owner-moderation deletes of inbound
+    /// (Discord-user) messages. Returns false when Discord returns 403
+    /// (bot lacks MANAGE_MESSAGES) or when no active bot connection exists for the guild.
+    /// Implemented in Task 5 (DiscordRestChannelClient).
+    /// </summary>
+    Task<bool> DeleteChannelMessageAsync(
+        ulong discordChannelId,
+        ulong discordMessageId,
+        long guildId,
+        CancellationToken ct = default);
 }
 
 /// <summary>Discord channel metadata returned from the channel-list sync.</summary>

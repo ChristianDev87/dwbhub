@@ -27,6 +27,14 @@ public sealed class MessageService : IMessageService
     private readonly IAuditWriter _audit;
     private readonly IMessagesBroadcaster _broadcaster;
     private readonly ILogger<MessageService> _logger;
+    private readonly ITenantRepository _tenants;
+    private readonly IGuildRepository _guilds;
+
+    /// <summary>
+    /// Replaceable clock seam. Tests inject a fixed time; production uses UTC now.
+    /// Matches the <c>_now</c> pattern used in <c>BotConnectionManager</c>.
+    /// </summary>
+    internal Func<DateTimeOffset> _now { get; set; } = () => DateTimeOffset.UtcNow;
 
     public MessageService(
         IMessageRepository messages,
@@ -36,7 +44,9 @@ public sealed class MessageService : IMessageService
         IDiscordRestChannelClient discord,
         IAuditWriter audit,
         IMessagesBroadcaster broadcaster,
-        ILogger<MessageService> logger)
+        ILogger<MessageService> logger,
+        ITenantRepository tenants,
+        IGuildRepository guilds)
     {
         _messages = messages;
         _channels = channels;
@@ -46,6 +56,8 @@ public sealed class MessageService : IMessageService
         _audit = audit;
         _broadcaster = broadcaster;
         _logger = logger;
+        _tenants = tenants;
+        _guilds = guilds;
     }
 
     // ── Inbound ───────────────────────────────────────────────────────────────
@@ -232,6 +244,178 @@ public sealed class MessageService : IMessageService
         int limit,
         CancellationToken ct = default)
         => _messages.ListByChannelBeforeAsync(tenantId, channelId, beforeSnowflake, limit, ct);
+
+    // ── EditAsync ─────────────────────────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public async Task<EditMessageOutcome> EditAsync(
+        long tenantId, long actorUserId, long messageId, string newContent,
+        CancellationToken ct = default)
+    {
+        var trimmed = (newContent ?? string.Empty).Trim();
+        if (trimmed.Length == 0) return new EditMessageOutcome.EmptyContent();
+        if (trimmed.Length > 2000) return new EditMessageOutcome.ContentTooLong(trimmed.Length, 2000);
+
+        var msg = await _messages.GetByInternalIdAsync(tenantId, messageId, ct).ConfigureAwait(false);
+        if (msg is null) return new EditMessageOutcome.NotFound();
+        if (msg.DeletedAt is not null) return new EditMessageOutcome.AlreadyDeleted();
+
+        // Edit is for own-outbound only.
+        if (!msg.ViaDwbhub || msg.DwbhubUserId != actorUserId)
+            return new EditMessageOutcome.Forbidden();
+
+        // Idempotent same-content no-op (no Discord call, no audit, no broadcast).
+        if (msg.Content == trimmed)
+            return new EditMessageOutcome.Success(msg);
+
+        // Per-tenant edit window.
+        var tenant = await _tenants.GetByIdAsync(tenantId, ct).ConfigureAwait(false);
+        if (tenant?.MessageEditWindowSeconds is int window)
+        {
+            var age = (int)(_now() - msg.SentAt).TotalSeconds;
+            if (age > window)
+                return new EditMessageOutcome.EditWindowExpired(age, window);
+        }
+
+        // Look up webhook; decrypt token.
+        var webhook = await _webhooks.GetByChannelAsync(tenantId, msg.ChannelId, ct).ConfigureAwait(false);
+        if (webhook is null) return new EditMessageOutcome.DiscordError("webhook_not_found");
+
+        var token = _webhookCipher.Decrypt(
+            new ChannelWebhookEnvelope(webhook.Ciphertext, webhook.Nonce, webhook.AuthTag, webhook.KeyVersion));
+
+        try
+        {
+            await _discord.EditWebhookMessageAsync(
+                (ulong)webhook.DiscordWebhookId, token, (ulong)msg.DiscordMessageId, trimmed, ct)
+                .ConfigureAwait(false);
+        }
+        catch (WebhookGoneException)
+        {
+            return new EditMessageOutcome.DiscordError("webhook_not_found");
+        }
+        catch (DiscordPermissionException)
+        {
+            return new EditMessageOutcome.DiscordError("webhook_patch_failed");
+        }
+        catch (DiscordRateLimitException)
+        {
+            return new EditMessageOutcome.DiscordError("discord_rate_limited");
+        }
+
+        var editedAt = _now();
+        await _messages.UpdateContentAsync(tenantId, messageId, trimmed, editedAt, ct).ConfigureAwait(false);
+
+        await _audit.RecordAsync(new AuditEvent(
+            TenantId: tenantId,
+            ActorUserId: actorUserId,
+            EventType: AuditEventTypes.MessageEditSelf,
+            Payload: new Dictionary<string, object?>
+            {
+                ["messageId"] = messageId,
+                ["channelId"] = msg.ChannelId,
+                ["discordMessageId"] = msg.DiscordMessageId,
+                ["previousContent"] = msg.Content,
+                ["newContent"] = trimmed,
+            }), ct).ConfigureAwait(false);
+
+        var updated = msg with { Content = trimmed, EditedAt = editedAt };
+        await _broadcaster.MessageUpdatedAsync(
+            msg.TenantId, msg.DiscordMessageId, trimmed, editedAt, ct).ConfigureAwait(false);
+
+        return new EditMessageOutcome.Success(updated);
+    }
+
+    // ── DeleteAsync ───────────────────────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public async Task<DeleteMessageOutcome> DeleteAsync(
+        long tenantId, long actorUserId, string actorRole, long messageId,
+        CancellationToken ct = default)
+    {
+        var msg = await _messages.GetByInternalIdAsync(tenantId, messageId, ct).ConfigureAwait(false);
+        if (msg is null) return new DeleteMessageOutcome.NotFound();
+        if (msg.DeletedAt is not null) return new DeleteMessageOutcome.AlreadyDeleted();
+
+        var isAuthor = msg.ViaDwbhub && msg.DwbhubUserId == actorUserId;
+        var isOwner = string.Equals(actorRole, "Owner", StringComparison.Ordinal);
+
+        string auditType;
+        bool ok;
+
+        if (isAuthor)
+        {
+            // Self-delete — even if caller is also Owner, author path produces a simpler audit trail.
+            var webhook = await _webhooks.GetByChannelAsync(tenantId, msg.ChannelId, ct).ConfigureAwait(false);
+            if (webhook is null) return new DeleteMessageOutcome.DiscordError("webhook_not_found");
+            var token = _webhookCipher.Decrypt(
+                new ChannelWebhookEnvelope(webhook.Ciphertext, webhook.Nonce, webhook.AuthTag, webhook.KeyVersion));
+            ok = await _discord.DeleteWebhookMessageAsync(
+                (ulong)webhook.DiscordWebhookId, token, (ulong)msg.DiscordMessageId, ct).ConfigureAwait(false);
+            auditType = AuditEventTypes.MessageDeleteSelf;
+        }
+        else if (isOwner && msg.ViaDwbhub)
+        {
+            // Mod-outbound — same Discord API as self-delete, different audit.
+            var webhook = await _webhooks.GetByChannelAsync(tenantId, msg.ChannelId, ct).ConfigureAwait(false);
+            if (webhook is null) return new DeleteMessageOutcome.DiscordError("webhook_not_found");
+            var token = _webhookCipher.Decrypt(
+                new ChannelWebhookEnvelope(webhook.Ciphertext, webhook.Nonce, webhook.AuthTag, webhook.KeyVersion));
+            ok = await _discord.DeleteWebhookMessageAsync(
+                (ulong)webhook.DiscordWebhookId, token, (ulong)msg.DiscordMessageId, ct).ConfigureAwait(false);
+            auditType = AuditEventTypes.MessageDeleteModerationOutbound;
+        }
+        else if (isOwner && !msg.ViaDwbhub)
+        {
+            // Mod-inbound — requires bot MANAGE_MESSAGES permission; uses bot REST API.
+            // Resolve channel by internal id → guild → permission check.
+            var bridged = await _channels.ListBridgedAsync(tenantId, ct).ConfigureAwait(false);
+            var chan = bridged.FirstOrDefault(c => c.Id == msg.ChannelId);
+            if (chan is null) return new DeleteMessageOutcome.NotFound();
+
+            var guild = await _guilds.GetByIdAsync(chan.GuildId, ct).ConfigureAwait(false);
+            if (guild?.TenantId != tenantId) return new DeleteMessageOutcome.NotFound();
+            if (guild.BotCanManageMessages != true)
+                return new DeleteMessageOutcome.BotMissingPermission();
+
+            ok = await _discord.DeleteChannelMessageAsync(
+                (ulong)chan.DiscordChannelId, (ulong)msg.DiscordMessageId, guild.Id, ct).ConfigureAwait(false);
+            if (!ok)
+            {
+                // Reactive cache update: Discord said no — mark permission as false for future requests.
+                await _guilds.UpdateBotPermissionsAsync(
+                    guild.Id, tenantId, canManageMessages: false, ct).ConfigureAwait(false);
+                return new DeleteMessageOutcome.BotMissingPermission();
+            }
+            auditType = AuditEventTypes.MessageDeleteModerationInbound;
+        }
+        else
+        {
+            return new DeleteMessageOutcome.Forbidden();
+        }
+
+        if (!ok) return new DeleteMessageOutcome.DiscordError("discord_delete_failed");
+
+        var deletedAt = _now();
+        await _messages.SoftDeleteByIdAsync(tenantId, messageId, deletedAt, ct).ConfigureAwait(false);
+
+        await _audit.RecordAsync(new AuditEvent(
+            TenantId: tenantId,
+            ActorUserId: actorUserId,
+            EventType: auditType,
+            Payload: new Dictionary<string, object?>
+            {
+                ["messageId"] = messageId,
+                ["channelId"] = msg.ChannelId,
+                ["discordMessageId"] = msg.DiscordMessageId,
+                ["originalAuthorUserId"] = msg.DwbhubUserId,
+                ["originalAuthorDiscordId"] = msg.ViaDwbhub ? null : (long?)msg.DiscordAuthorId,
+            }), ct).ConfigureAwait(false);
+
+        await _broadcaster.MessageDeletedAsync(msg.TenantId, msg.DiscordMessageId, ct).ConfigureAwait(false);
+
+        return new DeleteMessageOutcome.Success();
+    }
 
     // ── Private helpers ───────────────────────────────────────────────────────
 

@@ -1,5 +1,6 @@
 using DwbHub.Application.Audit;
 using DwbHub.Application.Messaging;
+using DwbHub.Core.Entities;
 using DwbHub.Core.Messaging;
 using DwbHub.Core.Repositories;
 using FluentAssertions;
@@ -97,6 +98,8 @@ public sealed class MessageServiceTests
         var discord = new Mock<IDiscordRestChannelClient>();
         var audit = new Mock<IAuditWriter>();
         var broadcaster = new Mock<IMessagesBroadcaster>();
+        var tenants = new Mock<ITenantRepository>();
+        var guilds = new Mock<IGuildRepository>();
 
         // Default: audit always succeeds
         audit.Setup(a => a.RecordAsync(It.IsAny<AuditEvent>(), It.IsAny<CancellationToken>()))
@@ -117,7 +120,8 @@ public sealed class MessageServiceTests
             msgRepo.Object, channelRepo.Object, webhookRepo.Object,
             cipher.Object, discord.Object,
             audit.Object, broadcaster.Object,
-            NullLogger<MessageService>.Instance);
+            NullLogger<MessageService>.Instance,
+            tenants.Object, guilds.Object);
 
         return (svc, msgRepo, channelRepo, webhookRepo, cipher, discord, audit, broadcaster);
     }

@@ -21,6 +21,10 @@ public static class AuditEventTypes
     public const string ChannelWebhookCreated = "channel.webhook_created";
     public const string ChannelWebhookDeleted = "channel.webhook_deleted";
     public const string MessageDeleted = "message.deleted";
+    public const string MessageDeleteModerationInbound = "message.delete.moderation_inbound";
+    public const string MessageDeleteModerationOutbound = "message.delete.moderation_outbound";
+    public const string MessageDeleteSelf = "message.delete.self";
+    public const string MessageEditSelf = "message.edit.self";
     public const string MessageEdited = "message.edited";
     public const string MessageReceivedInbound = "message.received_inbound";
     public const string MessageSentOutbound = "message.sent_outbound";

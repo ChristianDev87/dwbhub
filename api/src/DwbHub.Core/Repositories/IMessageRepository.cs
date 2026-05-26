@@ -58,4 +58,27 @@ public interface IMessageRepository
     /// Returns null when no row matches the supplied tenant + id combination.
     /// </summary>
     Task<Message?> GetByInternalIdAsync(long tenantId, long id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Update message content + set edited_at for a user-initiated edit.
+    /// Only affects rows where deleted_at IS NULL (defense-in-depth against race-edit-on-deleted).
+    /// </summary>
+    Task UpdateContentAsync(
+        long tenantId,
+        long messageId,
+        string newContent,
+        DateTimeOffset editedAt,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Soft-delete the message by its internal primary key, recording the exact deletion timestamp.
+    /// Only affects rows where deleted_at IS NULL (idempotent against double-deletes).
+    /// Used by MessageService.DeleteAsync for user-initiated deletes; the Discord-side path uses
+    /// the existing <see cref="MarkDeletedAsync(long, long, CancellationToken)"/> overload.
+    /// </summary>
+    Task SoftDeleteByIdAsync(
+        long tenantId,
+        long messageId,
+        DateTimeOffset deletedAt,
+        CancellationToken ct = default);
 }

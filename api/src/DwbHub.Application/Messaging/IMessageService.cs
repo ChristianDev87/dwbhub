@@ -48,4 +48,30 @@ public interface IMessageService
         long? beforeSnowflake,
         int limit,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Edit an outbound message authored by the caller. Validates ownership, edit-window, content shape,
+    /// then PATCHes the Discord webhook + updates the local DB + broadcasts SignalR + writes audit event.
+    /// Idempotent: if <paramref name="newContent"/> equals current content, returns Success without
+    /// calling Discord, audit, or broadcast.
+    /// </summary>
+    Task<EditMessageOutcome> EditAsync(
+        long tenantId,
+        long actorUserId,
+        long messageId,
+        string newContent,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Delete a message. Self-delete: always allowed if message is outbound and not yet deleted.
+    /// Moderation-delete (requires Owner role): allowed on others' outbound (webhook DELETE) or
+    /// on inbound (requires guild.bot_can_manage_messages = TRUE, uses bot DELETE).
+    /// Writes branch-specific audit event, soft-deletes locally, broadcasts SignalR with reason.
+    /// </summary>
+    Task<DeleteMessageOutcome> DeleteAsync(
+        long tenantId,
+        long actorUserId,
+        string actorRole,
+        long messageId,
+        CancellationToken ct = default);
 }

@@ -189,4 +189,12 @@ public sealed class FakeDiscordRestChannelClient : IDiscordRestChannelClient
         ulong messageId,
         CancellationToken ct = default)
         => Task.FromResult(true); // no-op: fake messages are never stored externally
+
+    /// <inheritdoc/>
+    public Task<bool> DeleteChannelMessageAsync(
+        ulong discordChannelId,
+        ulong discordMessageId,
+        long guildId,
+        CancellationToken ct = default)
+        => Task.FromResult(true); // no-op in fake: simulates bot having MANAGE_MESSAGES
 }

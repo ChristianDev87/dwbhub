@@ -301,4 +301,12 @@ internal sealed class RecordingMessageService : IMessageService
     public Task<IReadOnlyList<Message>> ListHistoryAsync(long tenantId, long channelId,
         long? beforeSnowflake, int limit, CancellationToken ct = default)
         => throw new NotSupportedException("Not used in these tests.");
+
+    public Task<EditMessageOutcome> EditAsync(long tenantId, long actorUserId, long messageId,
+        string newContent, CancellationToken ct = default)
+        => throw new NotSupportedException("Not used in these tests.");
+
+    public Task<DeleteMessageOutcome> DeleteAsync(long tenantId, long actorUserId, string actorRole,
+        long messageId, CancellationToken ct = default)
+        => throw new NotSupportedException("Not used in these tests.");
 }
