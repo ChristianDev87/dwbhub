@@ -73,7 +73,7 @@ const fakeAuth = {
   },
   login: vi.fn(),
   logout: vi.fn(),
-  refresh: vi.fn(),
+  refreshAccessToken: vi.fn(),
 };
 
 const GUILD_ID = "aaaa0000-0000-0000-0000-000000000001";

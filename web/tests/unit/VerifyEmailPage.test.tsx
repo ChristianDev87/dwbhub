@@ -17,7 +17,12 @@ import "@/lib/i18n";
  * the URL via duck-typing.
  */
 vi.mock("@/lib/api/useApiClient", () => ({
-  useApiClient: () => createApiClient(null, "http://localhost/"),
+  useApiClient: () =>
+    createApiClient(
+      () => null,
+      () => Promise.resolve(null),
+      "http://localhost/",
+    ),
 }));
 
 function getUrl(u: RequestInfo | URL): string {
