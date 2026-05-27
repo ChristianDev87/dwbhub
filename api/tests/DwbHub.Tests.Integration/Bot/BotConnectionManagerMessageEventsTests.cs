@@ -297,4 +297,14 @@ internal sealed class RecordingMessageService : IMessageService
     public Task<IReadOnlyList<Message>> ListHistoryAsync(long tenantId, long channelId,
         long? beforeSnowflake, int limit, CancellationToken ct = default)
         => throw new NotSupportedException("Not used in these tests.");
+
+    public Task<DwbHub.Application.Messaging.EditMessageResult> EditOutboundAsync(
+        long tenantId, long channelId, Guid messagePublicId, long actorUserId,
+        string newContent, CancellationToken ct = default)
+        => throw new NotSupportedException("Not used in these tests.");
+
+    public Task<DwbHub.Application.Messaging.DeleteMessageResult> DeleteOutboundAsync(
+        long tenantId, long channelId, Guid messagePublicId, long actorUserId,
+        DwbHub.Core.Entities.UserRole actorRole, CancellationToken ct = default)
+        => throw new NotSupportedException("Not used in these tests.");
 }

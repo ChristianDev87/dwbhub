@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using DwbHub.Application.Messaging;
 using DwbHub.Application.Tenancy;
+using DwbHub.Core.Entities;
 using DwbHub.Core.Repositories;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -175,6 +176,115 @@ public sealed class MessagesController(
         long? nextBefore = rows.Count == limit ? rows[^1].DiscordMessageId : null;
 
         return Ok(new MessageHistoryResponse(items, nextBefore));
+    }
+
+    /// <summary>
+    /// Edit a message previously sent via DwbHub. Only the original author may edit.
+    /// The edit window is 10 minutes from the original send time; beyond that a 422 is returned.
+    /// </summary>
+    [HttpPatch("{messagePublicId:guid}")]
+    [ProducesResponseType<EditMessageResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<EditWindowExpiredResponse>(StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Edit(
+        string slug,
+        Guid channelPublicId,
+        Guid messagePublicId,
+        [FromBody] EditMessageRequest req,
+        CancellationToken ct)
+    {
+        _ = slug;
+
+        if (!ModelState.IsValid)
+            return BadRequest(new { error = "invalid_request" });
+
+        if (string.IsNullOrWhiteSpace(req.Content))
+            return BadRequest(new { error = "content_required" });
+
+        var userId = ExtractUserId();
+        if (userId is null)
+            return Unauthorized(new { error = "missing_sub_claim" });
+
+        var tenant = tenantContext.Current
+            ?? throw new InvalidOperationException("TenantContext not populated despite /api/t/ route.");
+
+        var channel = await channels.GetByPublicIdAsync(tenant.Id, channelPublicId, ct).ConfigureAwait(false);
+        if (channel is null)
+            return NotFound(new { error = "channel_not_found" });
+
+        var result = await messageService.EditOutboundAsync(
+            tenant.Id, channel.Id, messagePublicId, userId.Value, req.Content.Trim(), ct)
+            .ConfigureAwait(false);
+
+        return result switch
+        {
+            EditMessageResult.Success s => Ok(new EditMessageResponse(
+                Id: s.UpdatedMessage.Id,
+                PublicId: s.UpdatedMessage.PublicId,
+                AuthorName: s.UpdatedMessage.DiscordAuthorName,
+                Content: s.UpdatedMessage.Content,
+                SentAt: s.UpdatedMessage.SentAt,
+                EditedAt: s.UpdatedMessage.EditedAt,
+                ViaDwbhub: s.UpdatedMessage.ViaDwbhub,
+                DiscordMessageId: s.UpdatedMessage.DiscordMessageId)),
+            EditMessageResult.NotFound => NotFound(new { error = "message_not_found" }),
+            EditMessageResult.Forbidden => StatusCode(StatusCodes.Status403Forbidden,
+                new { error = "forbidden" }),
+            EditMessageResult.EditWindowExpired => UnprocessableEntity(
+                new EditWindowExpiredResponse()),
+            _ => StatusCode(StatusCodes.Status500InternalServerError),
+        };
+    }
+
+    /// <summary>
+    /// Delete a message previously sent via DwbHub.
+    /// The original author OR a tenant Owner may delete.
+    /// Hard-deletes from Discord (idempotent on 404) and soft-deletes in our DB.
+    /// </summary>
+    [HttpDelete("{messagePublicId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Delete(
+        string slug,
+        Guid channelPublicId,
+        Guid messagePublicId,
+        CancellationToken ct)
+    {
+        _ = slug;
+
+        var userId = ExtractUserId();
+        if (userId is null)
+            return Unauthorized(new { error = "missing_sub_claim" });
+
+        var tenant = tenantContext.Current
+            ?? throw new InvalidOperationException("TenantContext not populated despite /api/t/ route.");
+
+        // Resolve the user to get their role (Owner check for cross-author delete).
+        var user = await users.GetByIdAsync(tenant.Id, userId.Value, ct).ConfigureAwait(false);
+        if (user is null)
+            return Unauthorized(new { error = "user_not_found" });
+
+        var channel = await channels.GetByPublicIdAsync(tenant.Id, channelPublicId, ct).ConfigureAwait(false);
+        if (channel is null)
+            return NotFound(new { error = "channel_not_found" });
+
+        var result = await messageService.DeleteOutboundAsync(
+            tenant.Id, channel.Id, messagePublicId, userId.Value, user.Role, ct)
+            .ConfigureAwait(false);
+
+        return result switch
+        {
+            DeleteMessageResult.Success => NoContent(),
+            DeleteMessageResult.NotFound => NotFound(new { error = "message_not_found" }),
+            DeleteMessageResult.Forbidden => StatusCode(StatusCodes.Status403Forbidden,
+                new { error = "forbidden" }),
+            _ => StatusCode(StatusCodes.Status500InternalServerError),
+        };
     }
 
     private long? ExtractUserId()
