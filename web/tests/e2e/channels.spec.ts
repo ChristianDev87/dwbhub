@@ -17,6 +17,8 @@ import {
   seedActiveGuild,
   SETUP_DEFAULTS,
 } from "./helpers/bootstrap";
+import { postTenantLogin } from "./helpers/api/tenants";
+import { bridgeChannel, getBackfillStatus } from "./helpers/api/channels";
 
 const {
   tenantSlug: SLUG,
@@ -38,11 +40,9 @@ async function loginAsOwner(page: Page): Promise<void> {
 }
 
 async function apiLogin(request: APIRequestContext): Promise<string> {
-  const res = await request.post(`/api/tenants/${SLUG}/auth/login`, {
-    data: {
-      email: OWNER_EMAIL,
-      password: OWNER_PASSWORD,
-    },
+  const res = await postTenantLogin(request, {
+    slug: SLUG,
+    body: { email: OWNER_EMAIL, password: OWNER_PASSWORD },
   });
   const body = (await res.json()) as { accessToken: string };
   return body.accessToken;
@@ -138,15 +138,16 @@ test.describe("Plan 1.0 channels page", () => {
     // status reaches "complete" and that fetchedCount is either 200 (fresh run)
     // OR 0 (idempotent re-run); never some partial in-between value.
     const accessToken = await apiLogin(request);
-    const authHeader = { Authorization: `Bearer ${accessToken}` };
+    const auth = { bearerToken: accessToken };
     const deadline = Date.now() + 30_000;
     let completed = false;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 1_000));
-      const st = await request.get(
-        `/api/t/${SLUG}/channels/${firstTextChannelPublicId}/backfill-status`,
-        { headers: authHeader },
-      );
+      const st = await getBackfillStatus(request, {
+        slug: SLUG,
+        channelPublicId: firstTextChannelPublicId,
+        auth,
+      });
       if (st.ok()) {
         const body = (await st.json()) as {
           status: { status: string; fetchedCount: number };
@@ -179,13 +180,14 @@ test.describe("Plan 1.0 channels page", () => {
     }
 
     const accessToken = await apiLogin(request);
-    const authHeader = { Authorization: `Bearer ${accessToken}` };
+    const auth = { bearerToken: accessToken };
 
     // Ensure channel is bridged via API (avoids UI flakiness waiting for bridge to start)
-    const bridgeRes = await request.post(
-      `/api/t/${SLUG}/channels/${firstTextChannelPublicId}/bridge`,
-      { headers: authHeader },
-    );
+    const bridgeRes = await bridgeChannel(request, {
+      slug: SLUG,
+      channelPublicId: firstTextChannelPublicId,
+      auth,
+    });
     // 202 = bridged; 409 = already bridged (both are OK)
     expect([202, 409]).toContain(bridgeRes.status());
 
@@ -193,10 +195,11 @@ test.describe("Plan 1.0 channels page", () => {
     const deadline = Date.now() + 60_000;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 2_000));
-      const statusRes = await request.get(
-        `/api/t/${SLUG}/channels/${firstTextChannelPublicId}/backfill-status`,
-        { headers: authHeader },
-      );
+      const statusRes = await getBackfillStatus(request, {
+        slug: SLUG,
+        channelPublicId: firstTextChannelPublicId,
+        auth,
+      });
       if (statusRes.ok()) {
         const st = (await statusRes.json()) as {
           status: { status: string; fetchedCount: number };
