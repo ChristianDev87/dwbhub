@@ -1,4 +1,5 @@
 using DwbHub.Application.Audit;
+using DwbHub.Core.Entities;
 using DwbHub.Core.Messaging;
 using DwbHub.Core.Repositories;
 using Microsoft.Extensions.Logging;
@@ -232,6 +233,164 @@ public sealed class MessageService : IMessageService
         int limit,
         CancellationToken ct = default)
         => _messages.ListByChannelBeforeAsync(tenantId, channelId, beforeSnowflake, limit, ct);
+
+    // ── User-facing Edit ──────────────────────────────────────────────────────
+
+    private static readonly TimeSpan EditWindow = TimeSpan.FromMinutes(10);
+
+    /// <inheritdoc/>
+    public async Task<EditMessageResult> EditOutboundAsync(
+        long tenantId,
+        long channelId,
+        Guid messagePublicId,
+        long actorUserId,
+        string newContent,
+        CancellationToken ct = default)
+    {
+        var message = await _messages.GetByPublicIdAsync(tenantId, channelId, messagePublicId, ct)
+            .ConfigureAwait(false);
+
+        if (message is null || message.DeletedAt is not null)
+            return new EditMessageResult.NotFound();
+
+        // Only the original author may edit (via-dwbhub messages only — author check).
+        if (message.DwbhubUserId != actorUserId)
+            return new EditMessageResult.Forbidden();
+
+        // 10-minute edit window.
+        var age = DateTimeOffset.UtcNow - message.SentAt;
+        if (age > EditWindow)
+            return new EditMessageResult.EditWindowExpired();
+
+        // Resolve webhook for this channel to call Discord.
+        var webhookRow = await _webhooks.GetByChannelAsync(tenantId, channelId, ct)
+            .ConfigureAwait(false);
+        if (webhookRow is null)
+        {
+            // No webhook means the message was never sent via our webhook — cannot edit.
+            return new EditMessageResult.Forbidden();
+        }
+
+        var token = _webhookCipher.Decrypt(
+            new ChannelWebhookEnvelope(
+                webhookRow.Ciphertext,
+                webhookRow.Nonce,
+                webhookRow.AuthTag,
+                webhookRow.KeyVersion));
+
+        // Push to Discord. WebhookGoneException (404) maps to edit_window_expired per spec.
+        try
+        {
+            await _discord.EditWebhookMessageAsync(
+                (ulong)webhookRow.DiscordWebhookId,
+                token,
+                (ulong)message.DiscordMessageId,
+                newContent,
+                ct).ConfigureAwait(false);
+        }
+        catch (WebhookGoneException)
+        {
+            return new EditMessageResult.EditWindowExpired();
+        }
+
+        var editedAt = DateTimeOffset.UtcNow;
+        await _messages.ApplyEditAsync(tenantId, message.DiscordMessageId, newContent, editedAt, ct)
+            .ConfigureAwait(false);
+
+        await _audit.RecordAsync(new AuditEvent(
+            TenantId: tenantId,
+            ActorUserId: actorUserId,
+            EventType: AuditEventTypes.MessageEdited,
+            Payload: new Dictionary<string, object?>
+            {
+                ["channel_id"] = channelId,
+                ["discord_message_id"] = message.DiscordMessageId,
+                ["message_public_id"] = messagePublicId,
+                // Intentionally NO "content" — keep PII out of the audit trail.
+            }), ct).ConfigureAwait(false);
+
+        await _broadcaster.MessageUpdatedAsync(
+            tenantId, message.DiscordMessageId, newContent, editedAt, ct)
+            .ConfigureAwait(false);
+
+        // Return the updated message projection.
+        var updated = message with { Content = newContent, EditedAt = editedAt };
+        return new EditMessageResult.Success(updated);
+    }
+
+    // ── User-facing Delete ────────────────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public async Task<DeleteMessageResult> DeleteOutboundAsync(
+        long tenantId,
+        long channelId,
+        Guid messagePublicId,
+        long actorUserId,
+        UserRole actorRole,
+        CancellationToken ct = default)
+    {
+        var message = await _messages.GetByPublicIdAsync(tenantId, channelId, messagePublicId, ct)
+            .ConfigureAwait(false);
+
+        if (message is null || message.DeletedAt is not null)
+            return new DeleteMessageResult.NotFound();
+
+        // Author OR tenant Owner may delete.
+        var isAuthor = message.DwbhubUserId == actorUserId;
+        var isOwner = actorRole == UserRole.Owner;
+        if (!isAuthor && !isOwner)
+            return new DeleteMessageResult.Forbidden();
+
+        // Hard-delete from Discord. 404 (false return) is tolerated — we still soft-delete locally.
+        var webhookRow = await _webhooks.GetByChannelAsync(tenantId, channelId, ct)
+            .ConfigureAwait(false);
+        if (webhookRow is not null)
+        {
+            var token = _webhookCipher.Decrypt(
+                new ChannelWebhookEnvelope(
+                    webhookRow.Ciphertext,
+                    webhookRow.Nonce,
+                    webhookRow.AuthTag,
+                    webhookRow.KeyVersion));
+
+            try
+            {
+                await _discord.DeleteWebhookMessageAsync(
+                    (ulong)webhookRow.DiscordWebhookId,
+                    token,
+                    (ulong)message.DiscordMessageId,
+                    ct).ConfigureAwait(false);
+            }
+            catch (WebhookGoneException)
+            {
+                // Webhook gone — still proceed with local soft-delete.
+                _logger.LogWarning(
+                    "Webhook gone when trying to delete message {DiscordMessageId} for tenant {TenantId}; proceeding with local soft-delete",
+                    message.DiscordMessageId, tenantId);
+            }
+        }
+
+        // Soft-delete locally (content preserved for audit trail).
+        await _messages.MarkDeletedAsync(tenantId, message.DiscordMessageId, ct)
+            .ConfigureAwait(false);
+
+        await _audit.RecordAsync(new AuditEvent(
+            TenantId: tenantId,
+            ActorUserId: actorUserId,
+            EventType: AuditEventTypes.MessageDeleted,
+            Payload: new Dictionary<string, object?>
+            {
+                ["channel_id"] = channelId,
+                ["discord_message_id"] = message.DiscordMessageId,
+                ["message_public_id"] = messagePublicId,
+                // Intentionally NO "content" — keep PII out of the audit trail.
+            }), ct).ConfigureAwait(false);
+
+        await _broadcaster.MessageDeletedAsync(tenantId, message.DiscordMessageId, ct)
+            .ConfigureAwait(false);
+
+        return new DeleteMessageResult.Success();
+    }
 
     // ── Private helpers ───────────────────────────────────────────────────────
 

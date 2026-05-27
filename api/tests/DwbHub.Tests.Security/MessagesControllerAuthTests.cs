@@ -283,6 +283,18 @@ file sealed class SecTestMessageService(IMessageRepository msgRepo) : IMessageSe
         long tenantId, long channelId, long? beforeSnowflake, int limit,
         CancellationToken ct = default)
         => msgRepo.ListByChannelBeforeAsync(tenantId, channelId, beforeSnowflake, limit, ct);
+
+    public Task<DwbHub.Application.Messaging.EditMessageResult> EditOutboundAsync(
+        long tenantId, long channelId, Guid messagePublicId, long actorUserId,
+        string newContent, CancellationToken ct = default)
+        => Task.FromResult<DwbHub.Application.Messaging.EditMessageResult>(
+            new DwbHub.Application.Messaging.EditMessageResult.NotFound());
+
+    public Task<DwbHub.Application.Messaging.DeleteMessageResult> DeleteOutboundAsync(
+        long tenantId, long channelId, Guid messagePublicId, long actorUserId,
+        DwbHub.Core.Entities.UserRole actorRole, CancellationToken ct = default)
+        => Task.FromResult<DwbHub.Application.Messaging.DeleteMessageResult>(
+            new DwbHub.Application.Messaging.DeleteMessageResult.NotFound());
 }
 
 /// <summary>
@@ -326,6 +338,18 @@ file sealed class SendSpyMessageService(
         long tenantId, long channelId, long? beforeSnowflake, int limit,
         CancellationToken ct = default)
         => msgRepo.ListByChannelBeforeAsync(tenantId, channelId, beforeSnowflake, limit, ct);
+
+    public Task<DwbHub.Application.Messaging.EditMessageResult> EditOutboundAsync(
+        long tenantId, long channelId, Guid messagePublicId, long actorUserId,
+        string newContent, CancellationToken ct = default)
+        => Task.FromResult<DwbHub.Application.Messaging.EditMessageResult>(
+            new DwbHub.Application.Messaging.EditMessageResult.NotFound());
+
+    public Task<DwbHub.Application.Messaging.DeleteMessageResult> DeleteOutboundAsync(
+        long tenantId, long channelId, Guid messagePublicId, long actorUserId,
+        DwbHub.Core.Entities.UserRole actorRole, CancellationToken ct = default)
+        => Task.FromResult<DwbHub.Application.Messaging.DeleteMessageResult>(
+            new DwbHub.Application.Messaging.DeleteMessageResult.NotFound());
 }
 
 /// <summary>

@@ -29,4 +29,19 @@ public static class MessagesApi
 
         return client.GetAsync(url);
     }
+
+    public static Task<HttpResponseMessage> PatchMessageAsync(
+        this HttpClient client, string tenantSlug, Guid channelPublicId, Guid messagePublicId, object body) =>
+        client.PatchAsJsonAsync(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"/api/t/{tenantSlug}/channels/{channelPublicId:D}/messages/{messagePublicId:D}"),
+            body);
+
+    public static Task<HttpResponseMessage> DeleteMessageAsync(
+        this HttpClient client, string tenantSlug, Guid channelPublicId, Guid messagePublicId) =>
+        client.DeleteAsync(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"/api/t/{tenantSlug}/channels/{channelPublicId:D}/messages/{messagePublicId:D}"));
 }

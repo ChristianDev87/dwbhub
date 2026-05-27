@@ -26,7 +26,9 @@ public sealed class MessageRepository(IDbConnectionFactory connectionFactory) : 
                     @SentAt, @EditedAt, @DeletedAt
                 )
                 ON CONFLICT (tenant_id, discord_message_id) DO NOTHING
-                RETURNING *
+                RETURNING id, public_id, tenant_id, channel_id, discord_message_id, discord_author_id,
+                          discord_author_name, via_dwbhub, dwbhub_user_id, content,
+                          sent_at, edited_at, deleted_at, created_at, updated_at
             )
             SELECT * FROM ins;
             """;
@@ -104,7 +106,7 @@ public sealed class MessageRepository(IDbConnectionFactory connectionFactory) : 
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
         const string sql = """
-            SELECT id, tenant_id, channel_id, discord_message_id, discord_author_id,
+            SELECT id, public_id, tenant_id, channel_id, discord_message_id, discord_author_id,
                    discord_author_name, via_dwbhub, dwbhub_user_id, content,
                    sent_at, edited_at, deleted_at, created_at, updated_at
             FROM messages
@@ -119,6 +121,30 @@ public sealed class MessageRepository(IDbConnectionFactory connectionFactory) : 
     }
 
     /// <inheritdoc/>
+    public async Task<Message?> GetByPublicIdAsync(
+        long tenantId,
+        long channelId,
+        Guid publicId,
+        CancellationToken ct = default)
+    {
+        using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
+        const string sql = """
+            SELECT id, public_id, tenant_id, channel_id, discord_message_id, discord_author_id,
+                   discord_author_name, via_dwbhub, dwbhub_user_id, content,
+                   sent_at, edited_at, deleted_at, created_at, updated_at
+            FROM messages
+            WHERE tenant_id  = @TenantId
+              AND channel_id = @ChannelId
+              AND public_id  = @PublicId;
+            """;
+        return await conn.QuerySingleOrDefaultAsync<Message>(
+            new CommandDefinition(sql,
+                new { TenantId = tenantId, ChannelId = channelId, PublicId = publicId },
+                cancellationToken: ct))
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<Message>> ListByChannelBeforeAsync(
         long tenantId,
         long channelId,
@@ -128,7 +154,7 @@ public sealed class MessageRepository(IDbConnectionFactory connectionFactory) : 
     {
         using var conn = await connectionFactory.OpenAsync(ct).ConfigureAwait(false);
         const string sql = """
-            SELECT id, tenant_id, channel_id, discord_message_id, discord_author_id,
+            SELECT id, public_id, tenant_id, channel_id, discord_message_id, discord_author_id,
                    discord_author_name, via_dwbhub, dwbhub_user_id, content,
                    sent_at, edited_at, deleted_at, created_at, updated_at
             FROM messages

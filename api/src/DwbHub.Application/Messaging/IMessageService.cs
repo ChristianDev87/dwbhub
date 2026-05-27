@@ -1,3 +1,4 @@
+using DwbHub.Core.Entities;
 using DwbHub.Core.Messaging;
 
 namespace DwbHub.Application.Messaging;
@@ -48,4 +49,78 @@ public interface IMessageService
         long? beforeSnowflake,
         int limit,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// User-facing edit: validates the 10-minute edit window, pushes the new content
+    /// to Discord, persists the change and broadcasts <c>MessageUpdated</c> via SignalR.
+    /// </summary>
+    /// <returns>
+    /// <see cref="EditMessageResult"/> discriminated union:
+    /// <see cref="EditMessageResult.Success"/> on success,
+    /// <see cref="EditMessageResult.NotFound"/> when the message does not exist,
+    /// <see cref="EditMessageResult.Forbidden"/> when the caller is not the author,
+    /// <see cref="EditMessageResult.EditWindowExpired"/> when more than 10 minutes have passed.
+    /// </returns>
+    Task<EditMessageResult> EditOutboundAsync(
+        long tenantId,
+        long channelId,
+        Guid messagePublicId,
+        long actorUserId,
+        string newContent,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// User-facing delete: hard-deletes from Discord (idempotent on 404),
+    /// soft-deletes in DB and broadcasts <c>MessageDeleted</c> via SignalR.
+    /// </summary>
+    /// <returns>
+    /// <see cref="DeleteMessageResult"/> discriminated union:
+    /// <see cref="DeleteMessageResult.Success"/> on success,
+    /// <see cref="DeleteMessageResult.NotFound"/> when the message does not exist (or already deleted),
+    /// <see cref="DeleteMessageResult.Forbidden"/> when the caller is neither author nor Owner.
+    /// </returns>
+    Task<DeleteMessageResult> DeleteOutboundAsync(
+        long tenantId,
+        long channelId,
+        Guid messagePublicId,
+        long actorUserId,
+        UserRole actorRole,
+        CancellationToken ct = default);
+}
+
+// ── Result discriminated unions ───────────────────────────────────────────────
+
+/// <summary>Result of <see cref="IMessageService.EditOutboundAsync"/>.</summary>
+public abstract record EditMessageResult
+{
+    private EditMessageResult() { }
+
+    /// <summary>Edit succeeded. Contains the updated message row.</summary>
+    public sealed record Success(Message UpdatedMessage) : EditMessageResult;
+
+    /// <summary>Message not found (wrong tenant / channel / id, or already deleted).</summary>
+    public sealed record NotFound : EditMessageResult;
+
+    /// <summary>Caller is not the original author of the message.</summary>
+    public sealed record Forbidden : EditMessageResult;
+
+    /// <summary>
+    /// The 10-minute edit window has elapsed (or Discord returned 404 for the webhook message).
+    /// </summary>
+    public sealed record EditWindowExpired : EditMessageResult;
+}
+
+/// <summary>Result of <see cref="IMessageService.DeleteOutboundAsync"/>.</summary>
+public abstract record DeleteMessageResult
+{
+    private DeleteMessageResult() { }
+
+    /// <summary>Delete succeeded (Discord hard-delete + DB soft-delete).</summary>
+    public sealed record Success : DeleteMessageResult;
+
+    /// <summary>Message not found or already soft-deleted.</summary>
+    public sealed record NotFound : DeleteMessageResult;
+
+    /// <summary>Caller is neither the author nor a tenant Owner.</summary>
+    public sealed record Forbidden : DeleteMessageResult;
 }

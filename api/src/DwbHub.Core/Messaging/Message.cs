@@ -8,6 +8,7 @@ namespace DwbHub.Core.Messaging;
 public sealed record Message
 {
     public long Id { get; init; }
+    public Guid PublicId { get; init; }                   // URL-safe external identifier (non-enumerable)
     public long TenantId { get; init; }
     public long ChannelId { get; init; }                  // internal guild_channels.id
     public long DiscordMessageId { get; init; }
