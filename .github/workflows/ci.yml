@@ -236,14 +236,16 @@ jobs:
     name: Discord round-trip tests
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: [self-hosted, linux, dotnet10]
-    needs: [container-smoke]
+    # Round-trip relies on a working bot connection. discord-live-tests
+    # verifies the gateway connect and REST reachability against the same
+    # secrets first — if that's broken, round-trip has nothing to verify
+    # against and would just burn Discord rate-limits.
+    needs: [container-smoke, discord-live-tests]
     timeout-minutes: 15
     concurrency:
-      # Separate concurrency group from discord-live so both can be queued
-      # independently. Both use the same bot but run different test categories;
-      # keeping them in separate groups avoids one cancelling the other. If
-      # simultaneous bot usage becomes a problem in practice, change both jobs
-      # to concurrency group: discord-shared.
+      # Same bot, so we don't want two jobs hammering it in parallel. needs:
+      # above already serialises with discord-live-tests; the group here
+      # avoids two PRs against main from running round-trip simultaneously.
       group: discord-roundtrip
       cancel-in-progress: false
     steps:
