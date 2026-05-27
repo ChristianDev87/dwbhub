@@ -258,6 +258,50 @@ services:
     networks: [test-net]
     command: ["discord-live"]
 
+  discord-roundtrip-tests:
+    build:
+      context: ../..
+      dockerfile: deploy/test-runners/Dockerfile.backend
+      tags: [dwbhub-test-runner-backend:dev]
+    volumes:
+      - ../..:/workspace:ro
+      - ${TEST_RESULTS_DIR:-../../test-results}:/results
+      # docker.sock required so Testcontainers can spin up a Postgres sidecar
+      # (same DinD pattern as backend-tests — the round-trip tests use the shared
+      # PostgresFixture / Testcontainers.PostgreSql to provision the DB).
+      - /var/run/docker.sock:/var/run/docker.sock
+    tmpfs:
+      # dotnet test compiles DwbHub.Tests.Integration and its transitive deps.
+      # tmpfs shadows the :ro workspace bind at obj/bin so dotnet can write.
+      - /workspace/api/src/DwbHub.Api/obj
+      - /workspace/api/src/DwbHub.Api/bin
+      - /workspace/api/src/DwbHub.Application/obj
+      - /workspace/api/src/DwbHub.Application/bin
+      - /workspace/api/src/DwbHub.Bot/obj
+      - /workspace/api/src/DwbHub.Bot/bin
+      - /workspace/api/src/DwbHub.Core/obj
+      - /workspace/api/src/DwbHub.Core/bin
+      - /workspace/api/src/DwbHub.Data/obj
+      - /workspace/api/src/DwbHub.Data/bin
+      - /workspace/api/src/DwbHub.Infrastructure/obj
+      - /workspace/api/src/DwbHub.Infrastructure/bin
+      - /workspace/api/tests/DwbHub.Tests.Integration/obj
+      - /workspace/api/tests/DwbHub.Tests.Integration/bin
+      - /workspace/api/tests/DwbHub.Tests.Shared/obj
+      - /workspace/api/tests/DwbHub.Tests.Shared/bin
+    extra_hosts:
+      # Discord.Net resolves gateway + REST endpoints via public DNS; extra_hosts
+      # doesn't interfere with that. host.docker.internal enables Testcontainers
+      # sibling-container connectivity (same pattern as backend-tests).
+      - "host.docker.internal:host-gateway"
+    environment:
+      TESTCONTAINERS_HOST_OVERRIDE: ${TESTCONTAINERS_HOST_OVERRIDE:-host.docker.internal}
+      TESTCONTAINERS_RYUK_DISABLED: "true"
+    secrets:
+      - discord_token
+    networks: [test-net]
+    command: ["discord-roundtrip"]
+
 networks:
   test-net:
     driver: bridge
