@@ -216,14 +216,30 @@ test.describe("Plan 1.0 channels page", () => {
       timeout: 10_000,
     });
 
+    // Test-isolation workaround: the TanStack Query staleTime in PR #67/#70 plus
+    // FakeDiscordRestChannelClient's deterministic channel IDs (which migrate
+    // across guilds via ON CONFLICT) means a prior browser project's bridge
+    // toggle can be reflected in this test's QueryClient cache. A hard reload
+    // discards the cache and fetches fresh server state. The proper fix lives in
+    // the Fake client (give it guild-scoped channel IDs); tracked separately.
+    await page.reload();
+    await expect(page.locator('[data-testid^="channel-row-"]')).toHaveCount(4, {
+      timeout: 10_000,
+    });
+
     const toggle = page.locator(
       `[data-testid="channel-bridge-toggle-${firstTextChannelPublicId}"]`,
     );
     // Should be bridged at this point
     await expect(toggle).toBeChecked({ timeout: 5_000 });
 
-    // Unbridge
-    await toggle.uncheck();
+    // Unbridge — use click() instead of uncheck() because the checkbox is a
+    // React controlled input: uncheck() performs an immediate post-click
+    // state check that races with React's re-render cycle, causing a
+    // "did not change its state" error even though the onChange fires
+    // correctly. click() just dispatches the event; the assertion below
+    // waits for the async optimistic-update + API round-trip to settle.
+    await toggle.click();
 
     // Toggle should now be unchecked (unbridged)
     await expect(toggle).not.toBeChecked({ timeout: 10_000 });
