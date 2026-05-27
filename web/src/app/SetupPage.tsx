@@ -84,7 +84,7 @@ export function SetupPage(): React.JSX.Element {
       }
       // openapi-fetch parses the JSON body at runtime even when the schema
       // declares `content?: never`; cast to recover the actual value.
-      return (data as unknown) as SetupCompleteBody;
+      return data as unknown as SetupCompleteBody;
     },
     onSuccess: (result) => {
       navigate(`/t/${result.tenantSlug}/verify-email-prompt`);
@@ -227,9 +227,7 @@ export function SetupPage(): React.JSX.Element {
           data-testid="setup-submit"
           className="inline-flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
         >
-          {isSubmitting && (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          )}
+          {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
           {t("setup.submit")}
         </button>
       </form>

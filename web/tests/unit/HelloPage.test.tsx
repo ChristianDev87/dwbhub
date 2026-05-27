@@ -64,8 +64,7 @@ describe("HelloPage", () => {
     (fetch as ReturnType<typeof vi.fn>).mockImplementation(
       async (u: RequestInfo | URL) => {
         const url = getUrl(u);
-        if (url.includes("/api/health"))
-          return new Promise<Response>(() => {});
+        if (url.includes("/api/health")) return new Promise<Response>(() => {});
         throw new Error(`unexpected fetch: ${url}`);
       },
     );
@@ -83,7 +82,11 @@ describe("HelloPage", () => {
         const url = getUrl(u);
         if (url.includes("/api/health"))
           return new Response(
-            JSON.stringify({ status: "ok", version: "1.2.3", uptime_seconds: 99 }),
+            JSON.stringify({
+              status: "ok",
+              version: "1.2.3",
+              uptime_seconds: 99,
+            }),
             { status: 200, headers: { "content-type": "application/json" } },
           );
         throw new Error(`unexpected fetch: ${url}`);
@@ -104,8 +107,7 @@ describe("HelloPage", () => {
     (fetch as ReturnType<typeof vi.fn>).mockImplementation(
       async (u: RequestInfo | URL) => {
         const url = getUrl(u);
-        if (url.includes("/api/health"))
-          throw new Error("network down");
+        if (url.includes("/api/health")) throw new Error("network down");
         throw new Error(`unexpected fetch: ${url}`);
       },
     );

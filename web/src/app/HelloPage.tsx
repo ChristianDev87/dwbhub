@@ -26,7 +26,7 @@ export function HelloPage(): React.JSX.Element {
     queryFn: async (): Promise<HealthResponse> => {
       const { data: raw, error: fetchError } = await api.GET("/api/health");
       if (fetchError) throw fetchError;
-      return (raw as unknown) as HealthResponse;
+      return raw as unknown as HealthResponse;
     },
   });
 
@@ -54,7 +54,8 @@ export function HelloPage(): React.JSX.Element {
         )}
         {isError && (
           <span data-testid="api-status-error" className="text-red-600">
-            {t("hello.api_status_error")} ({(error as Error)?.message ?? "unknown"})
+            {t("hello.api_status_error")} (
+            {(error as Error)?.message ?? "unknown"})
           </span>
         )}
       </section>

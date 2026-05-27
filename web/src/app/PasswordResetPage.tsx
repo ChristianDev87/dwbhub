@@ -115,9 +115,7 @@ export function PasswordResetPage(): React.JSX.Element {
           data-testid="reset-submit"
           className="inline-flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
         >
-          {mutation.isPending && (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          )}
+          {mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
           {t("passwordReset.submit")}
         </button>
       </form>
