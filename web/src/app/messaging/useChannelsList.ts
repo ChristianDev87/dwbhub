@@ -2,17 +2,31 @@
  * useChannelsList — fetches the channel list for a guild and exposes bridge
  * toggle + re-sync operations.
  *
- * Live updates: subscribes to `ChannelBridgeChanged` events via the shared
- * SignalR hub and patches the local list without a full re-fetch.
+ * Migrated to typed openapi-fetch + TanStack Query (PR 5c).
  *
- * Optimistic UI: bridge toggle immediately updates local state and reverts
- * on API error (4xx / 5xx). The caller is notified via `toggleError`.
+ * Live updates: subscribes to `ChannelBridgeChanged`, `BackfillProgress` and
+ * `BackfillComplete` events via the shared SignalR hub and patches the cache
+ * without a full re-fetch.
+ *
+ * Optimistic UI: bridge toggle immediately updates the cache and reverts on
+ * API error (4xx / 5xx). The caller is notified via `toggleError`.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "../auth-context";
+import { useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useApiClient } from "@/lib/api/useApiClient";
+import { qk } from "@/lib/api/queryKeys";
 import { useMessagesHub } from "./useMessagesHub";
 import type { MessageEvent } from "./messages-events";
+import type { components } from "@/lib/api/generated/schema";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type SchemaChannelListItem = components["schemas"]["ChannelListItem"];
+type SchemaBackfillItem = components["schemas"]["BackfillStatusItem"];
+type SchemaChannelListResponse = components["schemas"]["ChannelListResponse"];
 
 export interface BackfillInfo {
   status: "pending" | "running" | "complete" | "failed" | "cancelled";
@@ -28,10 +42,6 @@ export interface ChannelListItem {
   backfill?: BackfillInfo;
 }
 
-interface ChannelListResponse {
-  channels: ChannelListItem[];
-}
-
 export interface UseChannelsListResult {
   channels: ChannelListItem[];
   isLoading: boolean;
@@ -41,160 +51,244 @@ export interface UseChannelsListResult {
   toggleBridge: (channelPublicId: string, enable: boolean) => Promise<void>;
 }
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function mapSchemaItem(item: SchemaChannelListItem): ChannelListItem {
+  const base: ChannelListItem = {
+    publicId: item.publicId ?? "",
+    discordChannelId: item.discordChannelId ?? 0,
+    name: item.name ?? "",
+    channelType: item.channelType ?? 0,
+    isBridged: item.isBridged ?? false,
+  };
+  if (item.backfill) {
+    const b = item.backfill as SchemaBackfillItem;
+    base.backfill = {
+      status: (b.status ?? "pending") as BackfillInfo["status"],
+      fetchedCount: b.fetchedCount ?? 0,
+    };
+  }
+  return base;
+}
+
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
+
 export function useChannelsList(
   slug: string,
   guildPublicId: string,
 ): UseChannelsListResult {
-  const { state } = useAuth();
-  const accessToken = state.kind === "authenticated" ? state.accessToken : null;
+  const api = useApiClient();
+  const queryClient = useQueryClient();
 
-  const [channels, setChannels] = useState<ChannelListItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [toggleError, setToggleError] = useState<string | null>(null);
-
-  async function loadChannels() {
-    if (!accessToken) return;
-    setIsLoading(true);
-    setError(false);
-    try {
-      const res = await fetch(
-        `/api/t/${encodeURIComponent(slug)}/guilds/${encodeURIComponent(guildPublicId)}/channels`,
+  // ── Channel list query ───────────────────────────────────────────────────
+  const { data, isLoading, isError } = useQuery({
+    queryKey: qk.channels.list(slug, guildPublicId),
+    queryFn: async () => {
+      const { data: respData, error } = await api.GET(
+        "/api/t/{slug}/guilds/{guildPublicId}/channels",
         {
-          credentials: "include",
-          headers: { Authorization: `Bearer ${accessToken}` },
+          params: { path: { slug, guildPublicId } },
         },
       );
-      if (!res.ok) {
-        setError(true);
-        return;
+      if (error) throw error;
+      return respData as SchemaChannelListResponse;
+    },
+    staleTime: 30_000,
+    enabled: slug.length > 0 && guildPublicId.length > 0,
+  });
+
+  const channels: ChannelListItem[] = (data?.channels ?? []).map(mapSchemaItem);
+
+  // ── Toggle-error state — stored separately (not in query data) ───────────
+  // We use useMutation's error state for display.
+
+  // ── Bridge / Unbridge mutation with optimistic update ───────────────────
+  const toggleBridgeMutation = useMutation<
+    void,
+    { code: string },
+    { channelPublicId: string; enable: boolean },
+    { previousData: SchemaChannelListResponse | undefined }
+  >({
+    mutationFn: async ({ channelPublicId, enable }) => {
+      if (enable) {
+        const { error } = await api.POST(
+          "/api/t/{slug}/channels/{channelPublicId}/bridge",
+          {
+            params: { path: { slug, channelPublicId } },
+          },
+        );
+        if (error) {
+          const status = (error as { status?: number }).status ?? "error";
+          throw { code: `HTTP ${String(status)}` };
+        }
+      } else {
+        const { error } = await api.DELETE(
+          "/api/t/{slug}/channels/{channelPublicId}/bridge",
+          {
+            params: { path: { slug, channelPublicId } },
+          },
+        );
+        if (error) {
+          const status = (error as { status?: number }).status ?? "error";
+          throw { code: `HTTP ${String(status)}` };
+        }
       }
-      const body = (await res.json()) as ChannelListResponse;
-      setChannels(body.channels);
-    } catch {
-      setError(true);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (accessToken) {
-      void loadChannels();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug, guildPublicId, accessToken]);
-
-  const hubHandler = useCallback(
-    (evt: MessageEvent) => {
-      if (evt.kind === "ChannelBridgeChanged") {
-        const { channelPublicId, isBridged } = evt.payload;
-        setChannels((prev) =>
-          prev.map((c) =>
-            c.publicId === channelPublicId ? { ...c, isBridged } : c,
-          ),
-        );
-      } else if (evt.kind === "BackfillProgress") {
-        const { channelPublicId, fetchedCount } = evt.payload;
-        setChannels((prev) =>
-          prev.map((c) =>
-            c.publicId === channelPublicId
-              ? {
-                  ...c,
-                  backfill: {
-                    status: "running" as BackfillInfo["status"],
-                    fetchedCount,
-                  },
-                }
-              : c,
-          ),
-        );
-      } else if (evt.kind === "BackfillComplete") {
-        const { channelPublicId, totalFetched } = evt.payload;
-        setChannels((prev) =>
-          prev.map((c) =>
-            c.publicId === channelPublicId
-              ? {
-                  ...c,
-                  backfill: { status: "complete", fetchedCount: totalFetched },
-                }
-              : c,
-          ),
+    },
+    onMutate: async ({ channelPublicId, enable }) => {
+      await queryClient.cancelQueries({
+        queryKey: qk.channels.list(slug, guildPublicId),
+      });
+      const previousData = queryClient.getQueryData<SchemaChannelListResponse>(
+        qk.channels.list(slug, guildPublicId),
+      );
+      // Optimistic update
+      queryClient.setQueryData<SchemaChannelListResponse>(
+        qk.channels.list(slug, guildPublicId),
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            channels: (old.channels ?? []).map((c) =>
+              c.publicId === channelPublicId ? { ...c, isBridged: enable } : c,
+            ),
+          };
+        },
+      );
+      return { previousData };
+    },
+    onError: (_err, _vars, ctx) => {
+      // Rollback
+      if (ctx?.previousData !== undefined) {
+        queryClient.setQueryData(
+          qk.channels.list(slug, guildPublicId),
+          ctx.previousData,
         );
       }
     },
-    // stable: does not depend on any variable from closure
-    [],
-  );
+    onSettled: () => {
+      void queryClient.invalidateQueries({
+        queryKey: qk.channels.list(slug, guildPublicId),
+      });
+    },
+  });
 
-  useMessagesHub(hubHandler);
-
+  // Exposed async wrapper so ChannelsPage can await it (matching the old API).
+  // Errors are surfaced via `toggleError` (mutation.error); we swallow the
+  // thrown rejection here so that `void toggleBridge(...)` callers in the
+  // component do not produce an unhandled promise rejection.
   async function toggleBridge(
     channelPublicId: string,
     enable: boolean,
   ): Promise<void> {
-    if (!accessToken) return;
-    setToggleError(null);
-
-    // Optimistic update
-    setChannels((prev) =>
-      prev.map((c) =>
-        c.publicId === channelPublicId ? { ...c, isBridged: enable } : c,
-      ),
-    );
-
     try {
-      const url = `/api/t/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channelPublicId)}/bridge`;
-      const res = await fetch(url, {
-        method: enable ? "POST" : "DELETE",
-        credentials: "include",
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-
-      if (!res.ok) {
-        // Revert on error
-        setChannels((prev) =>
-          prev.map((c) =>
-            c.publicId === channelPublicId ? { ...c, isBridged: !enable } : c,
-          ),
-        );
-        setToggleError(`HTTP ${res.status.toString()}`);
-      }
+      await toggleBridgeMutation.mutateAsync({ channelPublicId, enable });
     } catch {
-      // Revert on network error
-      setChannels((prev) =>
-        prev.map((c) =>
-          c.publicId === channelPublicId ? { ...c, isBridged: !enable } : c,
-        ),
-      );
-      setToggleError("network");
+      // Intentionally swallowed — error is exposed via toggleError.
     }
   }
 
+  // ── Sync mutation ────────────────────────────────────────────────────────
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await api.POST(
+        "/api/t/{slug}/guilds/{guildPublicId}/channels/sync",
+        {
+          params: { path: { slug, guildPublicId } },
+        },
+      );
+      if (error) throw error;
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({
+        queryKey: qk.channels.list(slug, guildPublicId),
+      });
+    },
+  });
+
   function refresh() {
-    // Also triggers a channel sync on the server side
-    if (!accessToken) return;
-    void (async () => {
-      try {
-        await fetch(
-          `/api/t/${encodeURIComponent(slug)}/guilds/${encodeURIComponent(guildPublicId)}/channels/sync`,
-          {
-            method: "POST",
-            credentials: "include",
-            headers: { Authorization: `Bearer ${accessToken}` },
+    syncMutation.mutate();
+  }
+
+  // ── SignalR handler — writes into the exact same query cache key ─────────
+  const hubHandler = useCallback(
+    (evt: MessageEvent) => {
+      if (evt.kind === "ChannelBridgeChanged") {
+        const { channelPublicId, isBridged } = evt.payload;
+        queryClient.setQueryData<SchemaChannelListResponse>(
+          qk.channels.list(slug, guildPublicId),
+          (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              channels: (old.channels ?? []).map((c) =>
+                c.publicId === channelPublicId ? { ...c, isBridged } : c,
+              ),
+            };
           },
         );
-      } catch {
-        // Ignore sync errors — loadChannels will still refresh the list
+      } else if (evt.kind === "BackfillProgress") {
+        const { channelPublicId, fetchedCount } = evt.payload;
+        queryClient.setQueryData<SchemaChannelListResponse>(
+          qk.channels.list(slug, guildPublicId),
+          (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              channels: (old.channels ?? []).map((c) =>
+                c.publicId === channelPublicId
+                  ? {
+                      ...c,
+                      backfill: {
+                        status: "running",
+                        fetchedCount,
+                      } as SchemaBackfillItem,
+                    }
+                  : c,
+              ),
+            };
+          },
+        );
+      } else if (evt.kind === "BackfillComplete") {
+        const { channelPublicId, totalFetched } = evt.payload;
+        queryClient.setQueryData<SchemaChannelListResponse>(
+          qk.channels.list(slug, guildPublicId),
+          (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              channels: (old.channels ?? []).map((c) =>
+                c.publicId === channelPublicId
+                  ? {
+                      ...c,
+                      backfill: {
+                        status: "complete",
+                        fetchedCount: totalFetched,
+                      } as SchemaBackfillItem,
+                    }
+                  : c,
+              ),
+            };
+          },
+        );
       }
-      await loadChannels();
-    })();
-  }
+    },
+    [queryClient, slug, guildPublicId],
+  );
+
+  useMessagesHub(hubHandler);
+
+  // ── Derive toggle error from mutation state ──────────────────────────────
+  const mutErr = toggleBridgeMutation.error as { code?: string } | null;
+  const toggleError = mutErr ? (mutErr.code ?? "error") : null;
 
   return {
     channels,
     isLoading,
-    error,
+    error: isError,
     toggleError,
     refresh,
     toggleBridge,

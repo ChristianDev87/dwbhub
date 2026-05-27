@@ -8,6 +8,10 @@ storybook-static/
 
 # Dependencies
 node_modules/
+.pnpm-store/
+
+# Lock files
+pnpm-lock.yaml
 
 # Test outputs
 coverage/
