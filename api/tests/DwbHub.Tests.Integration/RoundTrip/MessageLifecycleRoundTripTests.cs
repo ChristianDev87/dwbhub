@@ -319,12 +319,12 @@ public sealed class MessageLifecycleRoundTripTests : IAsyncLifetime
 
     [SkippableFact]
     [Trait("Category", "DiscordRoundTrip")]
-    public async Task Edit_message_via_webhook_updates_real_discord_message()
+    public async Task Edit_message_via_api_updates_real_discord_message()
     {
         Skip.IfNot(_envOk,
             "DISCORD_DEV_BOT_TOKEN / DISCORD_DEV_GUILD_ID / DISCORD_DEV_CHANNEL_ID not all set");
 
-        // Setup: send a message first.
+        // Setup: send a message first through the full pipeline.
         var initialContent = TestContent("edit-test-initial");
         var postRes = await _client.PostAsJsonAsync(
             $"/api/t/{_tenantSlug}/channels/{_bridgedChannelPublicId:D}/messages",
@@ -332,39 +332,40 @@ public sealed class MessageLifecycleRoundTripTests : IAsyncLifetime
         postRes.StatusCode.Should().Be(HttpStatusCode.Created);
         var postBody = await postRes.Content.ReadFromJsonAsync<SendMessageBody>().ConfigureAwait(false);
         postBody.Should().NotBeNull();
-        var messageSnowflake = (ulong)postBody!.DiscordMessageId;
+        var messagePublicId = postBody!.PublicId;
+        var messageSnowflake = (ulong)postBody.DiscordMessageId;
 
-        // Verify it arrived.
+        // Verify the message arrived on Discord.
         var sent = await PollForDiscordMessageAsync(
             _testChannelDiscordId, initialContent, TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         sent.Should().NotBeNull("message must be present in Discord before editing");
 
-        // Edit directly via Discord REST (webhook edit path).
+        // Edit via the real PATCH endpoint (full app pipeline → DiscordRestChannelClient).
         var editedContent = TestContent("edit-test-edited");
-        var edited = await _verifyClient.EditWebhookMessageAsync(
-            _webhookId, _webhookToken, messageSnowflake, editedContent,
-            CancellationToken.None).ConfigureAwait(false);
-        edited.Content.Should().Be(editedContent,
-            "Discord must reflect the new content after webhook edit");
-        edited.Id.Should().Be(messageSnowflake, "the same message snowflake must be returned");
+        var patchRes = await _client.PatchAsJsonAsync(
+            $"/api/t/{_tenantSlug}/channels/{_bridgedChannelPublicId:D}/messages/{messagePublicId:D}",
+            new { content = editedContent }).ConfigureAwait(false);
+        patchRes.StatusCode.Should().Be(HttpStatusCode.OK,
+            "PATCH /messages/{id} must return 200 OK after a successful edit");
 
-        // Secondary verification: poll Discord until the edit appears.
+        // Verification: poll Discord until the edited content appears.
         var verified = await PollForDiscordMessageAsync(
-            _testChannelDiscordId, editedContent, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            _testChannelDiscordId, editedContent, TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         verified.Should().NotBeNull(
-            "the edited content must be visible in Discord REST after the edit");
+            "the edited content must be visible in Discord REST after the API edit");
+        verified!.Id.Should().Be(messageSnowflake, "the same Discord snowflake must be present");
     }
 
     // ── Test 3: Delete ───────────────────────────────────────────────────────
 
     [SkippableFact]
     [Trait("Category", "DiscordRoundTrip")]
-    public async Task Delete_message_via_webhook_removes_real_discord_message()
+    public async Task Delete_message_via_api_removes_real_discord_message()
     {
         Skip.IfNot(_envOk,
             "DISCORD_DEV_BOT_TOKEN / DISCORD_DEV_GUILD_ID / DISCORD_DEV_CHANNEL_ID not all set");
 
-        // Setup: send a message first.
+        // Setup: send a message first through the full pipeline.
         var content = TestContent("delete-test");
         var postRes = await _client.PostAsJsonAsync(
             $"/api/t/{_tenantSlug}/channels/{_bridgedChannelPublicId:D}/messages",
@@ -372,21 +373,24 @@ public sealed class MessageLifecycleRoundTripTests : IAsyncLifetime
         postRes.StatusCode.Should().Be(HttpStatusCode.Created);
         var postBody = await postRes.Content.ReadFromJsonAsync<SendMessageBody>().ConfigureAwait(false);
         postBody.Should().NotBeNull();
-        var messageSnowflake = (ulong)postBody!.DiscordMessageId;
+        var messagePublicId = postBody!.PublicId;
+        var messageSnowflake = (ulong)postBody.DiscordMessageId;
 
-        // Verify it arrived.
+        // Verify the message arrived on Discord.
         var sent = await PollForDiscordMessageAsync(
             _testChannelDiscordId, content, TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         sent.Should().NotBeNull("message must be present in Discord before deleting");
 
-        // Delete via Discord REST (webhook delete path).
-        var deleted = await _verifyClient.DeleteWebhookMessageAsync(
-            _webhookId, _webhookToken, messageSnowflake, CancellationToken.None).ConfigureAwait(false);
-        deleted.Should().BeTrue("DeleteWebhookMessageAsync must return true on success");
+        // Delete via the real DELETE endpoint (full app pipeline → DiscordRestChannelClient).
+        var deleteRes = await _client.DeleteAsync(
+            $"/api/t/{_tenantSlug}/channels/{_bridgedChannelPublicId:D}/messages/{messagePublicId:D}")
+            .ConfigureAwait(false);
+        deleteRes.StatusCode.Should().Be(HttpStatusCode.NoContent,
+            "DELETE /messages/{id} must return 204 NoContent after a successful delete");
 
-        // Mark as gone so teardown skips it.
+        // Verification: poll Discord until the message is gone.
         await AssertDiscordMessageGoneAsync(
-            _testChannelDiscordId, messageSnowflake, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            _testChannelDiscordId, messageSnowflake, TimeSpan.FromSeconds(15)).ConfigureAwait(false);
     }
 
     // ── Helper methods ───────────────────────────────────────────────────────
@@ -487,4 +491,4 @@ public sealed class MessageLifecycleRoundTripTests : IAsyncLifetime
 
 // ── Response shapes ───────────────────────────────────────────────────────────
 
-file sealed record SendMessageBody(long Id, long DiscordMessageId, DateTimeOffset SentAt);
+file sealed record SendMessageBody(long Id, Guid PublicId, long DiscordMessageId, DateTimeOffset SentAt);

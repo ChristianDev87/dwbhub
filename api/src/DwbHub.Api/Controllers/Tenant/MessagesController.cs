@@ -83,7 +83,7 @@ public sealed class MessagesController(
                 ct).ConfigureAwait(false);
 
             return StatusCode(StatusCodes.Status201Created,
-                new SendMessageResponse(result.Id, result.DiscordMessageId, result.SentAt));
+                new SendMessageResponse(result.Id, result.PublicId, result.DiscordMessageId, result.SentAt));
         }
         catch (DiscordRateLimitException ex)
         {
