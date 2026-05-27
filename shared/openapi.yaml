@@ -1225,79 +1225,6 @@ paths:
             text/json:
               schema:
                 $ref: '#/components/schemas/MeResponse'
-  '/api/t/{slug}/test-only/messages/{messageId}/edit':
-    post:
-      tags:
-        - TestOnly
-      parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: messageId
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TestEditRequest'
-          text/json:
-            schema:
-              $ref: '#/components/schemas/TestEditRequest'
-          application/*+json:
-            schema:
-              $ref: '#/components/schemas/TestEditRequest'
-      responses:
-        '204':
-          description: No Content
-        '404':
-          description: Not Found
-          content:
-            text/plain:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-            text/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-  '/api/t/{slug}/test-only/messages/{messageId}/delete':
-    post:
-      tags:
-        - TestOnly
-      parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: messageId
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '204':
-          description: No Content
-        '404':
-          description: Not Found
-          content:
-            text/plain:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-            text/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
   '/api/t/{slug}/test-only/messages/inject-received':
     post:
       tags:
@@ -1682,6 +1609,9 @@ components:
         id:
           type: integer
           format: int64
+        publicId:
+          type: string
+          format: uuid
         discordMessageId:
           type: integer
           format: int64
@@ -1737,13 +1667,6 @@ components:
         completedAt:
           type: string
           format: date-time
-          nullable: true
-      additionalProperties: false
-    TestEditRequest:
-      type: object
-      properties:
-        content:
-          type: string
           nullable: true
       additionalProperties: false
     TestInjectReceivedRequest:

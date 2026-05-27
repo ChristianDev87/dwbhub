@@ -24,7 +24,18 @@ import {
 } from "./helpers/bootstrap";
 import { postTenantLogin } from "./helpers/api/tenants";
 import { bridgeChannel, getBackfillStatus } from "./helpers/api/channels";
-import { testOnly } from "./helpers/api/messages";
+import { testOnly, patchMessage, deleteMessage } from "./helpers/api/messages";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface SendMessageResponseBody {
+  id: number;
+  publicId: string;
+  discordMessageId: number;
+  sentAt: string;
+}
 
 const {
   tenantSlug: SLUG,
@@ -277,23 +288,34 @@ test.describe("Plan 1.0 chat page", () => {
     expect(value.length).toBeLessThanOrEqual(2000);
   });
 
-  // ── Test 6: edited Discord message reflects in UI via test-only endpoint ──
+  // ── Test 6: edited Discord message reflects in UI via real PATCH endpoint ──
 
   test("edit event updates message content in the chat list", async ({
     page,
     request,
   }) => {
-    const { accessToken } = await setupBridgedChannel(page, request);
+    const { channelPublicId, accessToken } = await setupBridgedChannel(
+      page,
+      request,
+    );
     const auth = { bearerToken: accessToken };
 
-    // Send a message
+    // Send a message via API so we get the publicId back in the response.
+    // The message is sent through the real POST endpoint, which triggers
+    // the SignalR MessageReceived broadcast — the UI will show it.
     const uniqueContent = `edit-test-${Date.now()}`;
-    const input = page.getByTestId("send-box-input");
-    await input.fill(uniqueContent);
-    await input.press("Enter");
+    const sendRes = await request.post(
+      `/api/t/${SLUG}/channels/${channelPublicId}/messages`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        data: { content: uniqueContent },
+      },
+    );
+    expect(sendRes.status()).toBe(201);
+    const sendBody = (await sendRes.json()) as SendMessageResponseBody;
+    const messagePublicId = sendBody.publicId;
 
-    // Wait for the message to appear and for the pending state to clear
-    // (pending rows have a negative temp id; we need the real DB id)
+    // Wait for the message to appear in the UI (via SignalR push).
     const msgRow = page.locator('[data-testid^="message-row-"]').filter({
       hasText: uniqueContent,
     });
@@ -305,27 +327,25 @@ test.describe("Plan 1.0 chat page", () => {
       msgRow.first().locator('[data-testid="message-pending"]'),
     ).toHaveCount(0, { timeout: 15_000 });
 
-    // Extract the message row testid to get its ID. Capture a STABLE testid-based
-    // locator here BEFORE the edit fires — after the edit the row's hasText no
-    // longer contains `uniqueContent` (server-pushed MessageUpdated replaces
-    // m.content with the new value), so a hasText-filter would stop matching
-    // and Playwright would report "element(s) not found".
+    // Capture a STABLE testid-based locator BEFORE the edit fires — after the edit
+    // the row's hasText no longer contains `uniqueContent` (server-pushed
+    // MessageUpdated replaces m.content with the new value), so a hasText-filter
+    // would stop matching and Playwright would report "element(s) not found".
     const testId = await msgRow.first().getAttribute("data-testid");
-    const messageId = testId?.replace("message-row-", "");
-    if (!testId || !messageId)
-      throw new Error("Could not extract message ID from testid");
+    if (!testId) throw new Error("Could not find message-row testid");
     const stableRow = page.locator(`[data-testid="${testId}"]`);
 
-    // Inject edit via test-only endpoint
+    // Edit via the real PATCH endpoint — flows through the full API pipeline.
     const editedContent = `edited-${Date.now()}`;
-    const editRes = await testOnly.editMessage(request, {
+    const editRes = await patchMessage(request, {
       slug: SLUG,
-      messageId,
+      channelPublicId,
+      messagePublicId,
       auth,
       body: { content: editedContent },
     });
-    // 204 = success; 404 = test mode not active (env-var not set)
-    expect(editRes.status()).toBe(204);
+    // 200 = success; 422 = edit window expired (should not happen in a fresh test)
+    expect(editRes.status()).toBe(200);
 
     // "(edited)" indicator should appear on the SAME row (located by stable testid).
     await expect(
@@ -343,14 +363,28 @@ test.describe("Plan 1.0 chat page", () => {
     page,
     request,
   }) => {
-    const { accessToken } = await setupBridgedChannel(page, request);
+    const { channelPublicId, accessToken } = await setupBridgedChannel(
+      page,
+      request,
+    );
     const auth = { bearerToken: accessToken };
 
+    // Send a message via API so we get the publicId back in the response.
+    // The message is sent through the real POST endpoint, which triggers
+    // the SignalR MessageReceived broadcast — the UI will show it.
     const uniqueContent = `delete-test-${Date.now()}`;
-    const input = page.getByTestId("send-box-input");
-    await input.fill(uniqueContent);
-    await input.press("Enter");
+    const sendRes = await request.post(
+      `/api/t/${SLUG}/channels/${channelPublicId}/messages`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        data: { content: uniqueContent },
+      },
+    );
+    expect(sendRes.status()).toBe(201);
+    const sendBody = (await sendRes.json()) as SendMessageResponseBody;
+    const messagePublicId = sendBody.publicId;
 
+    // Wait for the message to appear in the UI (via SignalR push).
     const msgRow = page.locator('[data-testid^="message-row-"]').filter({
       hasText: uniqueContent,
     });
@@ -365,16 +399,17 @@ test.describe("Plan 1.0 chat page", () => {
     // row's content is replaced with the localized deleted-placeholder so a
     // hasText-filter on `uniqueContent` would stop matching.
     const testId = await msgRow.first().getAttribute("data-testid");
-    const messageId = testId?.replace("message-row-", "");
-    if (!testId || !messageId)
-      throw new Error("Could not extract message ID from testid");
+    if (!testId) throw new Error("Could not find message-row testid");
     const stableRow = page.locator(`[data-testid="${testId}"]`);
 
-    const deleteRes = await testOnly.deleteMessage(request, {
+    // Delete via the real DELETE endpoint — flows through the full API pipeline.
+    const deleteRes = await deleteMessage(request, {
       slug: SLUG,
-      messageId,
+      channelPublicId,
+      messagePublicId,
       auth,
     });
+    // 204 = success; 404 = message not found (should not happen in a fresh test)
     expect(deleteRes.status()).toBe(204);
 
     // Message content should be replaced by the deleted placeholder

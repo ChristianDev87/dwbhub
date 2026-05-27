@@ -2,10 +2,15 @@
  * Typed API helpers for message endpoints.
  *
  * Covers /api/t/{slug}/channels/{channelPublicId}/messages (GET + POST)
- * and the test-only namespace:
- *   /api/t/{slug}/test-only/messages/{messageId}/edit
- *   /api/t/{slug}/test-only/messages/{messageId}/delete
+ * and the real edit/delete endpoints:
+ *   PATCH  /api/t/{slug}/channels/{channelPublicId}/messages/{messagePublicId}
+ *   DELETE /api/t/{slug}/channels/{channelPublicId}/messages/{messagePublicId}
+ * and the remaining test-only namespace:
  *   /api/t/{slug}/test-only/messages/inject-received
+ *
+ * NOTE: testOnly.editMessage and testOnly.deleteMessage have been removed.
+ * Use patchMessage / deleteMessage (real endpoints) instead — they work in
+ * fake-rest mode via FakeDiscordRestChannelClient.
  *
  * Symmetric to DwbHub.Tests.Shared.Api.MessagesApi.
  */
@@ -17,12 +22,12 @@ import type { paths } from "../../../../src/lib/api/generated/schema";
 // Types derived from paths
 // ---------------------------------------------------------------------------
 
-type TestEditRequest = NonNullable<
-  paths["/api/t/{slug}/test-only/messages/{messageId}/edit"]["post"]["requestBody"]
->["content"]["application/json"];
-
 type TestInjectReceivedRequest = NonNullable<
   paths["/api/t/{slug}/test-only/messages/inject-received"]["post"]["requestBody"]
+>["content"]["application/json"];
+
+type EditMessageRequest = NonNullable<
+  paths["/api/t/{slug}/channels/{channelPublicId}/messages/{messagePublicId}"]["patch"]["requestBody"]
 >["content"]["application/json"];
 
 // ---------------------------------------------------------------------------
@@ -59,54 +64,71 @@ export async function getMessages(
 }
 
 // ---------------------------------------------------------------------------
+// /api/t/{slug}/channels/{channelPublicId}/messages/{messagePublicId} — PATCH
+// ---------------------------------------------------------------------------
+
+/**
+ * PATCH /api/t/{slug}/channels/{channelPublicId}/messages/{messagePublicId}
+ *
+ * Edits an existing message through the real edit endpoint.
+ * Returns raw response. 200 = success, 403 = forbidden, 404 = not found,
+ * 422 = edit window expired, 404 = test mode not active (non-fake-rest env).
+ *
+ * The caller (Owner, who is also the message author) must provide their access token.
+ */
+export async function patchMessage(
+  request: APIRequestContext,
+  args: {
+    slug: string;
+    channelPublicId: string;
+    messagePublicId: string;
+    auth: { bearerToken: string };
+    body: EditMessageRequest;
+  },
+) {
+  return request.patch(
+    `/api/t/${args.slug}/channels/${args.channelPublicId}/messages/${args.messagePublicId}`,
+    {
+      headers: { Authorization: `Bearer ${args.auth.bearerToken}` },
+      data: args.body,
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// /api/t/{slug}/channels/{channelPublicId}/messages/{messagePublicId} — DELETE
+// ---------------------------------------------------------------------------
+
+/**
+ * DELETE /api/t/{slug}/channels/{channelPublicId}/messages/{messagePublicId}
+ *
+ * Deletes an existing message through the real delete endpoint.
+ * Returns raw response. 204 = success, 403 = forbidden, 404 = not found.
+ *
+ * The caller (Owner) may delete any message in their tenant.
+ */
+export async function deleteMessage(
+  request: APIRequestContext,
+  args: {
+    slug: string;
+    channelPublicId: string;
+    messagePublicId: string;
+    auth: { bearerToken: string };
+  },
+) {
+  return request.delete(
+    `/api/t/${args.slug}/channels/${args.channelPublicId}/messages/${args.messagePublicId}`,
+    {
+      headers: { Authorization: `Bearer ${args.auth.bearerToken}` },
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Test-only namespace
 // ---------------------------------------------------------------------------
 
 export const testOnly = {
-  /**
-   * POST /api/t/{slug}/test-only/messages/{messageId}/edit
-   *
-   * Returns raw response. 204 = success, 404 = test mode not active.
-   */
-  async editMessage(
-    request: APIRequestContext,
-    args: {
-      slug: string;
-      messageId: string | number;
-      auth: { bearerToken: string };
-      body: TestEditRequest;
-    },
-  ) {
-    return request.post(
-      `/api/t/${args.slug}/test-only/messages/${args.messageId}/edit`,
-      {
-        headers: { Authorization: `Bearer ${args.auth.bearerToken}` },
-        data: args.body,
-      },
-    );
-  },
-
-  /**
-   * POST /api/t/{slug}/test-only/messages/{messageId}/delete
-   *
-   * Returns raw response. 204 = success, 404 = test mode not active.
-   */
-  async deleteMessage(
-    request: APIRequestContext,
-    args: {
-      slug: string;
-      messageId: string | number;
-      auth: { bearerToken: string };
-    },
-  ) {
-    return request.post(
-      `/api/t/${args.slug}/test-only/messages/${args.messageId}/delete`,
-      {
-        headers: { Authorization: `Bearer ${args.auth.bearerToken}` },
-      },
-    );
-  },
-
   /**
    * POST /api/t/{slug}/test-only/messages/inject-received
    *
