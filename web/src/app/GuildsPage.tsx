@@ -110,14 +110,11 @@ export function GuildsPage(): React.JSX.Element {
         params: { path: { slug: safeSlug } },
       });
       if (error) throw error;
-      // The OpenAPI spec returns content: never for this endpoint (spec gap);
-      // cast to the known runtime shape.
-      return data as unknown as { guilds: Guild[] };
+      return data;
     },
     staleTime: 30_000,
     refetchInterval: (query) => {
-      const guilds = (query.state.data as { guilds: Guild[] } | undefined)
-        ?.guilds;
+      const guilds = query.state.data?.guilds;
       if (!guilds) return false;
       return guilds.some((g) => g.botConnectionState === "connecting")
         ? 3000
@@ -126,7 +123,7 @@ export function GuildsPage(): React.JSX.Element {
     enabled: safeSlug.length > 0,
   });
 
-  const guilds: Guild[] = guildsData?.guilds ?? [];
+  const guilds: Guild[] = (guildsData?.guilds ?? []) as Guild[];
   const loadState: "loading" | "ready" | "error" = isLoading
     ? "loading"
     : isError

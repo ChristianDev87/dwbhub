@@ -331,12 +331,23 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -353,12 +364,23 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -513,7 +535,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["BridgeCreatedResponse"];
+                        "application/json": components["schemas"]["BridgeCreatedResponse"];
+                        "text/json": components["schemas"]["BridgeCreatedResponse"];
+                    };
                 };
                 /** @description Unauthorized */
                 401: {
@@ -742,7 +768,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["GuildListResponse"];
+                        "application/json": components["schemas"]["GuildListResponse"];
+                        "text/json": components["schemas"]["GuildListResponse"];
+                    };
                 };
             };
         };
@@ -764,12 +794,27 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Created */
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["GuildResponse"];
+                        "application/json": components["schemas"]["GuildResponse"];
+                        "text/json": components["schemas"]["GuildResponse"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -801,12 +846,23 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -1042,7 +1098,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["MessageHistoryResponse"];
+                        "application/json": components["schemas"]["MessageHistoryResponse"];
+                        "text/json": components["schemas"]["MessageHistoryResponse"];
+                    };
                 };
                 /** @description Unauthorized */
                 401: {
@@ -1092,7 +1152,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["SendMessageResponse"];
+                        "application/json": components["schemas"]["SendMessageResponse"];
+                        "text/json": components["schemas"]["SendMessageResponse"];
+                    };
                 };
                 /** @description Bad Request */
                 400: {
@@ -1300,7 +1364,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["DashboardResponse"];
+                        "application/json": components["schemas"]["DashboardResponse"];
+                        "text/json": components["schemas"]["DashboardResponse"];
+                    };
                 };
             };
         };
@@ -1335,7 +1403,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["MeResponse"];
+                        "application/json": components["schemas"]["MeResponse"];
+                        "text/json": components["schemas"]["MeResponse"];
+                    };
                 };
             };
         };
@@ -1521,6 +1593,10 @@ export interface components {
         BackfillStatusResponse: {
             status?: components["schemas"]["BackfillStatusItem"];
         };
+        BridgeCreatedResponse: {
+            /** Format: int64 */
+            backfillJobId?: number;
+        };
         ChannelListItem: {
             /** Format: uuid */
             publicId?: string;
@@ -1541,6 +1617,27 @@ export interface components {
         ChannelListResponse: {
             channels?: components["schemas"]["ChannelListItem"][] | null;
         };
+        DashboardResponse: {
+            /** Format: int64 */
+            tenantId?: number;
+            tenantSlug?: string | null;
+            tenantName?: string | null;
+            locale?: string | null;
+        };
+        GuildListResponse: {
+            guilds?: components["schemas"]["GuildResponse"][] | null;
+        };
+        GuildResponse: {
+            /** Format: uuid */
+            publicId?: string;
+            discordGuildId?: string | null;
+            displayName?: string | null;
+            isActive?: boolean;
+            /** Format: date-time */
+            registeredAt?: string;
+            botCredentialsConfigured?: boolean;
+            botConnectionState?: string | null;
+        };
         HealthResponse: {
             status?: string | null;
             version?: string | null;
@@ -1555,6 +1652,32 @@ export interface components {
             error?: string | null;
             /** Format: int32 */
             retryAfterSeconds?: number;
+        };
+        MeResponse: {
+            /** Format: int64 */
+            userId?: number;
+            /** Format: int64 */
+            tenantId?: number;
+            tenantSlug?: string | null;
+            role?: string | null;
+        };
+        MessageHistoryItem: {
+            /** Format: int64 */
+            id?: number;
+            authorName?: string | null;
+            content?: string | null;
+            /** Format: date-time */
+            sentAt?: string;
+            /** Format: date-time */
+            editedAt?: string | null;
+            viaDwbhub?: boolean;
+            /** Format: int64 */
+            discordMessageId?: number;
+        };
+        MessageHistoryResponse: {
+            messages?: components["schemas"]["MessageHistoryItem"][] | null;
+            /** Format: int64 */
+            nextBefore?: number | null;
         };
         PasswordResetConfirmRequest: {
             token?: string | null;
@@ -1584,6 +1707,14 @@ export interface components {
         };
         SendMessageRequest: {
             content: string;
+        };
+        SendMessageResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            discordMessageId?: number;
+            /** Format: date-time */
+            sentAt?: string;
         };
         SetupCompleteRequest: {
             bootstrapToken?: string | null;
