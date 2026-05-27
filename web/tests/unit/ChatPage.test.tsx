@@ -1,19 +1,42 @@
 /**
  * ChatPage unit tests (Plan 1.0 Task 13)
  *
+ * Migrated to typed openapi-fetch + TanStack Query (PR 5c).
+ *
  * SignalR is mocked to prevent real WebSocket connections.
  * react-virtuoso is mocked for synchronous rendering.
- * Fetch is stubbed per test.
+ * Fetch is stubbed per test via real Response objects (required for
+ * openapi-fetch middleware's `instanceof Response` check).
  */
 import type React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  act,
+} from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { I18nextProvider } from "react-i18next";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { i18n } from "../../src/lib/i18n";
 import { AuthContext } from "../../src/app/auth-context";
 import { ChatPage } from "../../src/app/messaging/ChatPage";
 import type { ChatMessage } from "../../src/app/messaging/useChannel";
+import { createApiClient } from "../../src/lib/api/client";
+
+// ---------------------------------------------------------------------------
+// Mock useApiClient — absolute baseUrl required for jsdom URL construction.
+// ---------------------------------------------------------------------------
+vi.mock("@/lib/api/useApiClient", () => ({
+  useApiClient: () =>
+    createApiClient(
+      () => null,
+      () => Promise.resolve(null),
+      "http://localhost/",
+    ),
+}));
 
 // ---------------------------------------------------------------------------
 // Mock @microsoft/signalr (same pattern as ChannelsPage.test.tsx)
@@ -104,6 +127,16 @@ vi.mock("react-virtuoso", () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
 
@@ -129,6 +162,7 @@ function makeHistoryItem(
     sentAt: string;
     editedAt: string | null;
     viaDwbhub: boolean;
+    discordMessageId: number;
   }> = {},
 ) {
   return {
@@ -138,24 +172,37 @@ function makeHistoryItem(
     sentAt: overrides.sentAt ?? new Date().toISOString(),
     editedAt: overrides.editedAt ?? null,
     viaDwbhub: overrides.viaDwbhub ?? false,
+    discordMessageId: overrides.discordMessageId ?? id * 100,
   };
+}
+
+function makeQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
 }
 
 function renderChat(authOverride = fakeAuth, lang = "en") {
   void i18n.changeLanguage(lang);
+  const queryClient = makeQueryClient();
   return render(
-    <AuthContext.Provider value={authOverride}>
-      <I18nextProvider i18n={i18n}>
-        <MemoryRouter initialEntries={[`/t/acme/channels/${CHANNEL_ID}`]}>
-          <Routes>
-            <Route
-              path="/t/:slug/channels/:channelPublicId"
-              element={<ChatPage />}
-            />
-          </Routes>
-        </MemoryRouter>
-      </I18nextProvider>
-    </AuthContext.Provider>,
+    <QueryClientProvider client={queryClient}>
+      <AuthContext.Provider value={authOverride}>
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter initialEntries={[`/t/acme/channels/${CHANNEL_ID}`]}>
+            <Routes>
+              <Route
+                path="/t/:slug/channels/:channelPublicId"
+                element={<ChatPage />}
+              />
+            </Routes>
+          </MemoryRouter>
+        </I18nextProvider>
+      </AuthContext.Provider>
+    </QueryClientProvider>,
   );
 }
 
@@ -173,11 +220,9 @@ describe("ChatPage", () => {
 
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ messages: msgs, nextBefore: null }),
-      }),
+      vi
+        .fn()
+        .mockResolvedValue(jsonResponse({ messages: msgs, nextBefore: null })),
     );
 
     renderChat();
@@ -192,30 +237,31 @@ describe("ChatPage", () => {
   });
 
   it("send calls onSend with trimmed content and empties the input on success", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
-        if (init?.method === "POST") {
-          return {
-            ok: true,
-            status: 201,
-            json: async () => ({
+    // Capture the POST body inside the mock so we never read Request.body
+    // after the mock returns (avoids a post-test stream cleanup warning in
+    // Vitest 3 that causes exit code 1 even when all assertions pass).
+    let capturedPostBody: string | null = null;
+
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async (input: RequestInfo | URL) => {
+        const req = input instanceof Request ? input : null;
+        const url = req ? req.url : String(input);
+        const method = req ? req.method : "GET";
+        if (method === "POST" && url.includes("/messages")) {
+          capturedPostBody = req ? await req.text() : null;
+          return jsonResponse(
+            {
               id: 99,
               discordMessageId: 888888,
               sentAt: new Date().toISOString(),
-            }),
-          };
+            },
+            201,
+          );
         }
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            messages: [],
-            nextBefore: null,
-          }),
-        };
-      }),
-    );
+        return jsonResponse({ messages: [], nextBefore: null });
+      });
+    vi.stubGlobal("fetch", fetchMock);
 
     renderChat();
 
@@ -233,14 +279,10 @@ describe("ChatPage", () => {
     });
 
     // POST should have been called with trimmed content
-    const fetchMock = vi.mocked(globalThis.fetch);
-    const postCall = fetchMock.mock.calls.find(
-      (args) => (args[1] as RequestInit)?.method === "POST",
-    );
-    expect(postCall).toBeDefined();
-    const body = JSON.parse((postCall![1] as RequestInit).body as string) as {
-      content: string;
-    };
+    await waitFor(() => {
+      expect(capturedPostBody).not.toBeNull();
+    });
+    const body = JSON.parse(capturedPostBody!) as { content: string };
     expect(body.content).toBe("hello");
   });
 
@@ -248,26 +290,25 @@ describe("ChatPage", () => {
     let resolvePost!: () => void;
     const pendingPost = new Promise<Response>((r) => {
       resolvePost = () =>
-        r({
-          ok: true,
-          status: 201,
-          json: async () => ({
-            id: 10,
-            discordMessageId: 777,
-            sentAt: new Date().toISOString(),
-          }),
-        } as Response);
+        r(
+          jsonResponse(
+            {
+              id: 10,
+              discordMessageId: 777,
+              sentAt: new Date().toISOString(),
+            },
+            201,
+          ),
+        );
     });
 
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
-        if (init?.method === "POST") return pendingPost;
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ messages: [], nextBefore: null }),
-        };
+      vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+        const req = input instanceof Request ? input : null;
+        const method = req ? req.method : "GET";
+        if (method === "POST") return pendingPost;
+        return jsonResponse({ messages: [], nextBefore: null });
       }),
     );
 
@@ -302,11 +343,9 @@ describe("ChatPage", () => {
 
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ messages: msgs, nextBefore: null }),
-      }),
+      vi
+        .fn()
+        .mockResolvedValue(jsonResponse({ messages: msgs, nextBefore: null })),
     );
 
     renderChat(fakeAuth, "en");
@@ -332,11 +371,9 @@ describe("ChatPage", () => {
     const msgs = [makeHistoryItem(5, { content: "some content" })];
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ messages: msgs, nextBefore: null }),
-      }),
+      vi
+        .fn()
+        .mockResolvedValue(jsonResponse({ messages: msgs, nextBefore: null })),
     );
 
     renderChat(fakeAuth, "en");
@@ -358,11 +395,9 @@ describe("ChatPage", () => {
 
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ messages: msgs, nextBefore: null }),
-      }),
+      vi
+        .fn()
+        .mockResolvedValue(jsonResponse({ messages: msgs, nextBefore: null })),
     );
 
     renderChat();
@@ -382,11 +417,9 @@ describe("ChatPage", () => {
   it("textarea has maxLength attribute of 2000", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ messages: [], nextBefore: null }),
-      }),
+      vi
+        .fn()
+        .mockResolvedValue(jsonResponse({ messages: [], nextBefore: null })),
     );
 
     renderChat();
@@ -400,14 +433,7 @@ describe("ChatPage", () => {
   });
 
   it("shows error fallback when initial fetch fails", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-        json: async () => ({}),
-      }),
-    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({}, 500)));
 
     renderChat(fakeAuth, "en");
 
@@ -419,11 +445,9 @@ describe("ChatPage", () => {
   it("shows empty state when history has no messages", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ messages: [], nextBefore: null }),
-      }),
+      vi
+        .fn()
+        .mockResolvedValue(jsonResponse({ messages: [], nextBefore: null })),
     );
 
     renderChat(fakeAuth, "en");
@@ -434,8 +458,8 @@ describe("ChatPage", () => {
   });
 
   it("MessageReceived echo before POST resolves replaces pending entry (race fix)", async () => {
-    // POST is held open so discordMessageId is never stamped on the pending entry
-    // before the SignalR echo arrives — simulating the race condition.
+    // POST is held open so discordMessageId is never stamped on the pending
+    // entry before the SignalR echo arrives — simulating the race condition.
     let resolvePost!: (value: Response) => void;
     const pendingPost = new Promise<Response>((r) => {
       resolvePost = r;
@@ -443,13 +467,11 @@ describe("ChatPage", () => {
 
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
-        if (init?.method === "POST") return pendingPost;
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ messages: [], nextBefore: null }),
-        };
+      vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+        const req = input instanceof Request ? input : null;
+        const method = req ? req.method : "GET";
+        if (method === "POST") return pendingPost;
+        return jsonResponse({ messages: [], nextBefore: null });
       }),
     );
 
@@ -476,35 +498,39 @@ describe("ChatPage", () => {
     });
 
     // Now emit the SignalR echo BEFORE resolving the POST
-    // This is the race: POST is still in-flight, pending entry has discordMessageId=null
-    fakeConnRef.current!.emit("MessageReceived", {
-      id: 42,
-      channelPublicId: CHANNEL_ID,
-      authorName: "Owner",
-      content: "hello race",
-      sentAt: new Date().toISOString(),
-      viaDwbhub: true,
-      discordMessageId: 999,
+    // This is the race: POST is still in-flight, pending entry has
+    // discordMessageId=null
+    await act(async () => {
+      fakeConnRef.current!.emit("MessageReceived", {
+        id: 42,
+        channelPublicId: CHANNEL_ID,
+        authorName: "Owner",
+        content: "hello race",
+        sentAt: new Date().toISOString(),
+        viaDwbhub: true,
+        discordMessageId: 999,
+      });
     });
 
     // After echo: still exactly ONE message row (no duplicate)
     await waitFor(() => {
       const rows = screen.getAllByTestId(/^message-row-/);
       expect(rows).toHaveLength(1);
-      // The pending entry is replaced — row id should be the real id (42), not a tempId
+      // The pending entry is replaced — row id should be the real id (42)
       expect(rows[0]).toHaveAttribute("data-testid", "message-row-42");
     });
 
-    // Resolve the POST — the pending tempId no longer exists, so the map is a no-op
-    resolvePost({
-      ok: true,
-      status: 201,
-      json: async () => ({
-        id: 42,
-        discordMessageId: 999,
-        sentAt: new Date().toISOString(),
-      }),
-    } as Response);
+    // Resolve the POST — the pending tempId no longer exists, map is a no-op
+    resolvePost(
+      jsonResponse(
+        {
+          id: 42,
+          discordMessageId: 999,
+          sentAt: new Date().toISOString(),
+        },
+        201,
+      ),
+    );
 
     // Still exactly one row after POST resolves (no ghost entry created)
     await waitFor(() => {
