@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  act,
+} from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { I18nextProvider } from "react-i18next";
 import { i18n } from "../../src/lib/i18n";
@@ -282,7 +288,8 @@ describe("GuildsPage", () => {
 
     renderPage();
 
-    // Wait for the amber indicator
+    // Wait for the amber indicator — confirms the initial fetch resolved and
+    // the guilds state was committed to the DOM.
     await waitFor(() => {
       const indicator = screen.getByTestId(
         `guild-status-${baseGuild.publicId}`,
@@ -291,14 +298,24 @@ describe("GuildsPage", () => {
       expect(indicator).toHaveClass("text-amber-500");
     });
 
+    // Flush any pending React effects (specifically the useEffect([guilds])
+    // that registers the setInterval). Without this flush, under CI scheduling
+    // pressure the effect may not have run yet when we advance fake time,
+    // causing the polling interval to never fire.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
     const callsBefore = fetchMock.mock.calls.length;
 
-    // Advance fake time past the 3s polling interval
-    vi.advanceTimersByTime(3100);
-
-    await waitFor(() => {
-      expect(fetchMock.mock.calls.length).toBeGreaterThan(callsBefore);
+    // Advance fake time past the 3 s polling interval and let async callbacks
+    // settle (runOnlyPendingTimersAsync drains timer callbacks + their
+    // microtasks, unlike the fire-and-forget advanceTimersByTime).
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync();
     });
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(callsBefore);
 
     vi.useRealTimers();
   });

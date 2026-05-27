@@ -4,29 +4,16 @@ import { useQuery } from "@tanstack/react-query";
 import { useApiClient } from "@/lib/api/useApiClient";
 import { qk } from "@/lib/api/queryKeys";
 
-/** Shape of the /api/health response body. */
-type HealthResponse = {
-  status: string;
-  version: string;
-  uptime_seconds: number;
-};
-
 export function HelloPage(): React.JSX.Element {
   const { t } = useTranslation();
   const api = useApiClient();
 
-  /**
-   * NOTE: The generated schema has `content?: never` for the 200 response of
-   * /api/health (schema gap). openapi-fetch still parses the JSON body at
-   * runtime; we cast `data as unknown` to recover the actual value.
-   * On network failures, `error` from openapi-fetch is the thrown Error instance.
-   */
   const { data, isError, error } = useQuery({
     queryKey: qk.health(),
-    queryFn: async (): Promise<HealthResponse> => {
-      const { data: raw, error: fetchError } = await api.GET("/api/health");
+    queryFn: async () => {
+      const { data, error: fetchError } = await api.GET("/api/health");
       if (fetchError) throw fetchError;
-      return raw as unknown as HealthResponse;
+      return data;
     },
   });
 

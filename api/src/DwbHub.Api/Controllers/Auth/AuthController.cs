@@ -66,12 +66,14 @@ public sealed class AuthController(
     /// </summary>
     [HttpPost("/api/auth/verify-email/confirm")]
     [AllowAnonymous]
+    [ProducesResponseType<VerifyEmailConfirmResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> VerifyEmailConfirm([FromBody] VerifyEmailConfirmRequest body, CancellationToken ct)
     {
         var outcome = await emailVerificationService.ConfirmAsync(body.Token, ct);
         return outcome switch
         {
-            VerifyConfirmOutcome.Success => Ok(new { verified = true }),
+            VerifyConfirmOutcome.Success => Ok(new VerifyEmailConfirmResponse(Verified: true)),
             VerifyConfirmOutcome.Invalid => BadRequest(new { error = "invalid_or_expired_token" }),
             _ => BadRequest(new { error = "invalid_or_expired_token" }),
         };
@@ -98,12 +100,14 @@ public sealed class AuthController(
     /// </summary>
     [HttpPost("/api/auth/password-reset/confirm")]
     [AllowAnonymous]
+    [ProducesResponseType<PasswordResetConfirmResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> PasswordResetConfirm([FromBody] PasswordResetConfirmRequest body, CancellationToken ct)
     {
         var outcome = await passwordResetService.ConfirmAsync(body.Token, body.NewPassword, ct);
         return outcome switch
         {
-            ResetConfirmOutcome.Success s => Ok(new { reset = true, sessionsRevoked = s.SessionsRevoked }),
+            ResetConfirmOutcome.Success s => Ok(new PasswordResetConfirmResponse(Reset: true, SessionsRevoked: s.SessionsRevoked)),
             ResetConfirmOutcome.WeakPassword => BadRequest(new { error = "weak_password", min_length = PasswordStrength.MinimumLength }),
             ResetConfirmOutcome.Invalid => BadRequest(new { error = "invalid_or_expired_token" }),
             _ => BadRequest(new { error = "invalid_or_expired_token" }),

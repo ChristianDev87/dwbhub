@@ -72,7 +72,7 @@ public sealed class BotConnectionLifecycleTests : IAsyncLifetime
         Environment.SetEnvironmentVariable("DWBHUB_BOOTSTRAP_TOKEN_FILE", Path.GetTempFileName());
 
         _fakeFactory = new DwbHub.Tests.Integration.Bot.FakeBotConnectionFactory();
-        _factory = new WebApplicationFactory<Program>()
+        _factory = new DwbHubTestFactory()
             .WithWebHostBuilder(wb => wb.ConfigureTestServices(services =>
             {
                 // Replace DiscordNetBotConnectionFactory with DwbHub.Tests.Integration.Bot.FakeBotConnectionFactory.

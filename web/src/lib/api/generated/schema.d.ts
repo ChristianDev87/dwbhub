@@ -121,7 +121,22 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["VerifyEmailConfirmResponse"];
+                        "application/json": components["schemas"]["VerifyEmailConfirmResponse"];
+                        "text/json": components["schemas"]["VerifyEmailConfirmResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -199,7 +214,22 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["PasswordResetConfirmResponse"];
+                        "application/json": components["schemas"]["PasswordResetConfirmResponse"];
+                        "text/json": components["schemas"]["PasswordResetConfirmResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -969,7 +999,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["HealthResponse"];
+                        "application/json": components["schemas"]["HealthResponse"];
+                        "text/json": components["schemas"]["HealthResponse"];
+                    };
                 };
             };
         };
@@ -1140,7 +1174,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["SetupStatusResponse"];
+                        "application/json": components["schemas"]["SetupStatusResponse"];
+                        "text/json": components["schemas"]["SetupStatusResponse"];
+                    };
                 };
             };
         };
@@ -1176,12 +1214,60 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Created */
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "text/plain": components["schemas"]["SetupCompleteResponse"];
+                        "application/json": components["schemas"]["SetupCompleteResponse"];
+                        "text/json": components["schemas"]["SetupCompleteResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Gone */
+                410: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -1455,6 +1541,12 @@ export interface components {
         ChannelListResponse: {
             channels?: components["schemas"]["ChannelListItem"][] | null;
         };
+        HealthResponse: {
+            status?: string | null;
+            version?: string | null;
+            /** Format: int64 */
+            uptime_seconds?: number;
+        };
         LoginRequest: {
             email?: string | null;
             password?: string | null;
@@ -1467,6 +1559,11 @@ export interface components {
         PasswordResetConfirmRequest: {
             token?: string | null;
             newPassword?: string | null;
+        };
+        PasswordResetConfirmResponse: {
+            reset?: boolean;
+            /** Format: int32 */
+            sessionsRevoked?: number;
         };
         PasswordResetRequestRequest: {
             tenantSlug?: string | null;
@@ -1497,6 +1594,19 @@ export interface components {
             ownerDisplayName?: string | null;
             ownerPassword?: string | null;
         };
+        SetupCompleteResponse: {
+            /** Format: int64 */
+            tenantId?: number;
+            tenantSlug?: string | null;
+            /** Format: int64 */
+            ownerUserId?: number;
+            verificationEmailSent?: boolean;
+        };
+        SetupStatusResponse: {
+            completed?: boolean;
+            /** Format: date-time */
+            completedAt?: string | null;
+        };
         TestEditRequest: {
             content?: string | null;
         };
@@ -1508,6 +1618,9 @@ export interface components {
         };
         VerifyEmailConfirmRequest: {
             token?: string | null;
+        };
+        VerifyEmailConfirmResponse: {
+            verified?: boolean;
         };
         VerifyEmailResendRequest: {
             tenantSlug?: string | null;

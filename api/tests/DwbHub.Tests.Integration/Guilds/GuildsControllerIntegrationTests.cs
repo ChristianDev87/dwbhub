@@ -67,7 +67,7 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         Environment.SetEnvironmentVariable("DWBHUB_SMTP_FROM", "noreply@test.local");
         Environment.SetEnvironmentVariable("DWBHUB_PUBLIC_BASE_URL", "http://localhost:5173");
         Environment.SetEnvironmentVariable("DWBHUB_BOOTSTRAP_TOKEN_FILE", Path.GetTempFileName());
-        _factory = new WebApplicationFactory<Program>();
+        _factory = new DwbHubTestFactory();
         _client = _factory.CreateClient();
     }
 
@@ -220,7 +220,7 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         Environment.SetEnvironmentVariable("DWBHUB_LOG_DIR", uniqueLogDir);
 
         var fakeFactory = new FakeBotConnectionFactory();
-        using var scopedFactory = new WebApplicationFactory<Program>()
+        using var scopedFactory = new DwbHubTestFactory()
             .WithWebHostBuilder(b => b.ConfigureTestServices(svc =>
             {
                 svc.RemoveAll<IBotConnectionFactory>();

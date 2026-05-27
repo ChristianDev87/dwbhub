@@ -65,7 +65,7 @@ public sealed class TenantRoutingIntegrationTests : IAsyncLifetime
         Environment.SetEnvironmentVariable("DWBHUB_PUBLIC_BASE_URL", "http://localhost:5173");
         Environment.SetEnvironmentVariable("DWBHUB_BOOTSTRAP_TOKEN_FILE", Path.GetTempFileName());
 
-        _factory = new WebApplicationFactory<Program>();
+        _factory = new DwbHubTestFactory();
         _client = _factory.CreateClient();
     }
 
