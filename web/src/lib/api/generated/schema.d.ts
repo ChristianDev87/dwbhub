@@ -1217,6 +1217,162 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/t/{slug}/channels/{channelPublicId}/messages/{messagePublicId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                    channelPublicId: string;
+                    messagePublicId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                    channelPublicId: string;
+                    messagePublicId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["EditMessageRequest"];
+                    "text/json": components["schemas"]["EditMessageRequest"];
+                    "application/*+json": components["schemas"]["EditMessageRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["EditMessageResponse"];
+                        "application/json": components["schemas"]["EditMessageResponse"];
+                        "text/json": components["schemas"]["EditMessageResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Content */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["EditWindowExpiredResponse"];
+                        "application/json": components["schemas"]["EditWindowExpiredResponse"];
+                        "text/json": components["schemas"]["EditWindowExpiredResponse"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/api/setup/status": {
         parameters: {
             query?: never;
@@ -1419,106 +1575,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/t/{slug}/test-only/messages/{messageId}/edit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    slug: string;
-                    messageId: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["TestEditRequest"];
-                    "text/json": components["schemas"]["TestEditRequest"];
-                    "application/*+json": components["schemas"]["TestEditRequest"];
-                };
-            };
-            responses: {
-                /** @description No Content */
-                204: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/t/{slug}/test-only/messages/{messageId}/delete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    slug: string;
-                    messageId: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description No Content */
-                204: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/t/{slug}/test-only/messages/inject-received": {
         parameters: {
             query?: never;
@@ -1624,6 +1680,29 @@ export interface components {
             tenantName?: string | null;
             locale?: string | null;
         };
+        EditMessageRequest: {
+            content: string;
+        };
+        EditMessageResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: uuid */
+            publicId?: string;
+            authorName?: string | null;
+            content?: string | null;
+            /** Format: date-time */
+            sentAt?: string;
+            /** Format: date-time */
+            editedAt?: string | null;
+            viaDwbhub?: boolean;
+            /** Format: int64 */
+            discordMessageId?: number;
+        };
+        EditWindowExpiredResponse: {
+            error?: string | null;
+            /** Format: int32 */
+            retryAfterSeconds?: number;
+        };
         GuildListResponse: {
             guilds?: components["schemas"]["GuildResponse"][] | null;
         };
@@ -1664,6 +1743,8 @@ export interface components {
         MessageHistoryItem: {
             /** Format: int64 */
             id?: number;
+            /** Format: uuid */
+            publicId?: string;
             authorName?: string | null;
             content?: string | null;
             /** Format: date-time */
@@ -1711,6 +1792,8 @@ export interface components {
         SendMessageResponse: {
             /** Format: int64 */
             id?: number;
+            /** Format: uuid */
+            publicId?: string;
             /** Format: int64 */
             discordMessageId?: number;
             /** Format: date-time */
@@ -1737,9 +1820,6 @@ export interface components {
             completed?: boolean;
             /** Format: date-time */
             completedAt?: string | null;
-        };
-        TestEditRequest: {
-            content?: string | null;
         };
         TestInjectReceivedRequest: {
             /** Format: uuid */

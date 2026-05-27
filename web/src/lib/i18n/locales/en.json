@@ -150,7 +150,24 @@
     "send": "Send",
     "sending": "sending…",
     "viaDwbhub": "(via DwbHub)",
-    "you": "You"
+    "you": "You",
+    "editMessage": {
+      "button": "Edit",
+      "save": "Save",
+      "cancel": "Cancel",
+      "tooLong": "Message must be at most 1800 characters.",
+      "empty": "Message cannot be empty.",
+      "windowExpired": "This message is too old to edit.",
+      "forbidden": "You can only edit your own messages.",
+      "genericError": "Edit failed. Try again."
+    },
+    "deleteMessage": {
+      "button": "Delete",
+      "confirmPrompt": "Delete this message?",
+      "confirm": "Delete",
+      "cancel": "Cancel",
+      "genericError": "Delete failed. Try again."
+    }
   },
   "botCredentials": {
     "configured": "Bot token configured",

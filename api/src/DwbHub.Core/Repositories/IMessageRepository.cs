@@ -58,4 +58,16 @@ public interface IMessageRepository
     /// Returns null when no row matches the supplied tenant + id combination.
     /// </summary>
     Task<Message?> GetByInternalIdAsync(long tenantId, long id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetch a single message by its external public UUID, scoped by tenant and channel.
+    /// Used by the PATCH / DELETE user-facing endpoints. Includes soft-deleted rows so
+    /// the controller can return 404 (already deleted) consistently.
+    /// Returns null when no row matches.
+    /// </summary>
+    Task<Message?> GetByPublicIdAsync(
+        long tenantId,
+        long channelId,
+        Guid publicId,
+        CancellationToken ct = default);
 }

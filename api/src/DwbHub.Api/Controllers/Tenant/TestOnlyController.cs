@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using DwbHub.Application.Messaging;
 using DwbHub.Application.Tenancy;
 using DwbHub.Core.Messaging;
@@ -10,8 +9,11 @@ namespace DwbHub.Api.Controllers.Tenant;
 
 /// <summary>
 /// Test-only endpoints used by Playwright e2e specs to inject Discord events
-/// (MessageUpdated, MessageDeleted, MessageReceived) without needing a real
-/// Discord bot or gateway connection.
+/// (MessageReceived) without needing a real Discord bot or gateway connection.
+///
+/// NOTE: The edit and delete test-only endpoints have been removed. Use the real
+/// PATCH /messages/{id} and DELETE /messages/{id} endpoints instead — they are
+/// fully exercisable in fake-rest mode via FakeDiscordRestChannelClient.
 ///
 /// GATING: every action returns 404 unless DWBHUB_DISCORD_TEST_MODE=fake-rest.
 /// Production guard: every action also throws if ASPNETCORE_ENVIRONMENT=Production.
@@ -25,7 +27,6 @@ namespace DwbHub.Api.Controllers.Tenant;
 public sealed class TestOnlyController(
     IMessageService messageService,
     IGuildChannelRepository channelRepo,
-    IMessageRepository messageRepo,
     ITenantContext tenantContext,
     IHostEnvironment hostEnv,
     ILogger<TestOnlyController> logger) : ControllerBase
@@ -46,95 +47,6 @@ public sealed class TestOnlyController(
             return NotFound(new { error = "test_mode_not_active" });
 
         return null;
-    }
-
-    // ── POST .../messages/{messageId}/edit ─────────────────────────────────────
-
-    /// <summary>
-    /// Simulate a Discord MessageUpdated event for an existing message.
-    /// Persists the edit and broadcasts via SignalR so the frontend can react.
-    /// </summary>
-    [HttpPost("messages/{messageId:long}/edit")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Edit(
-        string slug,
-        long messageId,
-        [FromBody] TestEditRequest req,
-        CancellationToken ct)
-    {
-        _ = slug;
-        var guard = CheckTestModeGuard();
-        if (guard is not null) return guard;
-
-        var tenant = ResolveTenant();
-
-        // The caller supplies the internal DB id (from the message-row testid).
-        // Resolve the row so we can pass the actual discord_message_id to PersistEditAsync.
-        var message = await messageRepo.GetByInternalIdAsync(tenant.Id, messageId, ct)
-            .ConfigureAwait(false);
-        if (message is null)
-            return NotFound(new { error = "message_not_found" });
-
-        var evt = new MessageUpdatedEvent
-        {
-            TenantId = tenant.Id,
-            GuildId = 0, // not used by MessageService.PersistEditAsync
-            DiscordChannelId = 0, // not used by MessageService.PersistEditAsync
-            DiscordMessageId = message.DiscordMessageId,
-            Content = req.Content ?? "",
-            EditedAt = DateTimeOffset.UtcNow,
-        };
-
-        logger.LogInformation(
-            "[test-only] Injecting MessageUpdated for internalId={Id} discordMessageId={DiscordId} tenant={TenantId}",
-            messageId, message.DiscordMessageId, tenant.Id);
-
-        await messageService.PersistEditAsync(evt, ct).ConfigureAwait(false);
-        return NoContent();
-    }
-
-    // ── POST .../messages/{messageId}/delete ──────────────────────────────────
-
-    /// <summary>
-    /// Simulate a Discord MessageDeleted event for an existing message.
-    /// Soft-deletes the row and broadcasts via SignalR.
-    /// </summary>
-    [HttpPost("messages/{messageId:long}/delete")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete(
-        string slug,
-        long messageId,
-        CancellationToken ct)
-    {
-        _ = slug;
-        var guard = CheckTestModeGuard();
-        if (guard is not null) return guard;
-
-        var tenant = ResolveTenant();
-
-        // The caller supplies the internal DB id (from the message-row testid).
-        // Resolve the row so we can pass the actual discord_message_id to MarkDeletedAsync.
-        var message = await messageRepo.GetByInternalIdAsync(tenant.Id, messageId, ct)
-            .ConfigureAwait(false);
-        if (message is null)
-            return NotFound(new { error = "message_not_found" });
-
-        var evt = new MessageDeletedEvent
-        {
-            TenantId = tenant.Id,
-            GuildId = 0,
-            DiscordChannelId = 0,
-            DiscordMessageId = message.DiscordMessageId,
-        };
-
-        logger.LogInformation(
-            "[test-only] Injecting MessageDeleted for internalId={Id} discordMessageId={DiscordId} tenant={TenantId}",
-            messageId, message.DiscordMessageId, tenant.Id);
-
-        await messageService.MarkDeletedAsync(evt, ct).ConfigureAwait(false);
-        return NoContent();
     }
 
     // ── POST .../test-only/messages/inject-received ───────────────────────────
@@ -204,12 +116,6 @@ public sealed class TestOnlyController(
 }
 
 // ── Request DTOs ──────────────────────────────────────────────────────────────
-
-/// <summary>Request body for the test-only message edit endpoint.</summary>
-public sealed record TestEditRequest
-{
-    public string? Content { get; init; }
-}
 
 /// <summary>Request body for the test-only inject-received endpoint.</summary>
 public sealed record TestInjectReceivedRequest

@@ -1,0 +1,8 @@
+# Temporary override: makes /workspace/shared writable so verify-openapi.ps1 -Update can write.
+# Usage: docker compose -f deploy/compose/docker-compose.test.yml -f deploy/compose/docker-compose.openapi-regen.yml run --rm openapi-drift
+services:
+  openapi-drift:
+    volumes:
+      - ../..:/workspace:rw
+    environment:
+      OPENAPI_REGEN: "true"

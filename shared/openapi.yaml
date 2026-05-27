@@ -920,6 +920,172 @@ paths:
             text/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  '/api/t/{slug}/channels/{channelPublicId}/messages/{messagePublicId}':
+    patch:
+      tags:
+        - Messages
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: channelPublicId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: messagePublicId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditMessageRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/EditMessageRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/EditMessageRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/EditMessageResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditMessageResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/EditMessageResponse'
+        '422':
+          description: Unprocessable Content
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/EditWindowExpiredResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditWindowExpiredResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/EditWindowExpiredResponse'
+        '400':
+          description: Bad Request
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      tags:
+        - Messages
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: channelPublicId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: messagePublicId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /api/setup/status:
     get:
       tags:
@@ -1059,79 +1225,6 @@ paths:
             text/json:
               schema:
                 $ref: '#/components/schemas/MeResponse'
-  '/api/t/{slug}/test-only/messages/{messageId}/edit':
-    post:
-      tags:
-        - TestOnly
-      parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: messageId
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TestEditRequest'
-          text/json:
-            schema:
-              $ref: '#/components/schemas/TestEditRequest'
-          application/*+json:
-            schema:
-              $ref: '#/components/schemas/TestEditRequest'
-      responses:
-        '204':
-          description: No Content
-        '404':
-          description: Not Found
-          content:
-            text/plain:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-            text/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-  '/api/t/{slug}/test-only/messages/{messageId}/delete':
-    post:
-      tags:
-        - TestOnly
-      parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: messageId
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '204':
-          description: No Content
-        '404':
-          description: Not Found
-          content:
-            text/plain:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-            text/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
   '/api/t/{slug}/test-only/messages/inject-received':
     post:
       tags:
@@ -1274,6 +1367,54 @@ components:
           type: string
           nullable: true
       additionalProperties: false
+    EditMessageRequest:
+      required:
+        - content
+      type: object
+      properties:
+        content:
+          maxLength: 1800
+          minLength: 1
+          type: string
+      additionalProperties: false
+    EditMessageResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        publicId:
+          type: string
+          format: uuid
+        authorName:
+          type: string
+          nullable: true
+        content:
+          type: string
+          nullable: true
+        sentAt:
+          type: string
+          format: date-time
+        editedAt:
+          type: string
+          format: date-time
+          nullable: true
+        viaDwbhub:
+          type: boolean
+        discordMessageId:
+          type: integer
+          format: int64
+      additionalProperties: false
+    EditWindowExpiredResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          nullable: true
+        retryAfterSeconds:
+          type: integer
+          format: int32
+      additionalProperties: false
     GuildListResponse:
       type: object
       properties:
@@ -1361,6 +1502,9 @@ components:
         id:
           type: integer
           format: int64
+        publicId:
+          type: string
+          format: uuid
         authorName:
           type: string
           nullable: true
@@ -1468,6 +1612,9 @@ components:
         id:
           type: integer
           format: int64
+        publicId:
+          type: string
+          format: uuid
         discordMessageId:
           type: integer
           format: int64
@@ -1523,13 +1670,6 @@ components:
         completedAt:
           type: string
           format: date-time
-          nullable: true
-      additionalProperties: false
-    TestEditRequest:
-      type: object
-      properties:
-        content:
-          type: string
           nullable: true
       additionalProperties: false
     TestInjectReceivedRequest:
