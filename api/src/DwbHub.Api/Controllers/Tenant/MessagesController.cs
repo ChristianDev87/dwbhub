@@ -164,6 +164,7 @@ public sealed class MessagesController(
 
         var items = rows.Select(m => new MessageHistoryItem(
             Id: m.Id,
+            PublicId: m.PublicId,
             AuthorName: m.DiscordAuthorName,
             Content: m.Content,
             SentAt: m.SentAt,

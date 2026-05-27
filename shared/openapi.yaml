@@ -1502,6 +1502,9 @@ components:
         id:
           type: integer
           format: int64
+        publicId:
+          type: string
+          format: uuid
         authorName:
           type: string
           nullable: true

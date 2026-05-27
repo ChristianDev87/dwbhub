@@ -1743,6 +1743,8 @@ export interface components {
         MessageHistoryItem: {
             /** Format: int64 */
             id?: number;
+            /** Format: uuid */
+            publicId?: string;
             authorName?: string | null;
             content?: string | null;
             /** Format: date-time */
