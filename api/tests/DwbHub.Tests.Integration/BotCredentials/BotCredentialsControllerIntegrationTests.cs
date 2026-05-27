@@ -8,6 +8,7 @@ using DwbHub.Data.Connections;
 using DwbHub.Data.Repositories;
 using DwbHub.Infrastructure.Auth;
 using DwbHub.Tests.Integration.Infrastructure;
+using DwbHub.Tests.Shared.Api;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Npgsql;
@@ -64,7 +65,7 @@ public sealed class BotCredentialsControllerIntegrationTests : IAsyncLifetime
         Environment.SetEnvironmentVariable("DWBHUB_SMTP_FROM", "noreply@test.local");
         Environment.SetEnvironmentVariable("DWBHUB_PUBLIC_BASE_URL", "http://localhost:5173");
         Environment.SetEnvironmentVariable("DWBHUB_BOOTSTRAP_TOKEN_FILE", Path.GetTempFileName());
-        _factory = new WebApplicationFactory<Program>();
+        _factory = new DwbHubTestFactory();
         _client = _factory.CreateClient();
     }
 
@@ -107,16 +108,13 @@ public sealed class BotCredentialsControllerIntegrationTests : IAsyncLifetime
         return (tid, publicId, _issuer.Issue(ownerUser, tenant), _issuer.Issue(memberUser, tenant));
     }
 
-    private static string Url(string slug, Guid guildPublicId) =>
-        $"/api/t/{slug}/guilds/{guildPublicId:D}/bot-credentials";
-
     [Fact]
     public async Task PUT_first_time_returns_204_and_emits_added_audit_event_without_secrets()
     {
         var (tid, pid, owner, _) = await SeedTenantOwnerMemberAndGuildAsync("acme");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", owner);
 
-        var res = await _client.PutAsJsonAsync(Url("acme", pid), new { token = TestToken });
+        var res = await _client.PutBotCredentialsAsync("acme", pid, new { token = TestToken });
         res.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         await using var conn = _ds.CreateConnection();
@@ -146,8 +144,8 @@ public sealed class BotCredentialsControllerIntegrationTests : IAsyncLifetime
         var (_, pid, owner, _) = await SeedTenantOwnerMemberAndGuildAsync("acme");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", owner);
 
-        await _client.PutAsJsonAsync(Url("acme", pid), new { token = TestToken });
-        var res = await _client.PutAsJsonAsync(Url("acme", pid), new { token = TestToken });
+        await _client.PutBotCredentialsAsync("acme", pid, new { token = TestToken });
+        var res = await _client.PutBotCredentialsAsync("acme", pid, new { token = TestToken });
         res.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         await using var conn = _ds.CreateConnection();
@@ -165,7 +163,7 @@ public sealed class BotCredentialsControllerIntegrationTests : IAsyncLifetime
         var (_, pid, _, member) = await SeedTenantOwnerMemberAndGuildAsync("acme");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", member);
 
-        var res = await _client.PutAsJsonAsync(Url("acme", pid), new { token = TestToken });
+        var res = await _client.PutBotCredentialsAsync("acme", pid, new { token = TestToken });
         res.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -175,7 +173,7 @@ public sealed class BotCredentialsControllerIntegrationTests : IAsyncLifetime
         var (_, pid, owner, _) = await SeedTenantOwnerMemberAndGuildAsync("acme");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", owner);
 
-        var res = await _client.PutAsJsonAsync(Url("acme", pid), new { token = "bogus.token" });
+        var res = await _client.PutBotCredentialsAsync("acme", pid, new { token = "bogus.token" });
         res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
@@ -185,8 +183,8 @@ public sealed class BotCredentialsControllerIntegrationTests : IAsyncLifetime
         var (_, pid, owner, _) = await SeedTenantOwnerMemberAndGuildAsync("acme");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", owner);
 
-        await _client.PutAsJsonAsync(Url("acme", pid), new { token = TestToken });
-        var res = await _client.DeleteAsync(Url("acme", pid));
+        await _client.PutBotCredentialsAsync("acme", pid, new { token = TestToken });
+        var res = await _client.DeleteBotCredentialsAsync("acme", pid);
         res.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         await using var conn = _ds.CreateConnection();
@@ -204,7 +202,7 @@ public sealed class BotCredentialsControllerIntegrationTests : IAsyncLifetime
         var (_, pid, owner, _) = await SeedTenantOwnerMemberAndGuildAsync("acme");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", owner);
 
-        var res = await _client.DeleteAsync(Url("acme", pid));
+        var res = await _client.DeleteBotCredentialsAsync("acme", pid);
         res.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

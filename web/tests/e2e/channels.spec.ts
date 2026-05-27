@@ -17,6 +17,8 @@ import {
   seedActiveGuild,
   SETUP_DEFAULTS,
 } from "./helpers/bootstrap";
+import { postTenantLogin } from "./helpers/api/tenants";
+import { bridgeChannel, getBackfillStatus } from "./helpers/api/channels";
 
 const {
   tenantSlug: SLUG,
@@ -38,11 +40,9 @@ async function loginAsOwner(page: Page): Promise<void> {
 }
 
 async function apiLogin(request: APIRequestContext): Promise<string> {
-  const res = await request.post(`/api/tenants/${SLUG}/auth/login`, {
-    data: {
-      email: OWNER_EMAIL,
-      password: OWNER_PASSWORD,
-    },
+  const res = await postTenantLogin(request, {
+    slug: SLUG,
+    body: { email: OWNER_EMAIL, password: OWNER_PASSWORD },
   });
   const body = (await res.json()) as { accessToken: string };
   return body.accessToken;
@@ -138,15 +138,16 @@ test.describe("Plan 1.0 channels page", () => {
     // status reaches "complete" and that fetchedCount is either 200 (fresh run)
     // OR 0 (idempotent re-run); never some partial in-between value.
     const accessToken = await apiLogin(request);
-    const authHeader = { Authorization: `Bearer ${accessToken}` };
+    const auth = { bearerToken: accessToken };
     const deadline = Date.now() + 30_000;
     let completed = false;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 1_000));
-      const st = await request.get(
-        `/api/t/${SLUG}/channels/${firstTextChannelPublicId}/backfill-status`,
-        { headers: authHeader },
-      );
+      const st = await getBackfillStatus(request, {
+        slug: SLUG,
+        channelPublicId: firstTextChannelPublicId,
+        auth,
+      });
       if (st.ok()) {
         const body = (await st.json()) as {
           status: { status: string; fetchedCount: number };
@@ -179,13 +180,14 @@ test.describe("Plan 1.0 channels page", () => {
     }
 
     const accessToken = await apiLogin(request);
-    const authHeader = { Authorization: `Bearer ${accessToken}` };
+    const auth = { bearerToken: accessToken };
 
     // Ensure channel is bridged via API (avoids UI flakiness waiting for bridge to start)
-    const bridgeRes = await request.post(
-      `/api/t/${SLUG}/channels/${firstTextChannelPublicId}/bridge`,
-      { headers: authHeader },
-    );
+    const bridgeRes = await bridgeChannel(request, {
+      slug: SLUG,
+      channelPublicId: firstTextChannelPublicId,
+      auth,
+    });
     // 202 = bridged; 409 = already bridged (both are OK)
     expect([202, 409]).toContain(bridgeRes.status());
 
@@ -193,10 +195,11 @@ test.describe("Plan 1.0 channels page", () => {
     const deadline = Date.now() + 60_000;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 2_000));
-      const statusRes = await request.get(
-        `/api/t/${SLUG}/channels/${firstTextChannelPublicId}/backfill-status`,
-        { headers: authHeader },
-      );
+      const statusRes = await getBackfillStatus(request, {
+        slug: SLUG,
+        channelPublicId: firstTextChannelPublicId,
+        auth,
+      });
       if (statusRes.ok()) {
         const st = (await statusRes.json()) as {
           status: { status: string; fetchedCount: number };
@@ -216,14 +219,30 @@ test.describe("Plan 1.0 channels page", () => {
       timeout: 10_000,
     });
 
+    // Test-isolation workaround: the TanStack Query staleTime in PR #67/#70 plus
+    // FakeDiscordRestChannelClient's deterministic channel IDs (which migrate
+    // across guilds via ON CONFLICT) means a prior browser project's bridge
+    // toggle can be reflected in this test's QueryClient cache. A hard reload
+    // discards the cache and fetches fresh server state. The proper fix lives in
+    // the Fake client (give it guild-scoped channel IDs); tracked separately.
+    await page.reload();
+    await expect(page.locator('[data-testid^="channel-row-"]')).toHaveCount(4, {
+      timeout: 10_000,
+    });
+
     const toggle = page.locator(
       `[data-testid="channel-bridge-toggle-${firstTextChannelPublicId}"]`,
     );
     // Should be bridged at this point
     await expect(toggle).toBeChecked({ timeout: 5_000 });
 
-    // Unbridge
-    await toggle.uncheck();
+    // Unbridge — use click() instead of uncheck() because the checkbox is a
+    // React controlled input: uncheck() performs an immediate post-click
+    // state check that races with React's re-render cycle, causing a
+    // "did not change its state" error even though the onChange fires
+    // correctly. click() just dispatches the event; the assertion below
+    // waits for the async optimistic-update + API round-trip to settle.
+    await toggle.click();
 
     // Toggle should now be unchecked (unbridged)
     await expect(toggle).not.toBeChecked({ timeout: 10_000 });

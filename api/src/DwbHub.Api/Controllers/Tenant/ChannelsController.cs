@@ -43,7 +43,7 @@ public sealed class ChannelsController(
     /// backfill job summary per channel.
     /// </summary>
     [HttpGet("guilds/{guildPublicId:guid}/channels")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ChannelListResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ChannelListResponse>> List(
@@ -156,7 +156,7 @@ public sealed class ChannelsController(
     /// prevent orphan jobs.
     /// </summary>
     [HttpPost("channels/{channelPublicId:guid}/bridge")]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<BridgeCreatedResponse>(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -233,7 +233,7 @@ public sealed class ChannelsController(
             tenant.Id, channelPublicId, isBridged: true, ct).ConfigureAwait(false);
 
         return StatusCode(StatusCodes.Status202Accepted,
-            new { backfillJobId = backfillJob.Id });
+            new BridgeCreatedResponse(backfillJob.Id));
     }
 
     // ── DELETE channels/{channelPublicId}/bridge ──────────────────────────────
@@ -322,7 +322,7 @@ public sealed class ChannelsController(
     /// Returns 404 when no job exists.
     /// </summary>
     [HttpGet("channels/{channelPublicId:guid}/backfill-status")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<BackfillStatusResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<BackfillStatusResponse>> BackfillStatus(

@@ -1,5 +1,19 @@
 import { readFileSync } from "node:fs";
 import type { APIRequestContext } from "@playwright/test";
+import {
+  getSetupStatusOrThrow,
+  postSetupComplete,
+  postVerifyEmailConfirm,
+} from "./api/global";
+import { postTenantLogin } from "./api/tenants";
+import {
+  createGuild,
+  listGuildsOrThrow,
+  putBotCredentials,
+  activateGuild,
+  syncChannels,
+  listGuildChannelsOrThrow,
+} from "./api/guilds";
 
 // ---------------------------------------------------------------------------
 // Fake Discord bot token — valid shape per BotTokenShapeAttribute:
@@ -12,10 +26,8 @@ import type { APIRequestContext } from "@playwright/test";
 const FAKE_BOT_TOKEN =
   "MTAwMDAwMDAwMDAwMDAwMDAwMDAwMDA.GFakeToken.AbCdEfGhIjKlMnOpQrStUvWxYzAb-fake";
 
-// Deterministic fake Discord guild snowflake used by seedActiveGuild.
-// The value is stable across runs so the guild upsert is idempotent IF the
-// database volume is preserved between test sessions. Individual test cases
-// that need isolation should generate their own unique IDs.
+// Deterministic fake Discord guild snowflake — stable across runs so the
+// guild upsert is idempotent when the database volume is reused between sessions.
 const FAKE_GUILD_DISCORD_ID = "100200300400500600";
 
 const BOOTSTRAP_TOKEN_PATH = "/api-bootstrap-ro/bootstrap-token.txt";
@@ -82,6 +94,8 @@ async function extractVerificationToken(ownerEmail: string): Promise<string> {
   const start = Date.now();
 
   while (Date.now() - start < maxWaitMs) {
+    // Mailpit is a third-party service — these calls remain as raw fetch,
+    // not typed through our backend schema.
     const res = await fetch(`${base}/api/v1/messages`);
     if (!res.ok) {
       throw new Error(
@@ -148,13 +162,7 @@ export async function ensureSetupCompleted(
   request: APIRequestContext,
 ): Promise<void> {
   // 1. Check current setup status.
-  const statusRes = await request.get("/api/setup/status");
-  if (!statusRes.ok()) {
-    throw new Error(
-      `GET /api/setup/status returned ${statusRes.status()} — api unreachable from e2e container?`,
-    );
-  }
-  const status = (await statusRes.json()) as { completed: boolean };
+  const status = await getSetupStatusOrThrow(request);
   if (status.completed) {
     // Already completed on a prior run — api-data volume was reused.
     return;
@@ -175,16 +183,14 @@ export async function ensureSetupCompleted(
   //    Field names match SetupCompleteRequest (camelCase .NET default serialisation):
   //    bootstrapToken, tenantName, tenantSlug, tenantLocale, ownerEmail,
   //    ownerDisplayName, ownerPassword.
-  const setupRes = await request.post("/api/setup/complete", {
-    data: {
-      bootstrapToken,
-      tenantName: SETUP_DEFAULTS.tenantName,
-      tenantSlug: SETUP_DEFAULTS.tenantSlug,
-      tenantLocale: SETUP_DEFAULTS.tenantLocale,
-      ownerEmail: SETUP_DEFAULTS.ownerEmail,
-      ownerDisplayName: SETUP_DEFAULTS.ownerDisplayName,
-      ownerPassword: SETUP_DEFAULTS.ownerPassword,
-    },
+  const setupRes = await postSetupComplete(request, {
+    bootstrapToken,
+    tenantName: SETUP_DEFAULTS.tenantName,
+    tenantSlug: SETUP_DEFAULTS.tenantSlug,
+    tenantLocale: SETUP_DEFAULTS.tenantLocale,
+    ownerEmail: SETUP_DEFAULTS.ownerEmail,
+    ownerDisplayName: SETUP_DEFAULTS.ownerDisplayName,
+    ownerPassword: SETUP_DEFAULTS.ownerPassword,
   });
 
   // 410 Gone = already completed (race or stale lock) — treat as success.
@@ -202,8 +208,8 @@ export async function ensureSetupCompleted(
   //    Mailpit and confirm it so all login-dependent specs can proceed.
   const verifyToken = await extractVerificationToken(SETUP_DEFAULTS.ownerEmail);
 
-  const confirmRes = await request.post("/api/auth/verify-email/confirm", {
-    data: { token: verifyToken },
+  const confirmRes = await postVerifyEmailConfirm(request, {
+    token: verifyToken,
   });
 
   if (!confirmRes.ok()) {
@@ -254,8 +260,9 @@ export async function seedActiveGuild(
 
   // 1. Login as owner to get access token (cookie-based sessions).
   // The login endpoint is /api/tenants/{slug}/auth/login (tenant-scoped).
-  const loginRes = await request.post(`/api/tenants/${slug}/auth/login`, {
-    data: {
+  const loginRes = await postTenantLogin(request, {
+    slug,
+    body: {
       email: SETUP_DEFAULTS.ownerEmail,
       password: SETUP_DEFAULTS.ownerPassword,
     },
@@ -268,14 +275,15 @@ export async function seedActiveGuild(
   }
   const loginBody = (await loginRes.json()) as { accessToken: string };
   const accessToken = loginBody.accessToken;
-  const authHeader = { Authorization: `Bearer ${accessToken}` };
+  const auth = { bearerToken: accessToken };
 
   // 2. Add guild (idempotent — 409 treated as success).
   let guildPublicId: string;
 
-  const addRes = await request.post(`/api/t/${slug}/guilds`, {
-    headers: authHeader,
-    data: { discordGuildId, displayName },
+  const addRes = await createGuild(request, {
+    slug,
+    auth,
+    body: { discordGuildId, displayName },
   });
 
   if (addRes.ok()) {
@@ -283,21 +291,11 @@ export async function seedActiveGuild(
     guildPublicId = body.publicId;
   } else if (addRes.status() === 409) {
     // Already exists — find it in the list
-    const listRes = await request.get(`/api/t/${slug}/guilds`, {
-      headers: authHeader,
-    });
-    if (!listRes.ok()) {
-      throw new Error(
-        `seedActiveGuild: GET guilds failed ${listRes.status()} after 409 on add`,
-      );
-    }
-    const listBody = (await listRes.json()) as {
-      guilds: Array<{ publicId: string; discordGuildId: string }>;
-    };
-    const existing = listBody.guilds.find(
+    const listBody = await listGuildsOrThrow(request, { slug, auth });
+    const existing = listBody.guilds?.find(
       (g) => g.discordGuildId === discordGuildId,
     );
-    if (!existing) {
+    if (!existing?.publicId) {
       throw new Error(
         `seedActiveGuild: got 409 but could not find guild ${discordGuildId} in list`,
       );
@@ -311,13 +309,12 @@ export async function seedActiveGuild(
   }
 
   // 3. PUT bot credentials (idempotent upsert).
-  const credRes = await request.put(
-    `/api/t/${slug}/guilds/${guildPublicId}/bot-credentials`,
-    {
-      headers: authHeader,
-      data: { token: FAKE_BOT_TOKEN },
-    },
-  );
+  const credRes = await putBotCredentials(request, {
+    slug,
+    guildPublicId,
+    auth,
+    body: { token: FAKE_BOT_TOKEN },
+  });
   // 204 = set; 404 = guild not found (shouldn't happen at this point)
   if (!credRes.ok()) {
     const body = await credRes.text();
@@ -330,18 +327,17 @@ export async function seedActiveGuild(
   //    The GuildsController.Activate route is POST /api/t/{slug}/guilds/{publicId}/activate.
   //    New guilds are active=true on creation, so this is a no-op — but we call it
   //    to ensure OnGuildActivatedAsync runs and the BotConnectionManager picks up creds.
-  await request.post(`/api/t/${slug}/guilds/${guildPublicId}/activate`, {
-    headers: authHeader,
-  });
+  await activateGuild(request, { slug, publicId: guildPublicId, auth });
 
   // Brief pause to allow BotConnectionManager to process credentials asynchronously.
   await new Promise((r) => setTimeout(r, 800));
 
   // 5. Sync channels from FakeDiscordRestChannelClient.
-  const syncRes = await request.post(
-    `/api/t/${slug}/guilds/${guildPublicId}/channels/sync`,
-    { headers: authHeader },
-  );
+  const syncRes = await syncChannels(request, {
+    slug,
+    guildPublicId,
+    auth,
+  });
   if (!syncRes.ok() && syncRes.status() !== 204) {
     const body = await syncRes.text();
     throw new Error(
@@ -350,20 +346,13 @@ export async function seedActiveGuild(
   }
 
   // 6. Fetch channel list to find the first text channel public ID.
-  const channelRes = await request.get(
-    `/api/t/${slug}/guilds/${guildPublicId}/channels`,
-    { headers: authHeader },
-  );
-  if (!channelRes.ok()) {
-    throw new Error(
-      `seedActiveGuild: GET channels failed ${channelRes.status()}`,
-    );
-  }
-  const channelBody = (await channelRes.json()) as {
-    channels: Array<{ publicId: string; channelType: number }>;
-  };
+  const channelBody = await listGuildChannelsOrThrow(request, {
+    slug,
+    guildPublicId,
+    auth,
+  });
   const firstText =
-    channelBody.channels.find((c) => c.channelType === 0)?.publicId ?? null;
+    channelBody.channels?.find((c) => c.channelType === 0)?.publicId ?? null;
 
   return { guildPublicId, firstTextChannelPublicId: firstText };
 }

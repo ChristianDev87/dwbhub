@@ -22,6 +22,9 @@ import {
   seedActiveGuild,
   SETUP_DEFAULTS,
 } from "./helpers/bootstrap";
+import { postTenantLogin } from "./helpers/api/tenants";
+import { bridgeChannel, getBackfillStatus } from "./helpers/api/channels";
+import { testOnly } from "./helpers/api/messages";
 
 const {
   tenantSlug: SLUG,
@@ -43,11 +46,9 @@ async function loginAsOwner(page: Page): Promise<void> {
 }
 
 async function apiLogin(request: APIRequestContext): Promise<string> {
-  const res = await request.post(`/api/tenants/${SLUG}/auth/login`, {
-    data: {
-      email: OWNER_EMAIL,
-      password: OWNER_PASSWORD,
-    },
+  const res = await postTenantLogin(request, {
+    slug: SLUG,
+    body: { email: OWNER_EMAIL, password: OWNER_PASSWORD },
   });
   const body = (await res.json()) as { accessToken: string };
   return body.accessToken;
@@ -71,23 +72,25 @@ async function setupBridgedChannel(
   }
 
   const accessToken = await apiLogin(request);
-  const authHeader = { Authorization: `Bearer ${accessToken}` };
+  const auth = { bearerToken: accessToken };
 
   // Bridge the channel
-  const bridgeRes = await request.post(
-    `/api/t/${SLUG}/channels/${firstTextChannelPublicId}/bridge`,
-    { headers: authHeader },
-  );
+  const bridgeRes = await bridgeChannel(request, {
+    slug: SLUG,
+    channelPublicId: firstTextChannelPublicId,
+    auth,
+  });
   expect([202, 409]).toContain(bridgeRes.status());
 
   // Wait for backfill to complete (up to 60s)
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 2_000));
-    const st = await request.get(
-      `/api/t/${SLUG}/channels/${firstTextChannelPublicId}/backfill-status`,
-      { headers: authHeader },
-    );
+    const st = await getBackfillStatus(request, {
+      slug: SLUG,
+      channelPublicId: firstTextChannelPublicId,
+      auth,
+    });
     if (st.ok()) {
       const body = (await st.json()) as {
         status: { status: string; fetchedCount: number };
@@ -113,19 +116,20 @@ async function setupBridgedChannel(
   // and be dropped silently. See useMessagesHub for the StrictMode-safe
   // lifecycle pattern.
   //
-  // Timeout 30s (was 15s): On a cold dev-stack the first WebSocket upgrade
-  // after Vite serves the bundle + React mounts + SignalR negotiates can
-  // exceed 15s under load, especially when this helper is invoked from a
-  // later test in the file (test 8 — pagination — was observed flaking with
-  // 15s while tests 1-7 passed). Doubling the budget removes the headroom
-  // problem without addressing root cause (which would be: warm up the
-  // dev-stack before the first chat-page navigation, or instrument the API
-  // to confirm hub-init completes server-side before client connects).
+  // Timeout 45s (was 30s, previously 15s): Firefox cold-stack SignalR connect
+  // can exceed 30s — the WebSocket upgrade negotiation is slower in Firefox's
+  // network stack than in Chromium, particularly on first connect after a fresh
+  // bundle load. 45s matches the test budget for the Firefox browser project
+  // without touching the global timeout. Chromium typically connects in <5s.
   await expect(
     page.locator('[data-signalr-state="Connected"]').first(),
-  ).toBeVisible({ timeout: 30_000 });
+  ).toBeVisible({ timeout: 45_000 });
 
-  return { channelPublicId: firstTextChannelPublicId, accessToken, authHeader };
+  return {
+    channelPublicId: firstTextChannelPublicId,
+    accessToken,
+    authHeader: { Authorization: `Bearer ${accessToken}` },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -280,7 +284,7 @@ test.describe("Plan 1.0 chat page", () => {
     request,
   }) => {
     const { accessToken } = await setupBridgedChannel(page, request);
-    const authHeader = { Authorization: `Bearer ${accessToken}` };
+    const auth = { bearerToken: accessToken };
 
     // Send a message
     const uniqueContent = `edit-test-${Date.now()}`;
@@ -314,13 +318,12 @@ test.describe("Plan 1.0 chat page", () => {
 
     // Inject edit via test-only endpoint
     const editedContent = `edited-${Date.now()}`;
-    const editRes = await request.post(
-      `/api/t/${SLUG}/test-only/messages/${messageId}/edit`,
-      {
-        headers: authHeader,
-        data: { content: editedContent },
-      },
-    );
+    const editRes = await testOnly.editMessage(request, {
+      slug: SLUG,
+      messageId,
+      auth,
+      body: { content: editedContent },
+    });
     // 204 = success; 404 = test mode not active (env-var not set)
     expect(editRes.status()).toBe(204);
 
@@ -341,7 +344,7 @@ test.describe("Plan 1.0 chat page", () => {
     request,
   }) => {
     const { accessToken } = await setupBridgedChannel(page, request);
-    const authHeader = { Authorization: `Bearer ${accessToken}` };
+    const auth = { bearerToken: accessToken };
 
     const uniqueContent = `delete-test-${Date.now()}`;
     const input = page.getByTestId("send-box-input");
@@ -367,10 +370,11 @@ test.describe("Plan 1.0 chat page", () => {
       throw new Error("Could not extract message ID from testid");
     const stableRow = page.locator(`[data-testid="${testId}"]`);
 
-    const deleteRes = await request.post(
-      `/api/t/${SLUG}/test-only/messages/${messageId}/delete`,
-      { headers: authHeader },
-    );
+    const deleteRes = await testOnly.deleteMessage(request, {
+      slug: SLUG,
+      messageId,
+      auth,
+    });
     expect(deleteRes.status()).toBe(204);
 
     // Message content should be replaced by the deleted placeholder
@@ -434,7 +438,7 @@ test.describe("Plan 1.0 chat page", () => {
       page,
       request,
     );
-    const authHeader = { Authorization: `Bearer ${accessToken}` };
+    const auth = { bearerToken: accessToken };
 
     // Wait for initial messages to load
     const msgRows = page.locator('[data-testid^="message-row-"]');
@@ -475,17 +479,15 @@ test.describe("Plan 1.0 chat page", () => {
     }
 
     // Inject a new message via test-only endpoint
-    const injectRes = await request.post(
-      `/api/t/${SLUG}/test-only/messages/inject-received`,
-      {
-        headers: authHeader,
-        data: {
-          channelPublicId,
-          content: "scroll-position-test-message",
-          authorName: "injector",
-        },
+    const injectRes = await testOnly.injectReceived(request, {
+      slug: SLUG,
+      auth,
+      body: {
+        channelPublicId,
+        content: "scroll-position-test-message",
+        authorName: "injector",
       },
-    );
+    });
     // 201 = injected; 404 = test mode not active
     expect([201, 404]).toContain(injectRes.status());
 

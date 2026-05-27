@@ -11,6 +11,7 @@ using DwbHub.Data.Repositories;
 using DwbHub.Infrastructure.Auth;
 using DwbHub.Tests.Integration.Bot;
 using DwbHub.Tests.Integration.Infrastructure;
+using DwbHub.Tests.Shared.Api;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -66,7 +67,7 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         Environment.SetEnvironmentVariable("DWBHUB_SMTP_FROM", "noreply@test.local");
         Environment.SetEnvironmentVariable("DWBHUB_PUBLIC_BASE_URL", "http://localhost:5173");
         Environment.SetEnvironmentVariable("DWBHUB_BOOTSTRAP_TOKEN_FILE", Path.GetTempFileName());
-        _factory = new WebApplicationFactory<Program>();
+        _factory = new DwbHubTestFactory();
         _client = _factory.CreateClient();
     }
 
@@ -111,24 +112,24 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         var (_, _, jwt) = await SeedOwnerAsync("acme", "owner@acme.test");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
 
-        var post = await _client.PostAsJsonAsync(
-            "/api/t/acme/guilds",
+        var post = await _client.CreateGuildAsync(
+            "acme",
             new { discordGuildId = "1234567890123456789", displayName = "Production" });
         post.StatusCode.Should().Be(HttpStatusCode.Created);
         var posted = await post.Content.ReadFromJsonAsync<GuildShape>();
         posted!.publicId.Should().NotBeEmpty();
         posted.displayName.Should().Be("Production");
 
-        var get = await _client.GetAsync("/api/t/acme/guilds");
+        var get = await _client.ListGuildsAsync("acme");
         get.StatusCode.Should().Be(HttpStatusCode.OK);
         var list = await get.Content.ReadFromJsonAsync<GuildListShape>();
         list!.guilds.Should().HaveCount(1);
         list.guilds[0].publicId.Should().Be(posted.publicId);
 
-        var del = await _client.DeleteAsync($"/api/t/acme/guilds/{posted.publicId:D}");
+        var del = await _client.DeleteGuildAsync("acme", posted.publicId);
         del.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        var getAfter = await _client.GetAsync("/api/t/acme/guilds");
+        var getAfter = await _client.ListGuildsAsync("acme");
         var listAfter = await getAfter.Content.ReadFromJsonAsync<GuildListShape>();
         listAfter!.guilds.Should().BeEmpty();
     }
@@ -139,8 +140,8 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         var (_, _, jwt) = await SeedMemberAsync("acme", "mem@acme.test");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
 
-        var post = await _client.PostAsJsonAsync(
-            "/api/t/acme/guilds",
+        var post = await _client.CreateGuildAsync(
+            "acme",
             new { discordGuildId = "1234567890123456789", displayName = "X" });
         post.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -151,8 +152,8 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         var (_, _, jwt) = await SeedOwnerAsync("acme", "owner@acme.test");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
 
-        var post = await _client.PostAsJsonAsync(
-            "/api/t/acme/guilds",
+        var post = await _client.CreateGuildAsync(
+            "acme",
             new { discordGuildId = "not-numeric", displayName = "X" });
         post.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -163,12 +164,12 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         var (_, _, jwt) = await SeedOwnerAsync("acme", "owner@acme.test");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
 
-        await _client.PostAsJsonAsync(
-            "/api/t/acme/guilds",
+        await _client.CreateGuildAsync(
+            "acme",
             new { discordGuildId = "1234567890123456789", displayName = "Production" });
 
-        var dup = await _client.PostAsJsonAsync(
-            "/api/t/acme/guilds",
+        var dup = await _client.CreateGuildAsync(
+            "acme",
             new { discordGuildId = "1234567890123456789", displayName = "Different Name" });
         dup.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
@@ -179,7 +180,7 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         var (_, _, jwt) = await SeedOwnerAsync("acme", "owner@acme.test");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
 
-        var del = await _client.DeleteAsync($"/api/t/acme/guilds/{Guid.NewGuid():D}");
+        var del = await _client.DeleteGuildAsync("acme", Guid.NewGuid());
         del.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -219,7 +220,7 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         Environment.SetEnvironmentVariable("DWBHUB_LOG_DIR", uniqueLogDir);
 
         var fakeFactory = new FakeBotConnectionFactory();
-        using var scopedFactory = new WebApplicationFactory<Program>()
+        using var scopedFactory = new DwbHubTestFactory()
             .WithWebHostBuilder(b => b.ConfigureTestServices(svc =>
             {
                 svc.RemoveAll<IBotConnectionFactory>();
@@ -235,7 +236,8 @@ public sealed class GuildsControllerIntegrationTests : IAsyncLifetime
         conn.State.Should().Be(BotConnectionState.Connected);
 
         // Act
-        var resp = await http.GetFromJsonAsync<GuildListShape>($"/api/t/botstate/guilds");
+        var listResp = await http.ListGuildsAsync("botstate");
+        var resp = await listResp.Content.ReadFromJsonAsync<GuildListShape>();
 
         // Assert
         resp.Should().NotBeNull();

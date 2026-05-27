@@ -5,6 +5,7 @@ using DwbHub.Application.Tenancy;
 using DwbHub.Core.Entities;
 using DwbHub.Core.Repositories;
 using DwbHub.Infrastructure.Tenancy;
+using DwbHub.Tests.Shared.Api;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -83,7 +84,7 @@ public sealed class TenantResolverMiddlewareTests
         using var server = BuildServer(tenants, audit);
         var client = server.CreateClient();
 
-        var res = await client.GetAsync("/api/health");
+        var res = await client.GetHealthAsync();
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         (await res.Content.ReadAsStringAsync()).Should().Contain("t=,g=");
         tenants.VerifyNoOtherCalls();
@@ -101,7 +102,7 @@ public sealed class TenantResolverMiddlewareTests
         using var server = BuildServer(tenants, audit);
         var client = server.CreateClient();
 
-        var res = await client.GetAsync("/api/t/acme/dashboard");
+        var res = await client.GetDashboardAsync("acme");
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         (await res.Content.ReadAsStringAsync()).Should().Contain("t=42");
     }
@@ -117,7 +118,7 @@ public sealed class TenantResolverMiddlewareTests
         using var server = BuildServer(tenants, audit, jwtTid: 99, jwtSub: 7);
         var client = server.CreateClient();
 
-        var res = await client.GetAsync("/api/t/acme/dashboard");
+        var res = await client.GetDashboardAsync("acme");
         res.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await res.Content.ReadAsStringAsync()).Should().Contain("cross_tenant_access_denied");
 
@@ -143,7 +144,7 @@ public sealed class TenantResolverMiddlewareTests
         using var server = BuildServer(tenants, audit);
         var client = server.CreateClient();
 
-        var res = await client.GetAsync("/api/t/nope/dashboard");
+        var res = await client.GetDashboardAsync("nope");
         res.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await res.Content.ReadAsStringAsync()).Should().Contain("tenant_not_found");
 
@@ -171,7 +172,7 @@ public sealed class TenantResolverMiddlewareTests
         using var server = BuildServer(tenants, audit, guilds, jwtTid: tenant.Id, jwtSub: 1);
         var client = server.CreateClient();
 
-        var res = await client.GetAsync($"/api/t/acme/g/{pid:D}/anything");
+        var res = await client.GetGuildAnythingAsync("acme", pid);
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await res.Content.ReadAsStringAsync();
         body.Should().Contain($"t={tenant.Id}");
@@ -193,7 +194,7 @@ public sealed class TenantResolverMiddlewareTests
         using var server = BuildServer(tenants, audit, guilds, jwtTid: tenant.Id, jwtSub: 1);
         var client = server.CreateClient();
 
-        var res = await client.GetAsync($"/api/t/acme/g/{pid:D}/anything");
+        var res = await client.GetGuildAnythingAsync("acme", pid);
         res.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await res.Content.ReadAsStringAsync()).Should().Contain("guild_not_found");
 
@@ -219,7 +220,7 @@ public sealed class TenantResolverMiddlewareTests
         using var server = BuildServer(tenants, audit, guilds);
         var client = server.CreateClient();
 
-        var res = await client.GetAsync($"/api/t/nope/g/{pid:D}/anything");
+        var res = await client.GetGuildAnythingAsync("nope", pid);
         res.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await res.Content.ReadAsStringAsync()).Should().Contain("tenant_not_found");
 

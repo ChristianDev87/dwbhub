@@ -14,6 +14,7 @@ public sealed class TenantDashboardController(ITenantContext tenantContext) : Co
 {
     /// <summary>Return tenant metadata (id, slug, name, locale) for the authenticated user's tenant.</summary>
     [HttpGet("/api/t/{slug}/dashboard")]
+    [ProducesResponseType<DashboardResponse>(StatusCodes.Status200OK)]
     public IActionResult Get(string slug)
     {
         _ = slug;

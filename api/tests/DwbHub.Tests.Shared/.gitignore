@@ -1,0 +1,7 @@
+# Allow empty-marker files in bin/ and obj/ so Docker can mount tmpfs at those
+# paths over the read-only :ro workspace bind in docker-compose.test.yml.
+# Without these markers the directories don't exist in a fresh checkout, and
+# Docker fails with "read-only file system" when trying to create the tmpfs
+# mountpoint via mkdirat on the :ro bind mount.
+!bin/.gitkeep
+!obj/.gitkeep

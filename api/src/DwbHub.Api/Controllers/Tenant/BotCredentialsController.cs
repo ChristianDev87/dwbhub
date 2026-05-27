@@ -32,6 +32,8 @@ public sealed class BotCredentialsController(
     /// </summary>
     [HttpPut]
     [Authorize(Roles = "Owner")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Set(
         string slug,
         Guid guildPublicId,
@@ -76,6 +78,8 @@ public sealed class BotCredentialsController(
     /// </summary>
     [HttpDelete]
     [Authorize(Roles = "Owner")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Remove(
         string slug,
         Guid guildPublicId,

@@ -1,40 +1,21 @@
 import type React from "react";
-import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-
-type HealthResponse = {
-  status: string;
-  version: string;
-  uptime_seconds: number;
-};
-
-type HealthState =
-  | { kind: "loading" }
-  | { kind: "ok"; data: HealthResponse }
-  | { kind: "error"; message: string };
+import { useQuery } from "@tanstack/react-query";
+import { useApiClient } from "@/lib/api/useApiClient";
+import { qk } from "@/lib/api/queryKeys";
 
 export function HelloPage(): React.JSX.Element {
   const { t } = useTranslation();
-  const [state, setState] = useState<HealthState>({ kind: "loading" });
+  const api = useApiClient();
 
-  useEffect(() => {
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        const res = await fetch("/api/health", { signal: controller.signal });
-        if (!res.ok) {
-          setState({ kind: "error", message: `HTTP ${res.status}` });
-          return;
-        }
-        const data = (await res.json()) as HealthResponse;
-        setState({ kind: "ok", data });
-      } catch (err) {
-        if ((err as Error).name === "AbortError") return;
-        setState({ kind: "error", message: (err as Error).message });
-      }
-    })();
-    return () => controller.abort();
-  }, []);
+  const { data, isError, error } = useQuery({
+    queryKey: qk.health(),
+    queryFn: async () => {
+      const { data, error: fetchError } = await api.GET("/api/health");
+      if (fetchError) throw fetchError;
+      return data;
+    },
+  });
 
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col items-center justify-center gap-4 px-6 py-12">
@@ -47,20 +28,21 @@ export function HelloPage(): React.JSX.Element {
         data-testid="api-status"
       >
         <span className="font-semibold">{t("hello.api_status_label")}:</span>{" "}
-        {state.kind === "loading" && (
+        {data === undefined && !isError && (
           <span>{t("hello.api_status_loading")}</span>
         )}
-        {state.kind === "ok" && (
+        {data !== undefined && (
           <span data-testid="api-status-ok">
             {t("hello.api_status_ok", {
-              version: state.data.version,
-              uptime: state.data.uptime_seconds,
+              version: data.version,
+              uptime: data.uptime_seconds,
             })}
           </span>
         )}
-        {state.kind === "error" && (
+        {isError && (
           <span data-testid="api-status-error" className="text-red-600">
-            {t("hello.api_status_error")} ({state.message})
+            {t("hello.api_status_error")} (
+            {(error as Error)?.message ?? "unknown"})
           </span>
         )}
       </section>

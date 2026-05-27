@@ -46,6 +46,8 @@ services:
       - /workspace/api/tests/DwbHub.Tests.Integration/bin
       - /workspace/api/tests/DwbHub.Tests.Security/obj
       - /workspace/api/tests/DwbHub.Tests.Security/bin
+      - /workspace/api/tests/DwbHub.Tests.Shared/obj
+      - /workspace/api/tests/DwbHub.Tests.Shared/bin
     extra_hosts:
       # Docker's official DinD pattern: maps host.docker.internal to whatever
       # `host-gateway` resolves to on the current platform. Works on Docker
@@ -245,6 +247,8 @@ services:
       - /workspace/api/src/DwbHub.Infrastructure/bin
       - /workspace/api/tests/DwbHub.Tests.Integration/obj
       - /workspace/api/tests/DwbHub.Tests.Integration/bin
+      - /workspace/api/tests/DwbHub.Tests.Shared/obj
+      - /workspace/api/tests/DwbHub.Tests.Shared/bin
     extra_hosts:
       # Discord.Net resolves wss://gateway.discord.gg via public DNS; extra_hosts
       # doesn't interfere with that, and mirrors the pattern used by backend-tests.

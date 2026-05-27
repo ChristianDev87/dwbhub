@@ -53,7 +53,19 @@ export interface AuthContextValue {
     password: string,
   ) => Promise<LoginResult>;
   logout: () => Promise<void>;
-  refresh: () => Promise<boolean>;
+  /**
+   * Attempts a cookie-based silent token refresh via /api/auth/refresh.
+   *
+   * Returns the new access token on success, or null on failure.
+   * On failure, AuthContext sets state to "unauthenticated" as a side-effect.
+   *
+   * IMPORTANT: This is intentionally a raw fetch call (not routed through the
+   * typed API client) to avoid a potential infinite refresh-on-refresh loop.
+   *
+   * Exposed as a stable useCallback reference so useApiClient can pass it to
+   * createApiClient without causing unnecessary client rebuilds.
+   */
+  refreshAccessToken: () => Promise<string | null>;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);

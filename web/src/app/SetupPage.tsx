@@ -5,7 +5,9 @@ import { useTranslation } from "react-i18next";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useMutation } from "@tanstack/react-query";
 import { Loader2, AlertCircle } from "lucide-react";
+import { useApiClient } from "@/lib/api/useApiClient";
 
 const slugRegex = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 
@@ -20,23 +22,18 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
-type SubmitState =
-  | { kind: "idle" }
-  | { kind: "submitting" }
-  | {
-      kind: "error";
-      reason:
-        | "invalid_bootstrap_token"
-        | "setup_already_completed"
-        | "slug_in_use"
-        | "weak_password"
-        | "invalid_request"
-        | "network";
-    };
+type ErrorReason =
+  | "invalid_bootstrap_token"
+  | "setup_already_completed"
+  | "slug_in_use"
+  | "weak_password"
+  | "invalid_request"
+  | "network";
 
 export function SetupPage(): React.JSX.Element {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const api = useApiClient();
   const {
     register,
     handleSubmit,
@@ -45,39 +42,55 @@ export function SetupPage(): React.JSX.Element {
     resolver: zodResolver(schema),
     defaultValues: { tenantLocale: "de" },
   });
-  const [state, setState] = useState<SubmitState>({ kind: "idle" });
+  const [serverError, setServerError] = useState<ErrorReason | null>(null);
 
-  const onSubmit = async (values: FormValues) => {
-    setState({ kind: "submitting" });
-    try {
-      const res = await fetch("/api/setup/complete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+  const mutation = useMutation({
+    mutationFn: async (values: FormValues) => {
+      const { data, error } = await api.POST("/api/setup/complete", {
+        body: {
+          bootstrapToken: values.bootstrapToken,
+          tenantName: values.tenantName,
+          tenantSlug: values.tenantSlug,
+          tenantLocale: values.tenantLocale,
+          ownerEmail: values.ownerEmail,
+          ownerDisplayName: values.ownerDisplayName,
+          ownerPassword: values.ownerPassword,
+        },
       });
-      if (res.status === 201) {
-        const body = (await res.json()) as { tenantSlug: string };
-        navigate(`/t/${body.tenantSlug}/verify-email-prompt`);
-        return;
+      if (error) {
+        const body = error as { error?: string } | null;
+        const reason: ErrorReason =
+          body?.error === "invalid_bootstrap_token"
+            ? "invalid_bootstrap_token"
+            : body?.error === "setup_already_completed"
+              ? "setup_already_completed"
+              : body?.error === "slug_in_use"
+                ? "slug_in_use"
+                : body?.error === "weak_password"
+                  ? "weak_password"
+                  : "invalid_request";
+        throw new Error(reason);
       }
-      const body = (await res.json().catch(() => null)) as {
-        error?: string;
-      } | null;
-      const reason =
-        body?.error === "invalid_bootstrap_token"
-          ? "invalid_bootstrap_token"
-          : body?.error === "setup_already_completed"
-            ? "setup_already_completed"
-            : body?.error === "slug_in_use"
-              ? "slug_in_use"
-              : body?.error === "weak_password"
-                ? "weak_password"
-                : "invalid_request";
-      setState({ kind: "error", reason });
-    } catch {
-      setState({ kind: "error", reason: "network" });
-    }
+      if (data === undefined) throw new Error("invalid_request");
+      return data;
+    },
+    onSuccess: (result) => {
+      const slug = result?.tenantSlug;
+      if (!slug) throw new Error("invalid_request");
+      navigate(`/t/${slug}/verify-email-prompt`);
+    },
+    onError: (err: Error) => {
+      const reason = (err.message as ErrorReason) ?? "network";
+      setServerError(reason);
+    },
+  });
+
+  const onSubmit = (values: FormValues) => {
+    setServerError(null);
+    mutation.mutate(values);
   };
+
+  const isSubmitting = mutation.isPending;
 
   return (
     <main
@@ -189,24 +202,22 @@ export function SetupPage(): React.JSX.Element {
             </p>
           )}
         </label>
-        {state.kind === "error" && (
+        {serverError !== null && (
           <p
             className="text-sm text-red-600 flex items-center gap-2"
             data-testid="setup-server-error"
           >
             <AlertCircle className="h-4 w-4" />
-            {t(`setup.errors.${state.reason}`)}
+            {t(`setup.errors.${serverError}`)}
           </p>
         )}
         <button
           type="submit"
-          disabled={state.kind === "submitting"}
+          disabled={isSubmitting}
           data-testid="setup-submit"
           className="inline-flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
         >
-          {state.kind === "submitting" && (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          )}
+          {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
           {t("setup.submit")}
         </button>
       </form>

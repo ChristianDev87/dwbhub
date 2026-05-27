@@ -11,6 +11,7 @@ using DwbHub.Data.Connections;
 using DwbHub.Data.Repositories;
 using DwbHub.Infrastructure.Auth;
 using DwbHub.Tests.Integration.Infrastructure;
+using DwbHub.Tests.Shared.Api;
 using FluentAssertions;
 using Hangfire;
 using Hangfire.Common;
@@ -88,7 +89,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
         Environment.SetEnvironmentVariable("DWBHUB_SMTP_FROM", "noreply@test.local");
         Environment.SetEnvironmentVariable("DWBHUB_PUBLIC_BASE_URL", "http://localhost:5173");
         Environment.SetEnvironmentVariable("DWBHUB_BOOTSTRAP_TOKEN_FILE", Path.GetTempFileName());
-        _factory = new WebApplicationFactory<Program>();
+        _factory = new DwbHubTestFactory();
     }
 
     public async Task DisposeAsync()
@@ -191,8 +192,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
         var (ch2Id, _) = await SeedChannelAsync(tid, gid, 100000000000001002L, "announcements", true);
 
         using var client = BuildClient(jwt);
-        var res = await client.GetAsync(
-            $"/api/t/chan-list/guilds/{gPublicId:D}/channels");
+        var res = await client.ListChannelsAsync("chan-list", gPublicId);
 
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await res.Content.ReadFromJsonAsync<JsonElement>();
@@ -215,8 +215,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
         var (tidB, uidB, gPublicIdB, _, _) = await SeedAsync("chan-list-xt2", "b@test.local");
 
         using var client = BuildClient(jwtA);
-        var res = await client.GetAsync(
-            $"/api/t/chan-list-xt1/guilds/{gPublicIdB:D}/channels");
+        var res = await client.ListChannelsAsync("chan-list-xt1", gPublicIdB);
 
         res.StatusCode.Should().Be(HttpStatusCode.NotFound);
         var body = await res.Content.ReadAsStringAsync();
@@ -234,9 +233,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
         var syncSvc = new CapturingSyncService(onSync: () => callCount++);
 
         using var client = BuildClient(jwt, syncSvc: syncSvc);
-        var res = await client.PostAsync(
-            $"/api/t/chan-sync/guilds/{gPublicId:D}/channels/sync",
-            content: null);
+        var res = await client.SyncChannelsAsync("chan-sync", gPublicId);
 
         res.StatusCode.Should().Be(HttpStatusCode.NoContent);
         callCount.Should().Be(1);
@@ -257,9 +254,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
         var jobClient = new CapturingJobClient(onEnqueue: (id) => capturedJobId = id);
 
         using var client = BuildClient(jwt, webhookSvc: webhookSvc, jobClient: jobClient);
-        var res = await client.PostAsync(
-            $"/api/t/chan-bridge/channels/{channelPublicId:D}/bridge",
-            content: null);
+        var res = await client.BridgeChannelAsync("chan-bridge", channelPublicId);
 
         res.StatusCode.Should().Be(HttpStatusCode.Accepted);
         webhookCreated.Should().BeTrue();
@@ -286,9 +281,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
             tid, gid, 100000000000002101L, "already-bridged", true);
 
         using var client = BuildClient(jwt);
-        var res = await client.PostAsync(
-            $"/api/t/chan-bridge-dup/channels/{channelPublicId:D}/bridge",
-            content: null);
+        var res = await client.BridgeChannelAsync("chan-bridge-dup", channelPublicId);
 
         res.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var body = await res.Content.ReadAsStringAsync();
@@ -308,9 +301,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
             new DiscordPermissionException("Missing MANAGE_WEBHOOKS"));
 
         using var client = BuildClient(jwt, webhookSvc: throwingSvc);
-        var res = await client.PostAsync(
-            $"/api/t/chan-bridge-perm/channels/{channelPublicId:D}/bridge",
-            content: null);
+        var res = await client.BridgeChannelAsync("chan-bridge-perm", channelPublicId);
 
         res.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var body = await res.Content.ReadAsStringAsync();
@@ -332,9 +323,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
             onRollback: () => rollbackCalledCount++);
 
         using var client = BuildClient(jwt, webhookSvc: webhookSvc);
-        var res = await client.PostAsync(
-            $"/api/t/chan-rollback/channels/{channelPublicId:D}/bridge",
-            content: null);
+        var res = await client.BridgeChannelAsync("chan-rollback", channelPublicId);
 
         // Bridge should fail and channel should remain un-bridged.
         res.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
@@ -363,8 +352,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
         var jobClient = new CapturingJobClient(onDelete: (id) => { /* capture */ });
 
         using var client = BuildClient(jwt, webhookSvc: webhookSvc, jobClient: jobClient);
-        var res = await client.DeleteAsync(
-            $"/api/t/chan-unbridge/channels/{channelPublicId:D}/bridge");
+        var res = await client.UnbridgeChannelAsync("chan-unbridge", channelPublicId);
 
         res.StatusCode.Should().Be(HttpStatusCode.NoContent);
         webhookDeleted.Should().BeTrue();
@@ -388,8 +376,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
             tid, gid, 100000000000002501L, "not-bridged-ch", false);
 
         using var client = BuildClient(jwt);
-        var res = await client.DeleteAsync(
-            $"/api/t/chan-unbridge-404/channels/{channelPublicId:D}/bridge");
+        var res = await client.UnbridgeChannelAsync("chan-unbridge-404", channelPublicId);
 
         res.StatusCode.Should().Be(HttpStatusCode.NotFound);
         var body = await res.Content.ReadAsStringAsync();
@@ -409,8 +396,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
         await _jobs.MarkRunningAsync(tid, job.Id);
 
         using var client = BuildClient(jwt);
-        var res = await client.GetAsync(
-            $"/api/t/chan-bfstatus/channels/{channelPublicId:D}/backfill-status");
+        var res = await client.GetBackfillStatusAsync("chan-bfstatus", channelPublicId);
 
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await res.Content.ReadFromJsonAsync<JsonElement>();
@@ -429,8 +415,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
             tid, gid, 100000000000002701L, "no-job-ch", true);
 
         using var client = BuildClient(jwt);
-        var res = await client.GetAsync(
-            $"/api/t/chan-bfstatus-404/channels/{channelPublicId:D}/backfill-status");
+        var res = await client.GetBackfillStatusAsync("chan-bfstatus-404", channelPublicId);
 
         res.StatusCode.Should().Be(HttpStatusCode.NotFound);
         var body = await res.Content.ReadAsStringAsync();
@@ -453,8 +438,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
         var jobClient = new CapturingJobClient(onDelete: (id) => deletedHangfireId = id);
 
         using var client = BuildClient(jwt, jobClient: jobClient);
-        var res = await client.DeleteAsync(
-            $"/api/t/chan-bfcancel/channels/{channelPublicId:D}/backfill-jobs/{job.Id}");
+        var res = await client.CancelBackfillJobAsync("chan-bfcancel", channelPublicId, job.Id);
 
         res.StatusCode.Should().Be(HttpStatusCode.NoContent);
         deletedHangfireId.Should().Be("hf-cancel-job");
@@ -477,8 +461,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
 
         // Tenant A's JWT targeting tenant B's job.
         using var client = BuildClient(jwtA);
-        var res = await client.DeleteAsync(
-            $"/api/t/chan-bfcancel-xt1/channels/{channelPublicIdB:D}/backfill-jobs/{jobB.Id}");
+        var res = await client.CancelBackfillJobAsync("chan-bfcancel-xt1", channelPublicIdB, jobB.Id);
 
         res.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -497,9 +480,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
         var webhookSvc = new TrackingWebhookService();
         using var client = BuildClient(jwt, webhookSvc: webhookSvc, jobClient: jobClient);
 
-        var bridgeRes = await client.PostAsync(
-            $"/api/t/chan-hist-preserve/channels/{channelPublicId:D}/bridge",
-            content: null);
+        var bridgeRes = await client.BridgeChannelAsync("chan-hist-preserve", channelPublicId);
         bridgeRes.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
         // Seed messages directly into the DB (simulating backfill).
@@ -517,8 +498,7 @@ public sealed class ChannelsControllerTests : IAsyncLifetime
         await _messages.InsertAsync(msg);
 
         // Unbridge.
-        var unbridgeRes = await client.DeleteAsync(
-            $"/api/t/chan-hist-preserve/channels/{channelPublicId:D}/bridge");
+        var unbridgeRes = await client.UnbridgeChannelAsync("chan-hist-preserve", channelPublicId);
         unbridgeRes.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         // Messages must still be in the DB.

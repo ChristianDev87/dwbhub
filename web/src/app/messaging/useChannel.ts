@@ -1,27 +1,35 @@
 /**
  * useChannel — chat history + live updates + send for a single channel.
  *
+ * Migrated to typed openapi-fetch + TanStack Query (PR 5c).
+ *
  * Responsibilities:
  *   - Initial fetch of message history (newest-first, then reversed for display)
- *   - Lazy-load of older pages via loadOlder()
+ *   - Lazy-load of older pages via loadOlder() — manual cache extension via
+ *     setQueryData (not useInfiniteQuery, to keep SignalR patch paths simple)
  *   - Live SignalR events: MessageReceived, MessageUpdated, MessageDeleted
  *   - Optimistic send with echo deduplication by discordMessageId; falls back
  *     to content+authorName match when the POST has not yet resolved (race
  *     case: server broadcasts before the HTTP response reaches the client)
- *
- * AbortController is used on all fetches so that stale responses from
- * StrictMode double-mounts are discarded before they can call setState.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type HubConnectionState } from "@microsoft/signalr";
 import { useAuth } from "../auth-context";
+import { useApiClient } from "@/lib/api/useApiClient";
+import { qk } from "@/lib/api/queryKeys";
 import { useMessagesHub } from "./useMessagesHub";
 import type { MessageEvent } from "./messages-events";
+import type { components } from "@/lib/api/generated/schema";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+type SchemaMessageItem = components["schemas"]["MessageHistoryItem"];
+type SchemaMessageHistoryResponse =
+  components["schemas"]["MessageHistoryResponse"];
 
 export interface ChatMessage {
   /** Positive from backend; negative temp ID for pending sends. */
@@ -37,27 +45,10 @@ export interface ChatMessage {
   isPending: boolean;
 }
 
-// Backend history item shape (from GET /messages)
-interface MessageHistoryItem {
-  id: number;
-  authorName: string;
-  content: string;
-  sentAt: string;
-  editedAt: string | null;
-  viaDwbhub: boolean;
-  discordMessageId: number | string;
-}
-
-interface MessageHistoryResponse {
-  messages: MessageHistoryItem[];
+// Internal cache shape (extends the API response with display-ready messages)
+interface MessageCacheData {
+  messages: ChatMessage[];
   nextBefore: number | null;
-}
-
-// Backend send-response shape (from POST /messages)
-interface SendMessageResponse {
-  id: number;
-  discordMessageId: number;
-  sentAt: string;
 }
 
 export interface UseChannelResult {
@@ -77,6 +68,24 @@ export interface UseChannelResult {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function schemaItemToChat(item: SchemaMessageItem): ChatMessage {
+  return {
+    id: item.id ?? 0,
+    authorName: item.authorName ?? "",
+    content: item.content ?? "",
+    sentAt: item.sentAt ?? new Date().toISOString(),
+    editedAt: item.editedAt ?? null,
+    viaDwbhub: item.viaDwbhub ?? false,
+    discordMessageId: item.discordMessageId ?? null,
+    isDeleted: false,
+    isPending: false,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
@@ -85,182 +94,241 @@ export function useChannel(
   channelPublicId: string,
 ): UseChannelResult {
   const { state } = useAuth();
-  const accessToken = state.kind === "authenticated" ? state.accessToken : null;
   const displayName =
     state.kind === "authenticated" ? state.user.displayName : "";
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-  const [sendError, setSendError] = useState<string | null>(null);
-  const [newCount, setNewCount] = useState(0);
+  const api = useApiClient();
+  const queryClient = useQueryClient();
 
   // Track whether the user is at the bottom of the list
   const atBottomRef = useRef(true);
 
-  // cursor for pagination (discordMessageId of oldest loaded message)
-  const nextBeforeRef = useRef<number | null>(null);
+  // Local state for things that don't belong in the query cache
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const [newCount, setNewCount] = useState(0);
 
-  // AbortController for the initial history fetch
-  const initAbortRef = useRef<AbortController | null>(null);
-  // AbortController for in-flight "load older" fetch
-  const olderAbortRef = useRef<AbortController | null>(null);
+  // ── Initial message query ────────────────────────────────────────────────
+  const {
+    data: cacheData,
+    isLoading,
+    isError,
+  } = useQuery<MessageCacheData>({
+    queryKey: qk.messages.list(slug, channelPublicId),
+    queryFn: async () => {
+      const { data, error } = await api.GET(
+        "/api/t/{slug}/channels/{channelPublicId}/messages",
+        {
+          params: {
+            path: { slug, channelPublicId },
+            query: { limit: 50 },
+          },
+        },
+      );
+      if (error) throw error;
+      const resp = data as SchemaMessageHistoryResponse;
+      // API returns newest-first; reverse for display (oldest at top)
+      const messages: ChatMessage[] = [...(resp.messages ?? [])]
+        .reverse()
+        .map(schemaItemToChat);
+      return {
+        messages,
+        nextBefore: resp.nextBefore ?? null,
+      };
+    },
+    staleTime: Infinity, // SignalR owns freshness
+    enabled: slug.length > 0 && channelPublicId.length > 0,
+  });
 
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
+  const messages = cacheData?.messages ?? [];
+  const hasMore = (cacheData?.nextBefore ?? null) !== null;
 
-  function historyItemToChat(item: MessageHistoryItem): ChatMessage {
-    return {
-      id: item.id,
-      authorName: item.authorName,
-      content: item.content,
-      sentAt: item.sentAt,
-      editedAt: item.editedAt ?? null,
-      viaDwbhub: item.viaDwbhub,
-      discordMessageId: item.discordMessageId,
-      isDeleted: false,
-      isPending: false,
-    };
-  }
-
-  // ---------------------------------------------------------------------------
-  // Initial load
-  // ---------------------------------------------------------------------------
-
-  useEffect(() => {
-    if (!accessToken) return;
-
-    // Cancel any previous in-flight initial fetch (StrictMode double-mount)
-    initAbortRef.current?.abort();
-    const controller = new AbortController();
-    initAbortRef.current = controller;
-
-    setIsLoading(true);
-    setError(null);
-
-    void (async () => {
-      try {
-        const url = `/api/t/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channelPublicId)}/messages?limit=50`;
-        const res = await fetch(url, {
-          credentials: "include",
-          headers: { Authorization: `Bearer ${accessToken}` },
-          signal: controller.signal,
-        });
-
-        if (!res.ok) {
-          setError("load");
-          return;
-        }
-
-        const body = (await res.json()) as MessageHistoryResponse;
-
-        // API returns newest-first; reverse for display (oldest at top)
-        const items: ChatMessage[] = [...body.messages]
-          .reverse()
-          .map(historyItemToChat);
-
-        setMessages(items);
-        setHasMore(body.nextBefore !== null);
-        nextBeforeRef.current = body.nextBefore;
-      } catch (err: unknown) {
-        if ((err as { name?: string }).name === "AbortError") return;
-        setError("load");
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      controller.abort();
-    };
-  }, [slug, channelPublicId, accessToken]);
-
-  // ---------------------------------------------------------------------------
-  // Load older messages (scroll-to-top pagination)
-  // ---------------------------------------------------------------------------
-
+  // ── Load older messages (scroll-to-top pagination) ───────────────────────
   const loadOlder = useCallback(() => {
-    if (!accessToken || !hasMore || isLoadingOlder) return;
-    if (nextBeforeRef.current === null) return;
+    const current = queryClient.getQueryData<MessageCacheData>(
+      qk.messages.list(slug, channelPublicId),
+    );
+    if (!current || current.nextBefore === null || isLoadingOlder) return;
 
-    // Cancel any previous in-flight older fetch
-    olderAbortRef.current?.abort();
-    const controller = new AbortController();
-    olderAbortRef.current = controller;
-
+    const beforeCursor = current.nextBefore;
     setIsLoadingOlder(true);
 
     void (async () => {
       try {
-        const url = `/api/t/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channelPublicId)}/messages?limit=50&before=${String(nextBeforeRef.current)}`;
-        const res = await fetch(url, {
-          credentials: "include",
-          headers: { Authorization: `Bearer ${accessToken}` },
-          signal: controller.signal,
-        });
-
-        if (!res.ok) return;
-
-        const body = (await res.json()) as MessageHistoryResponse;
-        const older: ChatMessage[] = [...body.messages]
+        const { data, error } = await api.GET(
+          "/api/t/{slug}/channels/{channelPublicId}/messages",
+          {
+            params: {
+              path: { slug, channelPublicId },
+              query: { limit: 50, before: beforeCursor },
+            },
+          },
+        );
+        if (error) return;
+        const resp = data as SchemaMessageHistoryResponse;
+        const older: ChatMessage[] = [...(resp.messages ?? [])]
           .reverse()
-          .map(historyItemToChat);
+          .map(schemaItemToChat);
 
-        setMessages((prev) => [...older, ...prev]);
-        setHasMore(body.nextBefore !== null);
-        nextBeforeRef.current = body.nextBefore;
-      } catch (err: unknown) {
-        if ((err as { name?: string }).name === "AbortError") return;
-        // Silently ignore older-page errors; user can scroll again to retry
+        queryClient.setQueryData<MessageCacheData>(
+          qk.messages.list(slug, channelPublicId),
+          (old) => {
+            if (!old) return old;
+            return {
+              messages: [...older, ...old.messages],
+              nextBefore: resp.nextBefore ?? null,
+            };
+          },
+        );
       } finally {
-        if (!controller.signal.aborted) {
-          setIsLoadingOlder(false);
-        }
+        setIsLoadingOlder(false);
       }
     })();
-  }, [slug, channelPublicId, accessToken, hasMore, isLoadingOlder]);
+  }, [api, queryClient, slug, channelPublicId, isLoadingOlder]);
 
-  // ---------------------------------------------------------------------------
-  // Live SignalR events
-  // ---------------------------------------------------------------------------
+  // ── Optimistic send mutation ─────────────────────────────────────────────
+  const sendMutation = useMutation<
+    components["schemas"]["SendMessageResponse"],
+    Error,
+    string,
+    { previousData: MessageCacheData | undefined; tempId: number }
+  >({
+    mutationFn: async (content: string) => {
+      const { data, error } = await api.POST(
+        "/api/t/{slug}/channels/{channelPublicId}/messages",
+        {
+          params: { path: { slug, channelPublicId } },
+          body: { content },
+        },
+      );
+      if (error) throw new Error("send");
+      return data as components["schemas"]["SendMessageResponse"];
+    },
+    onMutate: async (content: string) => {
+      await queryClient.cancelQueries({
+        queryKey: qk.messages.list(slug, channelPublicId),
+      });
+      const previousData = queryClient.getQueryData<MessageCacheData>(
+        qk.messages.list(slug, channelPublicId),
+      );
 
+      const tempId = -Date.now();
+      const pendingMsg: ChatMessage = {
+        id: tempId,
+        authorName: displayName,
+        content,
+        sentAt: new Date().toISOString(),
+        editedAt: null,
+        viaDwbhub: true,
+        discordMessageId: null, // filled after POST responds
+        isDeleted: false,
+        isPending: true,
+      };
+
+      queryClient.setQueryData<MessageCacheData>(
+        qk.messages.list(slug, channelPublicId),
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            messages: [...old.messages, pendingMsg],
+          };
+        },
+      );
+
+      return { previousData, tempId };
+    },
+    onError: (_err, _content, ctx) => {
+      // Rollback optimistic entry
+      if (ctx?.previousData !== undefined) {
+        queryClient.setQueryData(
+          qk.messages.list(slug, channelPublicId),
+          ctx.previousData,
+        );
+      }
+    },
+    onSuccess: (responseData, _content, ctx) => {
+      if (!ctx) return;
+      const { tempId } = ctx;
+      // Stamp the pending entry with the real discordMessageId so the
+      // incoming SignalR echo can find and replace it.
+      queryClient.setQueryData<MessageCacheData>(
+        qk.messages.list(slug, channelPublicId),
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            messages: old.messages.map((m) =>
+              m.id === tempId
+                ? {
+                    ...m,
+                    discordMessageId: responseData.discordMessageId ?? null,
+                  }
+                : m,
+            ),
+          };
+        },
+      );
+    },
+  });
+
+  async function sendMessage(content: string): Promise<void> {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    await sendMutation.mutateAsync(trimmed);
+  }
+
+  // ── Live SignalR events ──────────────────────────────────────────────────
   const hubHandler = useCallback(
     (evt: MessageEvent) => {
       if (evt.kind === "MessageReceived") {
         const p = evt.payload;
         if (p.channelPublicId !== channelPublicId) return;
 
-        setMessages((prev) => {
-          // Match 1: pending entry already has discordMessageId (POST resolved first)
-          let pendingIdx = prev.findIndex(
-            (m) =>
-              m.isPending &&
-              m.discordMessageId !== null &&
-              String(m.discordMessageId) === String(p.discordMessageId),
-          );
+        queryClient.setQueryData<MessageCacheData>(
+          qk.messages.list(slug, channelPublicId),
+          (old) => {
+            if (!old) return old;
+            const prev = old.messages;
 
-          // Match 2: race case — POST has not resolved yet so discordMessageId
-          // is still null on the pending entry; fall back to content + authorName
-          if (pendingIdx === -1 && p.viaDwbhub) {
-            pendingIdx = prev.findIndex(
+            // Match 1: pending entry already has discordMessageId (POST resolved first)
+            let pendingIdx = prev.findIndex(
               (m) =>
                 m.isPending &&
-                m.discordMessageId === null &&
-                m.content === p.content &&
-                m.authorName === p.authorName,
+                m.discordMessageId !== null &&
+                String(m.discordMessageId) === String(p.discordMessageId),
             );
-          }
 
-          if (pendingIdx !== -1) {
-            // Replace pending entry with confirmed message
-            const updated = [...prev];
-            updated[pendingIdx] = {
+            // Match 2: race case — POST has not resolved yet so discordMessageId
+            // is still null on the pending entry; fall back to content + authorName
+            if (pendingIdx === -1 && p.viaDwbhub) {
+              pendingIdx = prev.findIndex(
+                (m) =>
+                  m.isPending &&
+                  m.discordMessageId === null &&
+                  m.content === p.content &&
+                  m.authorName === p.authorName,
+              );
+            }
+
+            if (pendingIdx !== -1) {
+              // Replace pending entry with confirmed message
+              const updated = [...prev];
+              updated[pendingIdx] = {
+                id: p.id,
+                authorName: p.authorName,
+                content: p.content,
+                sentAt: p.sentAt,
+                editedAt: null,
+                viaDwbhub: p.viaDwbhub,
+                discordMessageId: p.discordMessageId,
+                isDeleted: false,
+                isPending: false,
+              };
+              return { ...old, messages: updated };
+            }
+
+            // No match: new message from someone else (or unmatched — append)
+            const newMsg: ChatMessage = {
               id: p.id,
               authorName: p.authorName,
               content: p.content,
@@ -271,131 +339,56 @@ export function useChannel(
               isDeleted: false,
               isPending: false,
             };
-            return updated;
-          }
 
-          // No match: new message from someone else (or unmatched — append)
-          const newMsg: ChatMessage = {
-            id: p.id,
-            authorName: p.authorName,
-            content: p.content,
-            sentAt: p.sentAt,
-            editedAt: null,
-            viaDwbhub: p.viaDwbhub,
-            discordMessageId: p.discordMessageId,
-            isDeleted: false,
-            isPending: false,
-          };
+            if (!atBottomRef.current) {
+              setNewCount((n) => n + 1);
+            }
 
-          if (!atBottomRef.current) {
-            setNewCount((n) => n + 1);
-          }
-
-          return [...prev, newMsg];
-        });
+            return { ...old, messages: [...prev, newMsg] };
+          },
+        );
       } else if (evt.kind === "MessageUpdated") {
         const p = evt.payload;
-        // Backend broadcasts messageId = discord_message_id (snowflake).
-        // Match against ChatMessage.discordMessageId using string comparison
-        // to avoid precision loss on very large snowflakes.
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.discordMessageId !== null &&
-            String(m.discordMessageId) === String(p.messageId)
-              ? { ...m, content: p.content, editedAt: p.editedAt }
-              : m,
-          ),
+        queryClient.setQueryData<MessageCacheData>(
+          qk.messages.list(slug, channelPublicId),
+          (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              messages: old.messages.map((m) =>
+                m.discordMessageId !== null &&
+                String(m.discordMessageId) === String(p.messageId)
+                  ? { ...m, content: p.content, editedAt: p.editedAt }
+                  : m,
+              ),
+            };
+          },
         );
       } else if (evt.kind === "MessageDeleted") {
         const p = evt.payload;
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.discordMessageId !== null &&
-            String(m.discordMessageId) === String(p.messageId)
-              ? { ...m, isDeleted: true }
-              : m,
-          ),
+        queryClient.setQueryData<MessageCacheData>(
+          qk.messages.list(slug, channelPublicId),
+          (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              messages: old.messages.map((m) =>
+                m.discordMessageId !== null &&
+                String(m.discordMessageId) === String(p.messageId)
+                  ? { ...m, isDeleted: true }
+                  : m,
+              ),
+            };
+          },
         );
       }
     },
-    [channelPublicId],
+    [queryClient, slug, channelPublicId],
   );
 
   const hubState = useMessagesHub(hubHandler);
 
-  // ---------------------------------------------------------------------------
-  // Send message
-  // ---------------------------------------------------------------------------
-
-  const sendMessage = useCallback(
-    async (content: string): Promise<void> => {
-      if (!accessToken) return;
-      const trimmed = content.trim();
-      if (!trimmed) return;
-
-      setSendError(null);
-      setIsSending(true);
-
-      // Optimistic: insert pending entry with negative temp ID
-      const tempId = -Date.now();
-      const pendingMsg: ChatMessage = {
-        id: tempId,
-        authorName: displayName,
-        content: trimmed,
-        sentAt: new Date().toISOString(),
-        editedAt: null,
-        viaDwbhub: true,
-        discordMessageId: null, // filled after POST responds
-        isDeleted: false,
-        isPending: true,
-      };
-
-      setMessages((prev) => [...prev, pendingMsg]);
-
-      try {
-        const url = `/api/t/${encodeURIComponent(slug)}/channels/${encodeURIComponent(channelPublicId)}/messages`;
-        const res = await fetch(url, {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ content: trimmed }),
-        });
-
-        if (!res.ok) {
-          // Remove the pending entry on failure
-          setMessages((prev) => prev.filter((m) => m.id !== tempId));
-          setSendError("send");
-          return;
-        }
-
-        const body = (await res.json()) as SendMessageResponse;
-
-        // Stamp the pending entry with the real discordMessageId so the
-        // incoming SignalR echo can find and replace it
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === tempId
-              ? { ...m, discordMessageId: body.discordMessageId }
-              : m,
-          ),
-        );
-      } catch {
-        setMessages((prev) => prev.filter((m) => m.id !== tempId));
-        setSendError("send");
-      } finally {
-        setIsSending(false);
-      }
-    },
-    [slug, channelPublicId, accessToken, displayName],
-  );
-
-  // ---------------------------------------------------------------------------
-  // Bottom-tracking (for new-message badge)
-  // ---------------------------------------------------------------------------
-
+  // ── Bottom-tracking (for new-message badge) ──────────────────────────────
   const markAtBottom = useCallback((atBottom: boolean) => {
     atBottomRef.current = atBottom;
     if (atBottom) {
@@ -406,11 +399,11 @@ export function useChannel(
   return {
     messages,
     isLoading,
-    error,
+    error: isError ? "load" : null,
     hasMore,
     isLoadingOlder,
-    isSending,
-    sendError,
+    isSending: sendMutation.isPending,
+    sendError: sendMutation.isError ? "send" : null,
     newCount,
     hubState,
     loadOlder,

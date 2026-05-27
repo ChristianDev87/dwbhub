@@ -1,4 +1,5 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { getHealth, getSetupStatus } from "./helpers/api/global";
 
 // Plan 0.3d's SetupGuard redirects `/` to `/setup` until the wizard completes.
 // In e2e CI the DB is always fresh when the first browser project (chromium)
@@ -7,23 +8,12 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 // therefore adaptive: they assert the redirect to /setup when setup is pending,
 // or pass immediately when setup is already done (nothing to verify).
 
-async function isSetupComplete(request: APIRequestContext): Promise<boolean> {
-  try {
-    const res = await request.get("/api/setup/status");
-    if (!res.ok()) return false;
-    const body = (await res.json()) as { completed: boolean };
-    return body.completed;
-  } catch {
-    return false;
-  }
-}
-
 test.describe("Plan 0.3d smoke (post-SetupGuard)", () => {
   test("fresh boot redirects to /setup and renders German heading", async ({
     page,
     request,
   }) => {
-    if (await isSetupComplete(request)) {
+    if ((await getSetupStatus(request))?.completed) {
       // Setup already done on a prior spec's beforeAll; the redirect only fires
       // once. Nothing to assert here — health check in the third test covers
       // that the stack is up.
@@ -42,7 +32,7 @@ test.describe("Plan 0.3d smoke (post-SetupGuard)", () => {
     page,
     request,
   }) => {
-    if (await isSetupComplete(request)) {
+    if ((await getSetupStatus(request))?.completed) {
       // Same reasoning as above.
       return;
     }
@@ -57,9 +47,7 @@ test.describe("Plan 0.3d smoke (post-SetupGuard)", () => {
   test("api /api/health responds 200 with version info", async ({
     request,
   }) => {
-    const res = await request.get("/api/health");
-    expect(res.status()).toBe(200);
-    const body = await res.json();
+    const body = await getHealth(request);
     expect(body).toHaveProperty("status", "ok");
     expect(body).toHaveProperty("version");
   });

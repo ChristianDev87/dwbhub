@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "./auth-context";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useApiClient } from "@/lib/api/useApiClient";
+import { qk } from "@/lib/api/queryKeys";
 import { BotTokenModal } from "./BotTokenModal";
 import { PauseGuildModal } from "./components/PauseGuildModal";
 
@@ -57,12 +59,9 @@ function statusColor(state: BotConnectionState): string {
 export function GuildsPage(): React.JSX.Element {
   const { t, i18n } = useTranslation();
   const { slug } = useParams<{ slug: string }>();
-  const { state } = useAuth();
-  const accessToken = state.kind === "authenticated" ? state.accessToken : null;
-  const [guilds, setGuilds] = useState<Guild[]>([]);
-  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">(
-    "loading",
-  );
+  const api = useApiClient();
+  const queryClient = useQueryClient();
+
   const [addError, setAddError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Guild | null>(null);
   const [pendingBotConfigure, setPendingBotConfigure] = useState<{
@@ -72,7 +71,6 @@ export function GuildsPage(): React.JSX.Element {
   const [pendingBotRemove, setPendingBotRemove] = useState<Guild | null>(null);
   const [pauseTarget, setPauseTarget] = useState<Guild | null>(null);
   const [actionPending, setActionPending] = useState<string | null>(null);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const {
     register,
@@ -98,129 +96,145 @@ export function GuildsPage(): React.JSX.Element {
     }
   }
 
-  async function loadList() {
-    try {
-      const headers: Record<string, string> = {};
-      if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
-      const res = await fetch(
-        `/api/t/${encodeURIComponent(slug ?? "")}/guilds`,
-        {
-          credentials: "include",
-          headers,
-        },
-      );
-      if (!res.ok) {
-        setLoadState("error");
-        return;
-      }
-      const body = (await res.json()) as { guilds: Guild[] };
-      setGuilds(body.guilds);
-      setLoadState("ready");
-    } catch {
-      setLoadState("error");
-    }
+  const safeSlug = slug ?? "";
+
+  // ── Guild list query with dynamic polling ────────────────────────────────
+  const {
+    data: guildsData,
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: qk.guilds.list(safeSlug),
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/t/{slug}/guilds", {
+        params: { path: { slug: safeSlug } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 30_000,
+    refetchInterval: (query) => {
+      const guilds = query.state.data?.guilds;
+      if (!guilds) return false;
+      return guilds.some((g) => g.botConnectionState === "connecting")
+        ? 3000
+        : false;
+    },
+    enabled: safeSlug.length > 0,
+  });
+
+  const guilds: Guild[] = (guildsData?.guilds ?? []) as Guild[];
+  const loadState: "loading" | "ready" | "error" = isLoading
+    ? "loading"
+    : isError
+      ? "error"
+      : "ready";
+
+  // ── Shared invalidation helper ───────────────────────────────────────────
+  function invalidateList() {
+    return queryClient.invalidateQueries({
+      queryKey: qk.guilds.list(safeSlug),
+    });
   }
 
-  useEffect(() => {
-    if (accessToken) {
-      void loadList();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug, accessToken]);
-
-  useEffect(() => {
-    const anyConnecting = guilds.some(
-      (g) => g.botConnectionState === "connecting",
-    );
-    if (anyConnecting) {
-      if (!pollingRef.current) {
-        pollingRef.current = setInterval(() => {
-          void loadList();
-        }, 3000);
+  // ── Add guild mutation ───────────────────────────────────────────────────
+  const addMutation = useMutation({
+    mutationFn: async (values: FormValues) => {
+      const { error, response } = await api.POST("/api/t/{slug}/guilds", {
+        params: { path: { slug: safeSlug } },
+        body: {
+          discordGuildId: values.discordGuildId,
+          displayName: values.displayName,
+        },
+      });
+      if (response.status === 409) {
+        throw new Error("guild_already_registered");
       }
-    } else {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      reset();
+      await invalidateList();
+    },
+    onError: (err: Error) => {
+      if (err.message === "guild_already_registered") {
+        setAddError(t("guilds.guildAlreadyRegistered"));
+      } else {
+        setAddError(t("guilds.networkError"));
       }
-    }
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guilds]);
+    },
+  });
 
   async function onAdd(data: FormValues, e?: React.BaseSyntheticEvent) {
     e?.preventDefault();
     setAddError(null);
-    try {
-      const addHeaders: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      if (accessToken) addHeaders["Authorization"] = `Bearer ${accessToken}`;
-      const res = await fetch(
-        `/api/t/${encodeURIComponent(slug ?? "")}/guilds`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: addHeaders,
-          body: JSON.stringify(data),
-        },
-      );
-      if (res.status === 409) {
-        setAddError(t("guilds.guildAlreadyRegistered"));
-        return;
-      }
-      if (!res.ok) {
-        setAddError(t("guilds.networkError"));
-        return;
-      }
-      reset();
-      await loadList();
-    } catch {
-      setAddError(t("guilds.networkError"));
-    }
+    addMutation.mutate(data);
   }
+
+  // ── Delete guild mutation ────────────────────────────────────────────────
+  const deleteMutation = useMutation({
+    mutationFn: async (publicId: string) => {
+      const { error } = await api.DELETE("/api/t/{slug}/guilds/{publicId}", {
+        params: { path: { slug: safeSlug, publicId } },
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      setPendingDelete(null);
+      await invalidateList();
+    },
+    onError: () => {
+      setPendingDelete(null);
+    },
+  });
 
   async function confirmDelete() {
     if (!pendingDelete) return;
-    try {
-      const deleteHeaders: Record<string, string> = {};
-      if (accessToken) deleteHeaders["Authorization"] = `Bearer ${accessToken}`;
-      const res = await fetch(
-        `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${pendingDelete.publicId}`,
-        { method: "DELETE", credentials: "include", headers: deleteHeaders },
-      );
-      if (res.status === 204) {
-        setPendingDelete(null);
-        await loadList();
-      }
-    } catch {
-      setPendingDelete(null);
-    }
+    deleteMutation.mutate(pendingDelete.publicId);
   }
+
+  // ── Delete bot credentials mutation ─────────────────────────────────────
+  const deleteBotCredsMutation = useMutation({
+    mutationFn: async (guildPublicId: string) => {
+      const { error } = await api.DELETE(
+        "/api/t/{slug}/guilds/{guildPublicId}/bot-credentials",
+        {
+          params: { path: { slug: safeSlug, guildPublicId } },
+        },
+      );
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      setPendingBotRemove(null);
+      await invalidateList();
+    },
+    onError: () => {
+      setPendingBotRemove(null);
+    },
+  });
 
   async function confirmBotRemove() {
     if (!pendingBotRemove) return;
-    try {
-      const botRemoveHeaders: Record<string, string> = {};
-      if (accessToken)
-        botRemoveHeaders["Authorization"] = `Bearer ${accessToken}`;
-      const res = await fetch(
-        `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${pendingBotRemove.publicId}/bot-credentials`,
-        { method: "DELETE", credentials: "include", headers: botRemoveHeaders },
-      );
-      if (res.status === 204) {
-        setPendingBotRemove(null);
-        await loadList();
-      }
-    } catch {
-      setPendingBotRemove(null);
-    }
+    deleteBotCredsMutation.mutate(pendingBotRemove.publicId);
   }
+
+  // ── Pause (deactivate) mutation ──────────────────────────────────────────
+  const deactivateMutation = useMutation({
+    mutationFn: async (publicId: string) => {
+      const { error } = await api.POST(
+        "/api/t/{slug}/guilds/{publicId}/deactivate",
+        {
+          params: { path: { slug: safeSlug, publicId } },
+        },
+      );
+      if (error) throw error;
+    },
+    onSettled: async () => {
+      setActionPending(null);
+      setPauseTarget(null);
+      await invalidateList();
+    },
+  });
 
   async function handlePause(g: Guild) {
     setPauseTarget(g);
@@ -229,45 +243,47 @@ export function GuildsPage(): React.JSX.Element {
   async function confirmPause() {
     if (!pauseTarget) return;
     setActionPending(pauseTarget.publicId);
-    const pauseHeaders: Record<string, string> = {};
-    if (accessToken) pauseHeaders["Authorization"] = `Bearer ${accessToken}`;
-    try {
-      await fetch(
-        `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${pauseTarget.publicId}/deactivate`,
-        { method: "POST", credentials: "include", headers: pauseHeaders },
-      );
-    } finally {
-      setActionPending(null);
-      setPauseTarget(null);
-      await loadList();
-    }
+    deactivateMutation.mutate(pauseTarget.publicId);
   }
+
+  // ── Resume (activate) mutation ───────────────────────────────────────────
+  const activateMutation = useMutation({
+    mutationFn: async (publicId: string) => {
+      const { error } = await api.POST(
+        "/api/t/{slug}/guilds/{publicId}/activate",
+        {
+          params: { path: { slug: safeSlug, publicId } },
+        },
+      );
+      if (error) throw error;
+    },
+    onSettled: async () => {
+      await invalidateList();
+    },
+  });
 
   async function handleResume(g: Guild) {
-    const resumeHeaders: Record<string, string> = {};
-    if (accessToken) resumeHeaders["Authorization"] = `Bearer ${accessToken}`;
-    try {
-      await fetch(
-        `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${g.publicId}/activate`,
-        { method: "POST", credentials: "include", headers: resumeHeaders },
-      );
-    } finally {
-      await loadList();
-    }
+    activateMutation.mutate(g.publicId);
   }
 
-  async function handleReconnect(g: Guild) {
-    const reconnectHeaders: Record<string, string> = {};
-    if (accessToken)
-      reconnectHeaders["Authorization"] = `Bearer ${accessToken}`;
-    try {
-      await fetch(
-        `/api/t/${encodeURIComponent(slug ?? "")}/guilds/${g.publicId}/bot/reconnect`,
-        { method: "POST", credentials: "include", headers: reconnectHeaders },
+  // ── Reconnect mutation ───────────────────────────────────────────────────
+  const reconnectMutation = useMutation({
+    mutationFn: async (publicId: string) => {
+      const { error } = await api.POST(
+        "/api/t/{slug}/guilds/{publicId}/bot/reconnect",
+        {
+          params: { path: { slug: safeSlug, publicId } },
+        },
       );
-    } finally {
-      await loadList();
-    }
+      if (error) throw error;
+    },
+    onSettled: async () => {
+      await invalidateList();
+    },
+  });
+
+  async function handleReconnect(g: Guild) {
+    reconnectMutation.mutate(g.publicId);
   }
 
   return (
@@ -491,7 +507,7 @@ export function GuildsPage(): React.JSX.Element {
           guildDisplayName={pendingBotConfigure.guild.displayName}
           mode={pendingBotConfigure.mode}
           onClose={() => setPendingBotConfigure(null)}
-          onSuccess={() => void loadList()}
+          onSuccess={() => void invalidateList()}
         />
       )}
 

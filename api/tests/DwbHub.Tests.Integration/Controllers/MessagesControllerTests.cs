@@ -11,6 +11,7 @@ using DwbHub.Data.Connections;
 using DwbHub.Data.Repositories;
 using DwbHub.Infrastructure.Auth;
 using DwbHub.Tests.Integration.Infrastructure;
+using DwbHub.Tests.Shared.Api;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -78,7 +79,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
         Environment.SetEnvironmentVariable("DWBHUB_SMTP_FROM", "noreply@test.local");
         Environment.SetEnvironmentVariable("DWBHUB_PUBLIC_BASE_URL", "http://localhost:5173");
         Environment.SetEnvironmentVariable("DWBHUB_BOOTSTRAP_TOKEN_FILE", Path.GetTempFileName());
-        _factory = new WebApplicationFactory<Program>();
+        _factory = new DwbHubTestFactory();
     }
 
     public async Task DisposeAsync()
@@ -143,9 +144,6 @@ public sealed class MessagesControllerTests : IAsyncLifetime
         return inserted!;
     }
 
-    private static string ChannelUrl(string slug, Guid channelPublicId) =>
-        $"/api/t/{slug}/channels/{channelPublicId:D}/messages";
-
     /// <summary>
     /// Creates a factory with the messaging services injected.
     /// The IMessageService stub is configurable per test.
@@ -204,7 +202,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
         };
         using var client = BuildClient(jwt, new SendSuccessStub(fakeMsg));
 
-        var res = await client.PostAsJsonAsync(ChannelUrl("msg-post-201", channelPublicId),
+        var res = await client.PostMessageAsync("msg-post-201", channelPublicId,
             new { content = "Hello" });
 
         res.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -238,8 +236,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
             .CreateClient();
 
         // No Authorization header — should return 401.
-        var res = await client.PostAsJsonAsync(
-            ChannelUrl("msg-noauth", channelPublicId),
+        var res = await client.PostMessageAsync("msg-noauth", channelPublicId,
             new { content = "Hello" });
 
         res.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -259,8 +256,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
         // Tenant A's JWT targeting Tenant B's channel.
         using var client = BuildClient(jwtA);
 
-        var res = await client.PostAsJsonAsync(
-            ChannelUrl("msg-xta", channelBPublicId),
+        var res = await client.PostMessageAsync("msg-xta", channelBPublicId,
             new { content = "sneaky" });
 
         // Must be 404, NOT 403 — no information disclosure.
@@ -281,8 +277,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
 
         using var client = BuildClient(jwt);
 
-        var res = await client.PostAsJsonAsync(
-            ChannelUrl("msg-unbridged", channel.PublicId),
+        var res = await client.PostMessageAsync("msg-unbridged", channel.PublicId,
             new { content = "Hello" });
 
         res.StatusCode.Should().Be(HttpStatusCode.Conflict);
@@ -301,8 +296,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
 
         using var client = BuildClient(jwt);
 
-        var res = await client.PostAsJsonAsync(
-            ChannelUrl("msg-empty", channelPublicId),
+        var res = await client.PostMessageAsync("msg-empty", channelPublicId,
             new { content = "" });
 
         res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -319,8 +313,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
 
         using var client = BuildClient(jwt);
 
-        var res = await client.PostAsJsonAsync(
-            ChannelUrl("msg-ws", channelPublicId),
+        var res = await client.PostMessageAsync("msg-ws", channelPublicId,
             new { content = "   " });
 
         res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -339,8 +332,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
 
         using var client = BuildClient(jwt);
 
-        var res = await client.PostAsJsonAsync(
-            ChannelUrl("msg-long", channelPublicId),
+        var res = await client.PostMessageAsync("msg-long", channelPublicId,
             new { content = new string('x', 2001) });
 
         res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -358,8 +350,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
         using var client = BuildClient(jwt,
             new ThrowOnSendStub(new DiscordRateLimitException(12, "rate limited")));
 
-        var res = await client.PostAsJsonAsync(
-            ChannelUrl("msg-rl", channelPublicId),
+        var res = await client.PostMessageAsync("msg-rl", channelPublicId,
             new { content = "Hello" });
 
         res.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
@@ -381,8 +372,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
         using var client = BuildClient(jwt,
             new ThrowOnSendStub(new DiscordPermissionException("Missing SEND_MESSAGES")));
 
-        var res = await client.PostAsJsonAsync(
-            ChannelUrl("msg-perm", channelPublicId),
+        var res = await client.PostMessageAsync("msg-perm", channelPublicId,
             new { content = "Hello" });
 
         res.StatusCode.Should().Be(HttpStatusCode.Conflict);
@@ -406,7 +396,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
 
         using var client = BuildClient(jwt);
 
-        var res = await client.GetAsync(ChannelUrl("msg-get-hist", channelPublicId) + "?limit=10");
+        var res = await client.GetMessagesAsync("msg-get-hist", channelPublicId, limit: 10);
         res.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await res.Content.ReadFromJsonAsync<HistoryShape>();
@@ -432,7 +422,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
 
         using var client = BuildClient(jwtA);
 
-        var res = await client.GetAsync(ChannelUrl("msg-get-xta", channelBPublicId));
+        var res = await client.GetMessagesAsync("msg-get-xta", channelBPublicId);
         res.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -452,7 +442,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
         using var client = BuildClient(jwt);
 
         // limit=500 should be clamped to 100 — no error, returns what's available.
-        var res = await client.GetAsync(ChannelUrl("msg-clamp-big", channelPublicId) + "?limit=500");
+        var res = await client.GetMessagesAsync("msg-clamp-big", channelPublicId, limit: 500);
         res.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await res.Content.ReadFromJsonAsync<HistoryShape>();
@@ -477,7 +467,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
         using var client = BuildClient(jwt);
 
         // limit=-1 should be clamped to 50, no error returned.
-        var res = await client.GetAsync(ChannelUrl("msg-clamp-neg", channelPublicId) + "?limit=-1");
+        var res = await client.GetMessagesAsync("msg-clamp-neg", channelPublicId, limit: -1);
         res.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await res.Content.ReadFromJsonAsync<HistoryShape>();
@@ -502,7 +492,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
         using var client = BuildClient(jwt);
 
         // Request first page of 3 — should return snowflakes 5006, 5005, 5004 (newest-first).
-        var res = await client.GetAsync(ChannelUrl("msg-page", channelPublicId) + "?limit=3");
+        var res = await client.GetMessagesAsync("msg-page", channelPublicId, limit: 3);
         res.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await res.Content.ReadFromJsonAsync<HistoryShape>();
@@ -527,7 +517,7 @@ public sealed class MessagesControllerTests : IAsyncLifetime
 
         using var client = BuildClient(jwt);
 
-        var res = await client.GetAsync(ChannelUrl("msg-deleted", channelPublicId));
+        var res = await client.GetMessagesAsync("msg-deleted", channelPublicId);
         res.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await res.Content.ReadFromJsonAsync<HistoryShape>();

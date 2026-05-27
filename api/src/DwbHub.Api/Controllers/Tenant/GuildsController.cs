@@ -29,6 +29,8 @@ public sealed class GuildsController(
     /// </summary>
     [HttpPost]
     [Authorize(Roles = "Owner")]
+    [ProducesResponseType<GuildResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Add(string slug, [FromBody] AddGuildRequest body, CancellationToken ct)
     {
         _ = slug;
@@ -87,6 +89,7 @@ public sealed class GuildsController(
     /// </summary>
     [HttpGet]
     [Authorize]
+    [ProducesResponseType<GuildListResponse>(StatusCodes.Status200OK)]
     public async Task<IActionResult> List(string slug, CancellationToken ct)
     {
         _ = slug;
@@ -131,6 +134,8 @@ public sealed class GuildsController(
     /// </summary>
     [HttpDelete("{publicId:guid}")]
     [Authorize(Roles = "Owner")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Remove(string slug, Guid publicId, CancellationToken ct)
     {
         _ = slug;
