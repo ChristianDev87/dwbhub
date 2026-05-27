@@ -167,12 +167,48 @@ echo "=== e2e: playwright test ==="
 # Playwright's CLI takes --reporter as a comma-separated list and the
 # corresponding output paths via PLAYWRIGHT_JUNIT_OUTPUT_NAME + the json
 # reporter's --output=… argument.
+PLAYWRIGHT_EXIT=0
 E2E_BASE_URL="http://host.docker.internal:${WEB_PORT}" \
 PLAYWRIGHT_JUNIT_OUTPUT_NAME="$RESULTS/playwright.xml" \
     pnpm --filter dwbhub-web exec playwright test \
         --reporter=junit,json \
         --output="$RESULTS/traces" \
-        > "$RESULTS/playwright.json"
+        > "$RESULTS/playwright.json" || PLAYWRIGHT_EXIT=$?
+
+# Always print a human-readable failure summary so Docker run output shows
+# which tests failed (playwright.json lives inside the container and is not
+# accessible after cleanup). Uses python3 (included in playwright base image).
+if [ "$PLAYWRIGHT_EXIT" -ne 0 ]; then
+    echo "[e2e] Playwright exited with code $PLAYWRIGHT_EXIT — failing tests:"
+    python3 - <<'PYEOF'
+import json, sys
+try:
+    data = json.load(open('/results/e2e/playwright.json'))
+    def walk(suite, prefix=''):
+        title = suite.get('title', '')
+        full = (prefix + ' > ' + title).strip(' >')
+        for spec in suite.get('specs', []):
+            for test in spec.get('tests', []):
+                status = test.get('status', '')
+                if status in ('unexpected', 'failed', 'timedOut'):
+                    proj = test.get('projectName', '?')
+                    print(f'  FAIL [{proj}] {full} > {spec.get("title","?")}')
+                    for r in test.get('results', []):
+                        err = r.get('error', {})
+                        msg = err.get('message', '')
+                        if msg:
+                            print(f'       {msg[:400]}')
+        for child in suite.get('suites', []):
+            walk(child, full)
+    for s in data.get('suites', []):
+        walk(s)
+except Exception as e:
+    print(f'Could not parse playwright.json: {e}')
+PYEOF
+fi
+
+# Propagate Playwright's exit code so the job fails when tests fail.
+exit $PLAYWRIGHT_EXIT
 
 # Stop the live dev-stack tail now that Playwright has finished.
 # `|| true` is essential: `set -e` would otherwise abort here because

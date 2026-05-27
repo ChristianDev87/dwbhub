@@ -12,10 +12,8 @@ import type { APIRequestContext } from "@playwright/test";
 const FAKE_BOT_TOKEN =
   "MTAwMDAwMDAwMDAwMDAwMDAwMDAwMDA.GFakeToken.AbCdEfGhIjKlMnOpQrStUvWxYzAb-fake";
 
-// Deterministic fake Discord guild snowflake used by seedActiveGuild.
-// The value is stable across runs so the guild upsert is idempotent IF the
-// database volume is preserved between test sessions. Individual test cases
-// that need isolation should generate their own unique IDs.
+// Deterministic fake Discord guild snowflake — stable across runs so the
+// guild upsert is idempotent when the database volume is reused between sessions.
 const FAKE_GUILD_DISCORD_ID = "100200300400500600";
 
 const BOOTSTRAP_TOKEN_PATH = "/api-bootstrap-ro/bootstrap-token.txt";
