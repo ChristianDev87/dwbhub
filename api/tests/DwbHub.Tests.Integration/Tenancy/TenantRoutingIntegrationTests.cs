@@ -7,6 +7,7 @@ using DwbHub.Data.Connections;
 using DwbHub.Data.Repositories;
 using DwbHub.Infrastructure.Auth;
 using DwbHub.Tests.Integration.Infrastructure;
+using DwbHub.Tests.Shared.Api;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Npgsql;
@@ -115,7 +116,7 @@ public sealed class TenantRoutingIntegrationTests : IAsyncLifetime
         var jwt = IssueJwtFor(uid, tid, "acme");
 
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
-        var res = await _client.GetAsync("/api/t/acme/me");
+        var res = await _client.GetMeAsync("acme");
 
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await res.Content.ReadFromJsonAsync<MeShape>();
@@ -131,7 +132,7 @@ public sealed class TenantRoutingIntegrationTests : IAsyncLifetime
         var jwt = IssueJwtFor(uid, tid, "acme");
 
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
-        var res = await _client.GetAsync("/api/t/acme/dashboard");
+        var res = await _client.GetDashboardAsync("acme");
 
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await res.Content.ReadFromJsonAsync<DashboardShape>();
@@ -149,7 +150,7 @@ public sealed class TenantRoutingIntegrationTests : IAsyncLifetime
 
         var jwt = IssueJwtFor(uidA, tidA, "acme");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
-        var res = await _client.GetAsync("/api/t/globex/dashboard");
+        var res = await _client.GetDashboardAsync("globex");
 
         res.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         var body = await res.Content.ReadAsStringAsync();
@@ -174,7 +175,7 @@ public sealed class TenantRoutingIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task GET_dashboard_unknown_tenant_returns_404_and_audit_row()
     {
-        var res = await _client.GetAsync("/api/t/nonexistent/dashboard");
+        var res = await _client.GetDashboardAsync("nonexistent");
         res.StatusCode.Should().Be(HttpStatusCode.NotFound);
 
         await using var conn = _ds.CreateConnection();
@@ -192,14 +193,14 @@ public sealed class TenantRoutingIntegrationTests : IAsyncLifetime
     public async Task GET_dashboard_without_jwt_returns_401()
     {
         await SeedTenantAndUserAsync("acme", "alice@acme.test");
-        var res = await _client.GetAsync("/api/t/acme/dashboard");
+        var res = await _client.GetDashboardAsync("acme");
         res.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
     public async Task GET_health_bypasses_tenant_middleware()
     {
-        var res = await _client.GetAsync("/api/health");
+        var res = await _client.GetHealthAsync();
         res.StatusCode.Should().Be(HttpStatusCode.OK);
 
         await using var conn = _ds.CreateConnection();
@@ -212,14 +213,14 @@ public sealed class TenantRoutingIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task GET_setup_status_bypasses_tenant_middleware()
     {
-        var res = await _client.GetAsync("/api/setup/status");
+        var res = await _client.GetSetupStatusAsync();
         res.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]
     public async Task POST_auth_refresh_bypasses_tenant_middleware()
     {
-        var res = await _client.PostAsync("/api/auth/refresh", content: null);
+        var res = await _client.PostAuthRefreshAsync();
         res.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -228,7 +229,7 @@ public sealed class TenantRoutingIntegrationTests : IAsyncLifetime
     {
         await SeedTenantAndUserAsync("acme", "alice@acme.test");
         var pid = Guid.NewGuid();
-        var res = await _client.GetAsync($"/api/t/acme/g/{pid:D}/anything");
+        var res = await _client.GetGuildAnythingAsync("acme", pid);
         res.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await res.Content.ReadAsStringAsync()).Should().Contain("guild_not_found");
 
@@ -246,7 +247,7 @@ public sealed class TenantRoutingIntegrationTests : IAsyncLifetime
     public async Task GET_guild_scoped_route_with_unknown_tenant_returns_404_with_tenant_audit()
     {
         var pid = Guid.NewGuid();
-        var res = await _client.GetAsync($"/api/t/nonexistent/g/{pid:D}/anything");
+        var res = await _client.GetGuildAnythingAsync("nonexistent", pid);
         res.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await res.Content.ReadAsStringAsync()).Should().Contain("tenant_not_found");
 

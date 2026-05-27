@@ -11,6 +11,7 @@ using DwbHub.Data.Connections;
 using DwbHub.Data.Repositories;
 using DwbHub.Infrastructure.Auth;
 using DwbHub.Tests.Integration.Infrastructure;
+using DwbHub.Tests.Shared.Api;
 using FluentAssertions;
 using Hangfire;
 using Hangfire.Common;
@@ -191,9 +192,7 @@ public sealed class ChannelsControllerSecurityTests : IAsyncLifetime
 
         // Act: tenant A tries to bridge tenant B's channel.
         using var client = BuildClient(jwtA);
-        var res = await client.PostAsync(
-            $"/api/t/chan-sec-s1a/channels/{channelBPublicId:D}/bridge",
-            content: null);
+        var res = await client.BridgeChannelAsync("chan-sec-s1a", channelBPublicId);
 
         // Assert: must be 404 (not 403 — 403 would confirm the UUID exists somewhere).
         res.StatusCode.Should().Be(HttpStatusCode.NotFound,
@@ -230,8 +229,7 @@ public sealed class ChannelsControllerSecurityTests : IAsyncLifetime
         using var client = BuildClient(jwt, webhookSvc: webhookSvc);
 
         // Act: DELETE bridge on a bridged-but-no-webhook channel.
-        var res = await client.DeleteAsync(
-            $"/api/t/chan-sec-s2/channels/{channelPublicId:D}/bridge");
+        var res = await client.UnbridgeChannelAsync("chan-sec-s2", channelPublicId);
 
         // Assert: 204 — caller must never see a 500 for missing webhook row.
         res.StatusCode.Should().Be(HttpStatusCode.NoContent,
@@ -270,9 +268,7 @@ public sealed class ChannelsControllerSecurityTests : IAsyncLifetime
         using var client = BuildClient(jwt, webhookSvc: sentinelSvc);
 
         // Exercise bridge endpoint — will fail because sentinelSvc throws with sentinel in message.
-        var bridgeRes = await client.PostAsync(
-            $"/api/t/chan-sec-s3/channels/{channelPublicId:D}/bridge",
-            content: null);
+        var bridgeRes = await client.BridgeChannelAsync("chan-sec-s3", channelPublicId);
         var bridgeBody = await bridgeRes.Content.ReadAsStringAsync();
 
         // The raw sentinel must not appear in the response body.
@@ -281,8 +277,7 @@ public sealed class ChannelsControllerSecurityTests : IAsyncLifetime
             "in any HTTP response body — token must stay server-side only");
 
         // Also verify list response is free of secrets.
-        var listRes = await client.GetAsync(
-            $"/api/t/chan-sec-s3/guilds/{gPublicId:D}/channels");
+        var listRes = await client.ListChannelsAsync("chan-sec-s3", gPublicId);
         var listBody = await listRes.Content.ReadAsStringAsync();
 
         listBody.Should().NotContain(SentinelToken,
@@ -316,21 +311,17 @@ public sealed class ChannelsControllerSecurityTests : IAsyncLifetime
         using var client = BuildClient(jwt, webhookSvc: decryptSpy);
 
         // Probe all read endpoints to confirm the decrypted token is never surfaced.
-        var endpoints = new[]
-        {
-            $"/api/t/chan-sec-s4/guilds/{gPublicId:D}/channels",
-            $"/api/t/chan-sec-s4/channels/{channelPublicId:D}/backfill-status",
-        };
+        var listRes = await client.ListChannelsAsync("chan-sec-s4", gPublicId);
+        var listBody = await listRes.Content.ReadAsStringAsync();
+        listBody.Should().NotContain(SentinelToken,
+            "endpoint /guilds/.../channels must not return the decrypted webhook token; " +
+            "DecryptTokenAsync is internal-only and must never appear in HTTP responses");
 
-        foreach (var endpoint in endpoints)
-        {
-            var res = await client.GetAsync(endpoint);
-            var body = await res.Content.ReadAsStringAsync();
-
-            body.Should().NotContain(SentinelToken,
-                $"endpoint {endpoint} must not return the decrypted webhook token; " +
-                "DecryptTokenAsync is internal-only and must never appear in HTTP responses");
-        }
+        var bfRes = await client.GetBackfillStatusAsync("chan-sec-s4", channelPublicId);
+        var bfBody = await bfRes.Content.ReadAsStringAsync();
+        bfBody.Should().NotContain(SentinelToken,
+            "endpoint /channels/.../backfill-status must not return the decrypted webhook token; " +
+            "DecryptTokenAsync is internal-only and must never appear in HTTP responses");
 
         // Optionally confirm: none of the GET read-paths called DecryptTokenAsync.
         // The read endpoints have no need to decrypt the token — only outbound posting does.

@@ -11,6 +11,7 @@ using DwbHub.Data.Connections;
 using DwbHub.Data.Repositories;
 using DwbHub.Infrastructure.Auth;
 using DwbHub.Tests.Integration.Infrastructure;
+using DwbHub.Tests.Shared.Api;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -149,8 +150,7 @@ public sealed class MessagesControllerAuthTests : IAsyncLifetime
             new AuthenticationHeaderValue("Bearer", jwtA);
 
         // Tenant A authenticated, targeting tenant B's channel via tenant A's slug.
-        var res = await client.PostAsJsonAsync(
-            $"/api/t/sec-t1a/channels/{channelBPublicId:D}/messages",
+        var res = await client.PostMessageAsync("sec-t1a", channelBPublicId,
             new { content = "attack" });
 
         // Must be 404 — must NOT be 403 (which would reveal the channel exists in another tenant).
@@ -199,8 +199,7 @@ public sealed class MessagesControllerAuthTests : IAsyncLifetime
             new AuthenticationHeaderValue("Bearer", jwt);
 
         // Act: POST with the injection payload.
-        var res = await client.PostAsJsonAsync(
-            $"/api/t/sec-xss/channels/{channelPublicId:D}/messages",
+        var res = await client.PostMessageAsync("sec-xss", channelPublicId,
             new { content = injectedContent });
 
         res.StatusCode.Should().Be(HttpStatusCode.Created,
@@ -228,8 +227,7 @@ public sealed class MessagesControllerAuthTests : IAsyncLifetime
         };
         await _msgRepo.InsertAsync(msg);
 
-        var histRes = await client.GetAsync(
-            $"/api/t/sec-xss/channels/{channelPublicId:D}/messages");
+        var histRes = await client.GetMessagesAsync("sec-xss", channelPublicId);
         histRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var histBody = await histRes.Content.ReadAsStringAsync();

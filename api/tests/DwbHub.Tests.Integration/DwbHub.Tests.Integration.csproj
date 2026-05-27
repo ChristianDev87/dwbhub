@@ -28,6 +28,7 @@
     <ProjectReference Include="..\..\src\DwbHub.Api\DwbHub.Api.csproj" />
     <ProjectReference Include="..\..\src\DwbHub.Data\DwbHub.Data.csproj" />
     <ProjectReference Include="..\..\src\DwbHub.Core\DwbHub.Core.csproj" />
+    <ProjectReference Include="..\DwbHub.Tests.Shared\DwbHub.Tests.Shared.csproj" />
   </ItemGroup>
 
 </Project>
