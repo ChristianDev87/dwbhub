@@ -116,7 +116,7 @@ const fakeAuth = {
   },
   login: vi.fn(),
   logout: vi.fn(),
-  refresh: vi.fn(),
+  refreshAccessToken: vi.fn(),
 };
 
 const CHANNEL_ID = "cccc1111-0000-0000-0000-000000000001";

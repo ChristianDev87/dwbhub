@@ -22,7 +22,7 @@ const fakeAuthValue = {
   },
   login: vi.fn(),
   logout: vi.fn(),
-  refresh: vi.fn(),
+  refreshAccessToken: vi.fn(),
 };
 
 function renderModal(

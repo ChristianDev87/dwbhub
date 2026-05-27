@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { AuthContext, type AuthState, type LoginResult } from "./auth-context";
 import { i18n } from "../lib/i18n";
+import { queryClient } from "@/lib/api/queryClient";
 
 interface LoginResponse {
   accessToken: string;
@@ -73,7 +74,7 @@ export function AuthProvider({
 }): React.JSX.Element {
   const [state, setState] = useState<AuthState>({ kind: "checking" });
 
-  const refresh = useCallback(async (): Promise<boolean> => {
+  const refreshAccessToken = useCallback(async (): Promise<string | null> => {
     try {
       const res = await fetch("/api/auth/refresh", {
         method: "POST",
@@ -88,14 +89,14 @@ export function AuthProvider({
         if (!loadProfile()) {
           setState({ kind: "unauthenticated" });
         }
-        return false;
+        return null;
       }
       const data = (await res.json()) as RefreshResponse;
       const stored = loadProfile();
       if (!stored) {
         // Refresh succeeded but no profile is stored (unexpected).
         setState({ kind: "unauthenticated" });
-        return false;
+        return null;
       }
       const updated: StoredProfile = {
         ...stored,
@@ -108,10 +109,10 @@ export function AuthProvider({
         user: updated.user,
         tenant: updated.tenant,
       });
-      return true;
+      return updated.accessToken;
     } catch {
       setState({ kind: "unauthenticated" });
-      return false;
+      return null;
     }
   }, []);
 
@@ -177,14 +178,14 @@ export function AuthProvider({
   );
 
   const logout = useCallback(async (): Promise<void> => {
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      });
-    } catch {
-      // swallow — state cleared either way
-    }
+    // best-effort POST — ignore network errors, state is cleared regardless
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    }).catch(() => {});
+    // Evict all cached query data so stale authenticated data is never shown
+    // after logout, regardless of which user logs in next.
+    queryClient.clear();
     clearProfile();
     setState({ kind: "unauthenticated" });
   }, []);
@@ -208,11 +209,11 @@ export function AuthProvider({
         tenant: stored.tenant,
       });
     }
-    void refresh();
-  }, [refresh]);
+    void refreshAccessToken();
+  }, [refreshAccessToken]);
 
   return (
-    <AuthContext.Provider value={{ state, login, logout, refresh }}>
+    <AuthContext.Provider value={{ state, login, logout, refreshAccessToken }}>
       {children}
     </AuthContext.Provider>
   );
