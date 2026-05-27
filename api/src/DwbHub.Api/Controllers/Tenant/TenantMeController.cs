@@ -15,6 +15,7 @@ public sealed class TenantMeController(ITenantContext tenantContext) : Controlle
 {
     /// <summary>Return the caller's user ID, tenant ID, tenant slug, and role.</summary>
     [HttpGet("/api/t/{slug}/me")]
+    [ProducesResponseType<MeResponse>(StatusCodes.Status200OK)]
     public IActionResult Me(string slug)
     {
         _ = slug; // path param consumed by the middleware regex; we read from context
