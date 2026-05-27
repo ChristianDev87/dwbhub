@@ -255,6 +255,7 @@ jobs:
           TOKEN: ${{ secrets.DISCORD_DEV_BOT_TOKEN }}
           GUILD_ID: ${{ secrets.DISCORD_DEV_GUILD_ID }}
           CHANNEL_ID: ${{ secrets.DISCORD_DEV_CHANNEL_ID }}
+          HELPER_TOKEN: ${{ secrets.DISCORD_DEV_HELPER_BOT_TOKEN }}
         shell: bash
         run: |
           if [ -z "$TOKEN" ] || [ -z "$GUILD_ID" ] || [ -z "$CHANNEL_ID" ]; then
@@ -265,6 +266,13 @@ jobs:
             printf '%s=%s\n' DISCORD_DEV_BOT_TOKEN "$TOKEN"
             printf '%s=%s\n' DISCORD_DEV_GUILD_ID "$GUILD_ID"
             printf '%s=%s\n' DISCORD_DEV_CHANNEL_ID "$CHANNEL_ID"
+            # DISCORD_DEV_HELPER_BOT_TOKEN is optional — Phase 2 tests use
+            # SkippableFact and skip when this is absent. Only write the line
+            # when the secret is present so the file stays bot-A-only on runners
+            # that don't have the helper-bot secret configured yet.
+            if [ -n "$HELPER_TOKEN" ]; then
+              printf '%s=%s\n' DISCORD_DEV_HELPER_BOT_TOKEN "$HELPER_TOKEN"
+            fi
           } > deploy/compose/discord.dev.env
       - name: Prepare workspace mountpoints
         run: sh deploy/test-runners/prep-workspace.sh

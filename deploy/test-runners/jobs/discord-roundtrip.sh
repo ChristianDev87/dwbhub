@@ -12,19 +12,21 @@
 #   2 = infrastructure error (token leaked into test-result artifacts)
 #
 # Secret mount: /run/secrets/discord_token
-#   Expected contents (three lines, no quotes):
-#     DISCORD_DEV_BOT_TOKEN=<value>
-#     DISCORD_DEV_GUILD_ID=<value>
-#     DISCORD_DEV_CHANNEL_ID=<value>   # REQUIRED for round-trip tests
+#   Expected contents (no quotes):
+#     DISCORD_DEV_BOT_TOKEN=<value>          # REQUIRED
+#     DISCORD_DEV_GUILD_ID=<value>           # REQUIRED
+#     DISCORD_DEV_CHANNEL_ID=<value>         # REQUIRED for round-trip tests
+#     DISCORD_DEV_HELPER_BOT_TOKEN=<value>   # OPTIONAL — Phase 2+ tests only
 #
 # SECURITY:
 #   * The secret file is NEVER sourced — only specific keys are extracted via awk.
-#   * The token value is NEVER printed; only its character-length is logged.
-#   * Any literal occurrence of the token in dotnet test output is redacted with
-#     <REDACTED-TOKEN> by a sed pipe before it reaches stdout.
+#   * Token values are NEVER printed; only character-lengths are logged.
+#   * Any literal occurrence of either token in dotnet test output is redacted with
+#     <REDACTED-TOKEN> / <REDACTED-HELPER-TOKEN> by a sed pipe before reaching stdout.
 #   * After the test run, a self-check greps /results/discord-roundtrip/ for the
-#     first 12 chars of the token AND the full guild-id snowflake; either
-#     appearing is a leak — exit 2.
+#     first 12 chars of BOTH tokens AND the full guild-id snowflake; any match
+#     is a leak — exit 2. We check both because we don't want either bot's
+#     identity appearing in logs or uploaded artefacts.
 #   * Extracted values are trimmed of any trailing \r so that CRLF-corrupted
 #     secret files do not slip a stray byte into Discord.Net's connection string.
 
@@ -48,6 +50,9 @@ fi
 BOT_TOKEN=$(awk -F= '/^DISCORD_DEV_BOT_TOKEN=/{print substr($0,index($0,"=")+1)}' "$SECRET_FILE" | tr -d '\r')
 GUILD_ID=$(awk -F= '/^DISCORD_DEV_GUILD_ID=/{print substr($0,index($0,"=")+1)}' "$SECRET_FILE" | tr -d '\r')
 CHANNEL_ID=$(awk -F= '/^DISCORD_DEV_CHANNEL_ID=/{print substr($0,index($0,"=")+1)}' "$SECRET_FILE" | tr -d '\r')
+# HELPER_BOT_TOKEN is optional — absent locally or on runners without the Phase 2
+# secret. When empty, Phase 2+ tests will Skip.If; existing tests are unaffected.
+HELPER_BOT_TOKEN=$(awk -F= '/^DISCORD_DEV_HELPER_BOT_TOKEN=/{print substr($0,index($0,"=")+1)}' "$SECRET_FILE" | tr -d '\r')
 
 if [ -z "$BOT_TOKEN" ] || [ -z "$GUILD_ID" ] || [ -z "$CHANNEL_ID" ]; then
     echo "[discord-roundtrip] SKIPPED: DISCORD_DEV_BOT_TOKEN / DISCORD_DEV_GUILD_ID / DISCORD_DEV_CHANNEL_ID must all be set for round-trip tests"
@@ -57,12 +62,17 @@ fi
 
 # ---------------------------------------------------------------------------
 # 2. Log meta-info (length only — per project rule, the entire discord.dev.env
-#    contents are credential-grade; treat all three fields as opaque).
+#    contents are credential-grade; treat all fields as opaque).
 # ---------------------------------------------------------------------------
 TOKEN_LEN=$(printf '%s' "$BOT_TOKEN" | wc -c | tr -d ' ')
 GUILD_LEN=$(printf '%s' "$GUILD_ID" | wc -c | tr -d ' ')
 CHANNEL_LEN=$(printf '%s' "$CHANNEL_ID" | wc -c | tr -d ' ')
-echo "[discord-roundtrip] secret-file ok: token_len=${TOKEN_LEN} guild_id_len=${GUILD_LEN} channel_id_len=${CHANNEL_LEN}"
+HELPER_LEN=$(printf '%s' "$HELPER_BOT_TOKEN" | wc -c | tr -d ' ')
+if [ "$HELPER_LEN" -gt 0 ]; then
+    echo "[discord-roundtrip] secret-file ok: token_len=${TOKEN_LEN} guild_id_len=${GUILD_LEN} channel_id_len=${CHANNEL_LEN} helper_token_len=${HELPER_LEN}"
+else
+    echo "[discord-roundtrip] secret-file ok: token_len=${TOKEN_LEN} guild_id_len=${GUILD_LEN} channel_id_len=${CHANNEL_LEN} (no helper token — Phase 2 tests will skip)"
+fi
 
 # ---------------------------------------------------------------------------
 # 3. Export env vars for the dotnet child process
@@ -70,6 +80,11 @@ echo "[discord-roundtrip] secret-file ok: token_len=${TOKEN_LEN} guild_id_len=${
 export DISCORD_DEV_BOT_TOKEN="$BOT_TOKEN"
 export DISCORD_DEV_GUILD_ID="$GUILD_ID"
 export DISCORD_DEV_CHANNEL_ID="$CHANNEL_ID"
+# Only export helper token when present — keeps the SkippableFact's Skip.If
+# check meaningful when running without the Phase 2 helper secret.
+if [ -n "$HELPER_BOT_TOKEN" ]; then
+    export DISCORD_DEV_HELPER_BOT_TOKEN="$HELPER_BOT_TOKEN"
+fi
 
 # Testcontainers settings — same as backend-tests / discord-live-tests.
 export TESTCONTAINERS_HOST_OVERRIDE="${TESTCONTAINERS_HOST_OVERRIDE:-host.docker.internal}"
@@ -78,7 +93,13 @@ export TESTCONTAINERS_RYUK_DISABLED="true"
 # ---------------------------------------------------------------------------
 # 4. Run dotnet test with token-redaction.
 # ---------------------------------------------------------------------------
+# Build a sed script that redacts both tokens in one pass. The helper-token
+# redaction step is a no-op when HELPER_BOT_TOKEN is empty (the pattern
+# becomes "s//..." which sed treats as a match-nothing substitution).
 SED_SCRIPT="s/${BOT_TOKEN}/<REDACTED-TOKEN>/g"
+if [ -n "$HELPER_BOT_TOKEN" ]; then
+    SED_SCRIPT="${SED_SCRIPT};s/${HELPER_BOT_TOKEN}/<REDACTED-HELPER-TOKEN>/g"
+fi
 RAW_OUT="$RESULTS/.dotnet-raw.tmp"
 
 set +e
@@ -92,7 +113,7 @@ dotnet test api/tests/DwbHub.Tests.Integration/DwbHub.Tests.Integration.csproj \
 DOTNET_EXIT=$?
 set -e
 
-# Redact token from captured output, then print.
+# Redact both tokens from captured output, then print.
 sed -E "$SED_SCRIPT" "$RAW_OUT"
 rm -f "$RAW_OUT"
 
@@ -100,10 +121,14 @@ echo "[discord-roundtrip] dotnet test exit: ${DOTNET_EXIT}"
 
 # ---------------------------------------------------------------------------
 # 5. Credential-leak self-check.
+#    We grep for the first 12 chars of BOTH bot tokens (Bot A and Bot B) so
+#    that neither bot's identity ever ships in CI logs or uploaded artefacts.
+#    The helper-token check is conditional: when HELPER_BOT_TOKEN is absent
+#    (local run without Phase 2 secret), we simply skip it — idempotent.
 # ---------------------------------------------------------------------------
 TOKEN_PREFIX=$(printf '%s' "$BOT_TOKEN" | cut -c1-12)
 if grep -rqF "$TOKEN_PREFIX" "$RESULTS/" 2>/dev/null; then
-    echo "[discord-roundtrip] FATAL: token prefix found in test-results — leak detected"
+    echo "[discord-roundtrip] FATAL: bot-A token prefix found in test-results — leak detected"
     exit 2
 fi
 if grep -rqF "$GUILD_ID" "$RESULTS/" 2>/dev/null; then
@@ -114,6 +139,17 @@ if grep -rqF "$CHANNEL_ID" "$RESULTS/" 2>/dev/null; then
     echo "[discord-roundtrip] FATAL: channel_id found in test-results — leak detected"
     exit 2
 fi
+if [ -n "$HELPER_BOT_TOKEN" ]; then
+    HELPER_PREFIX=$(printf '%s' "$HELPER_BOT_TOKEN" | cut -c1-12)
+    if grep -rqF "$HELPER_PREFIX" "$RESULTS/" 2>/dev/null; then
+        echo "[discord-roundtrip] FATAL: bot-B (helper) token prefix found in test-results — leak detected"
+        exit 2
+    fi
+fi
 
-echo "[discord-roundtrip] credential-leak check passed (token + guild_id + channel_id)"
+if [ -n "$HELPER_BOT_TOKEN" ]; then
+    echo "[discord-roundtrip] credential-leak check passed (bot-A token + bot-B token + guild_id + channel_id)"
+else
+    echo "[discord-roundtrip] credential-leak check passed (bot-A token + guild_id + channel_id)"
+fi
 exit "$DOTNET_EXIT"
