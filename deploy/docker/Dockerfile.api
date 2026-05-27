@@ -16,6 +16,7 @@ COPY api/src/DwbHub.Infrastructure/DwbHub.Infrastructure.csproj api/src/DwbHub.I
 COPY api/tests/DwbHub.Tests.Unit/DwbHub.Tests.Unit.csproj api/tests/DwbHub.Tests.Unit/
 COPY api/tests/DwbHub.Tests.Integration/DwbHub.Tests.Integration.csproj api/tests/DwbHub.Tests.Integration/
 COPY api/tests/DwbHub.Tests.Security/DwbHub.Tests.Security.csproj api/tests/DwbHub.Tests.Security/
+COPY api/tests/DwbHub.Tests.Shared/DwbHub.Tests.Shared.csproj api/tests/DwbHub.Tests.Shared/
 
 WORKDIR /src/api
 RUN dotnet restore --arch $TARGETARCH
