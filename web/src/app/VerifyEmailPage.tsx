@@ -1,63 +1,58 @@
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useMutation } from "@tanstack/react-query";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
-
-type VerifyState =
-  | { kind: "pending" }
-  | { kind: "success" }
-  | {
-      kind: "error";
-      reason: "missing_token" | "invalid_or_expired_token" | "network";
-    };
+import { useApiClient } from "@/lib/api/useApiClient";
 
 export function VerifyEmailPage(): React.JSX.Element {
   const { slug } = useParams<{ slug: string }>();
   const [params] = useSearchParams();
   const { t } = useTranslation();
   const token = params.get("token");
-  const [state, setState] = useState<VerifyState>({ kind: "pending" });
+  const api = useApiClient();
+
+  /**
+   * NOTE: The generated schema has `content?: never` for the 200 response of
+   * /api/auth/verify-email/confirm (schema gap). openapi-fetch still reads the
+   * body internally; on non-2xx responses `error` contains the parsed JSON.
+   * We only need success/failure state here, so the body value is ignored.
+   */
+  const mutation = useMutation<void, Error, string>({
+    mutationFn: async (verifyToken: string) => {
+      const { error } = await api.POST("/api/auth/verify-email/confirm", {
+        body: { token: verifyToken },
+      });
+      if (error) throw new Error("invalid_or_expired_token");
+    },
+  });
 
   useEffect(() => {
-    if (!token) {
-      setState({ kind: "error", reason: "missing_token" });
-      return;
-    }
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        const res = await fetch("/api/auth/verify-email/confirm", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token }),
-          signal: controller.signal,
-        });
-        if (res.ok) {
-          setState({ kind: "success" });
-        } else {
-          setState({ kind: "error", reason: "invalid_or_expired_token" });
-        }
-      } catch (err) {
-        if ((err as Error).name === "AbortError") return;
-        setState({ kind: "error", reason: "network" });
-      }
-    })();
-    return () => controller.abort();
+    if (!token) return;
+    mutation.mutate(token);
+    // The effect must run exactly once per token; exhaustive-deps is intentionally
+    // omitted for mutation (stable ref) to avoid re-triggering on re-renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  const isMissingToken = !token;
+  const isPending = Boolean(token) && (mutation.isIdle || mutation.isPending);
+  const isSuccess = mutation.isSuccess;
+  const isError = isMissingToken || mutation.isError;
 
   return (
     <main
       className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-6 py-12"
       data-testid="verify-email-page"
     >
-      {state.kind === "pending" && (
+      {isPending && (
         <div className="flex items-center gap-2" data-testid="verify-pending">
           <Loader2 className="h-5 w-5 animate-spin" />
           <span>{t("verifyEmail.pending")}</span>
         </div>
       )}
-      {state.kind === "success" && (
+      {isSuccess && (
         <div className="text-center" data-testid="verify-success">
           <CheckCircle2 className="mx-auto h-12 w-12 text-green-600" />
           <h1 className="mt-4 text-2xl font-semibold">
@@ -73,7 +68,7 @@ export function VerifyEmailPage(): React.JSX.Element {
           </Link>
         </div>
       )}
-      {state.kind === "error" && (
+      {isError && (
         <div className="text-center" data-testid="verify-error">
           <AlertCircle className="mx-auto h-12 w-12 text-red-600" />
           <h1 className="mt-4 text-2xl font-semibold">
