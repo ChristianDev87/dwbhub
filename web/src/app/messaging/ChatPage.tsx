@@ -15,6 +15,7 @@ import type React from "react";
 import { useParams, useLocation, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { HubConnectionState } from "@microsoft/signalr";
+import { useAuth } from "../auth-context";
 import { useChannel } from "./useChannel";
 import { MessageList } from "./MessageList";
 import { SendBox } from "./SendBox";
@@ -26,11 +27,18 @@ export function ChatPage(): React.JSX.Element {
   }>();
   const location = useLocation();
   const { t } = useTranslation();
+  const { state: authState } = useAuth();
 
   // Channel name via router state (Option C); fall back to ID prefix
   const channelName =
     (location.state as { channelName?: string } | null)?.channelName ??
     (channelPublicId ?? "").slice(0, 8);
+
+  // Current user info for permission checks
+  const currentUserDisplayName =
+    authState.kind === "authenticated" ? authState.user.displayName : "";
+  const isOwnerRole =
+    authState.kind === "authenticated" && authState.user.role === "Owner";
 
   const {
     messages,
@@ -45,6 +53,10 @@ export function ChatPage(): React.JSX.Element {
     loadOlder,
     sendMessage,
     markAtBottom,
+    editMessage,
+    deleteMessage,
+    isEditing,
+    isDeleting,
   } = useChannel(slug ?? "", channelPublicId ?? "");
 
   // -------------------------------------------------------------------------
@@ -117,6 +129,12 @@ export function ChatPage(): React.JSX.Element {
             hasMore={hasMore}
             onLoadOlder={loadOlder}
             onAtBottomChange={markAtBottom}
+            currentUserDisplayName={currentUserDisplayName}
+            isOwnerRole={isOwnerRole}
+            onEdit={editMessage}
+            onDelete={deleteMessage}
+            isEditing={isEditing}
+            isDeleting={isDeleting}
           />
         )}
 

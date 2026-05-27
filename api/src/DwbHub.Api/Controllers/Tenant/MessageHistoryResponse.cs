@@ -12,6 +12,7 @@ public sealed record MessageHistoryResponse(
 
 /// <summary>A single message item in the history response.</summary>
 /// <param name="Id">Internal database ID of the message row.</param>
+/// <param name="PublicId">External UUID identifier of the message. Required for PATCH/DELETE requests.</param>
 /// <param name="AuthorName">Discord display name of the author at send time.</param>
 /// <param name="Content">Message text content.</param>
 /// <param name="SentAt">Timestamp when the message was originally sent on Discord.</param>
@@ -20,6 +21,7 @@ public sealed record MessageHistoryResponse(
 /// <param name="DiscordMessageId">Discord snowflake identifying this message.</param>
 public sealed record MessageHistoryItem(
     long Id,
+    Guid PublicId,
     string AuthorName,
     string Content,
     DateTimeOffset SentAt,

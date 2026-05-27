@@ -150,7 +150,24 @@
     "send": "Senden",
     "sending": "wird gesendet…",
     "viaDwbhub": "(über DwbHub)",
-    "you": "Du"
+    "you": "Du",
+    "editMessage": {
+      "button": "Bearbeiten",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "tooLong": "Nachricht darf maximal 1800 Zeichen haben.",
+      "empty": "Nachricht darf nicht leer sein.",
+      "windowExpired": "Diese Nachricht ist zu alt zum Bearbeiten.",
+      "forbidden": "Du kannst nur eigene Nachrichten bearbeiten.",
+      "genericError": "Bearbeiten fehlgeschlagen. Erneut versuchen."
+    },
+    "deleteMessage": {
+      "button": "Löschen",
+      "confirmPrompt": "Sicher löschen?",
+      "confirm": "Löschen",
+      "cancel": "Abbrechen",
+      "genericError": "Löschen fehlgeschlagen. Erneut versuchen."
+    }
   },
   "botCredentials": {
     "configured": "Bot-Token konfiguriert",

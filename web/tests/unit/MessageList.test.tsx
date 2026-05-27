@@ -43,6 +43,7 @@ function makeMsg(
 ): ChatMessage {
   return {
     id,
+    publicId: null,
     authorName: `User${String(id)}`,
     content: `Message ${String(id)}`,
     sentAt: new Date().toISOString(),
@@ -54,6 +55,10 @@ function makeMsg(
     ...overrides,
   };
 }
+
+// Default no-op handlers for the new MessageList props
+const noopEdit = vi.fn().mockResolvedValue(undefined);
+const noopDelete = vi.fn().mockResolvedValue(undefined);
 
 function renderList(
   messages: ChatMessage[],
@@ -69,6 +74,12 @@ function renderList(
         hasMore={hasMore}
         onLoadOlder={onLoadOlder}
         onAtBottomChange={onAtBottomChange}
+        currentUserDisplayName="TestUser"
+        isOwnerRole={false}
+        onEdit={noopEdit}
+        onDelete={noopDelete}
+        isEditing={false}
+        isDeleting={false}
       />
     </I18nextProvider>,
   );
@@ -122,6 +133,12 @@ describe("MessageList", () => {
           hasMore={true}
           onLoadOlder={onLoadOlder}
           onAtBottomChange={vi.fn()}
+          currentUserDisplayName="TestUser"
+          isOwnerRole={false}
+          onEdit={noopEdit}
+          onDelete={noopDelete}
+          isEditing={false}
+          isDeleting={false}
         />
       </I18nextProvider>,
     );
@@ -137,6 +154,12 @@ describe("MessageList", () => {
           hasMore={false}
           onLoadOlder={onLoadOlder}
           onAtBottomChange={vi.fn()}
+          currentUserDisplayName="TestUser"
+          isOwnerRole={false}
+          onEdit={noopEdit}
+          onDelete={noopDelete}
+          isEditing={false}
+          isDeleting={false}
         />
       </I18nextProvider>,
     );

@@ -18,6 +18,12 @@ interface MessageListProps {
   hasMore: boolean;
   onLoadOlder: () => void;
   onAtBottomChange: (atBottom: boolean) => void;
+  currentUserDisplayName: string;
+  isOwnerRole: boolean;
+  onEdit: (args: { messagePublicId: string; content: string }) => Promise<void>;
+  onDelete: (args: { messagePublicId: string }) => Promise<void>;
+  isEditing: boolean;
+  isDeleting: boolean;
 }
 
 export function MessageList({
@@ -25,6 +31,12 @@ export function MessageList({
   hasMore,
   onLoadOlder,
   onAtBottomChange,
+  currentUserDisplayName,
+  isOwnerRole,
+  onEdit,
+  onDelete,
+  isEditing,
+  isDeleting,
 }: MessageListProps): React.JSX.Element {
   // startReached must be omitted entirely (not passed as undefined) because
   // the project uses exactOptionalPropertyTypes: true.
@@ -41,7 +53,16 @@ export function MessageList({
       {...startReachedProp}
       atBottomStateChange={onAtBottomChange}
       itemContent={(_index: number, item: ChatMessage) => (
-        <MessageRow key={item.id} message={item} />
+        <MessageRow
+          key={item.id}
+          message={item}
+          isOwnMessage={item.authorName === currentUserDisplayName}
+          isOwnerRole={isOwnerRole}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          isEditing={isEditing}
+          isDeleting={isDeleting}
+        />
       )}
     />
   );
