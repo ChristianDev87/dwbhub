@@ -208,13 +208,34 @@ public sealed class MessageLifecycleRoundTripTests : IAsyncLifetime
             $"channel {_testChannelDiscordId} must be visible to the bot after sync");
         _bridgedChannelPublicId = targetChannel!.PublicId;
 
-        // 14. Bridge the channel — creates a Discord webhook.
+        // 14. Defensive pre-bridge cleanup: delete any leaked "DwbHub" webhooks from
+        //     previous test runs that crashed before DisposeAsync could clean them up.
+        //     Discord caps webhooks at 10 per channel — without this, bridging fails with 500.
+        try
+        {
+            using var cleanupDiscord = new Discord.Rest.DiscordRestClient();
+            await cleanupDiscord.LoginAsync(Discord.TokenType.Bot, _botToken).ConfigureAwait(false);
+            var cleanupChannel = await cleanupDiscord.GetChannelAsync(_testChannelDiscordId).ConfigureAwait(false)
+                as Discord.Rest.RestTextChannel;
+            if (cleanupChannel is not null)
+            {
+                var existingWebhooks = await cleanupChannel.GetWebhooksAsync().ConfigureAwait(false);
+                foreach (var wh in existingWebhooks.Where(w =>
+                    w.Name.Equals("DwbHub", StringComparison.OrdinalIgnoreCase)))
+                {
+                    try { await wh.DeleteAsync().ConfigureAwait(false); } catch { /* swallow */ }
+                }
+            }
+        }
+        catch { /* swallow — cleanup failure must not block the test setup */ }
+
+        // 15. Bridge the channel — creates a Discord webhook.
         var bridgeRes = await _client.PostAsync(
             $"/api/t/{_tenantSlug}/channels/{_bridgedChannelPublicId:D}/bridge", null).ConfigureAwait(false);
         bridgeRes.StatusCode.Should().Be(HttpStatusCode.Accepted,
             "bridge must succeed so the round-trip send can post a message");
 
-        // 15. Read webhook credentials from DB for direct-REST edit/delete.
+        // 16. Read webhook credentials from DB for direct-REST edit/delete.
         var channelRow = await _channels.GetByPublicIdAsync(_tenantId, _bridgedChannelPublicId)
             .ConfigureAwait(false);
         channelRow.Should().NotBeNull();
@@ -235,7 +256,7 @@ public sealed class MessageLifecycleRoundTripTests : IAsyncLifetime
             KeyVersion: (int)webhookRow.key_version);
         _webhookToken = _webhookCipher.Decrypt(envelope);
 
-        // 16. Stand up a plain DiscordRestChannelClient for verification (bypass app stack).
+        // 17. Stand up a plain DiscordRestChannelClient for verification (bypass app stack).
         _verifyHttp = new HttpClient();
         _verifyClient = new DiscordRestChannelClient(
             _verifyHttp,
@@ -274,6 +295,18 @@ public sealed class MessageLifecycleRoundTripTests : IAsyncLifetime
             catch
             {
                 // Swallow — cleanup failure must not mask test assertion.
+            }
+
+            // Delete the test webhook to avoid hitting Discord's 10-webhook-per-channel limit.
+            // This is the primary fix for the webhook leak introduced in PR #74.
+            try
+            {
+                await _verifyClient.DeleteWebhookAsync(
+                    _webhookId, _webhookToken, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Swallow — webhook may have been deleted already or token may be invalid.
             }
         }
 
