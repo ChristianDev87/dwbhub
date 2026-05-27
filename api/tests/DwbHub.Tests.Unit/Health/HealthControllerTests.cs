@@ -28,10 +28,9 @@ public sealed class HealthControllerTests
         var controller = new HealthController();
 
         var result = controller.Get() as OkObjectResult;
-        var payload = result!.Value!;
-        var type = payload.GetType();
+        var payload = result!.Value.Should().BeOfType<HealthResponse>().Subject;
 
-        type.GetProperty("version").Should().NotBeNull();
-        type.GetProperty("uptime_seconds").Should().NotBeNull();
+        payload.Version.Should().NotBeNullOrEmpty();
+        payload.UptimeSeconds.Should().BeGreaterThanOrEqualTo(0);
     }
 }

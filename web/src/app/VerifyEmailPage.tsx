@@ -13,12 +13,6 @@ export function VerifyEmailPage(): React.JSX.Element {
   const token = params.get("token");
   const api = useApiClient();
 
-  /**
-   * NOTE: The generated schema has `content?: never` for the 200 response of
-   * /api/auth/verify-email/confirm (schema gap). openapi-fetch still reads the
-   * body internally; on non-2xx responses `error` contains the parsed JSON.
-   * We only need success/failure state here, so the body value is ignored.
-   */
   const mutation = useMutation<void, Error, string>({
     mutationFn: async (verifyToken: string) => {
       const { error } = await api.POST("/api/auth/verify-email/confirm", {

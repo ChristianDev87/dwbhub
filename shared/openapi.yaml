@@ -63,6 +63,28 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/VerifyEmailConfirmResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyEmailConfirmResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/VerifyEmailConfirmResponse'
+        '400':
+          description: Bad Request
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /api/auth/password-reset/request:
     post:
       tags:
@@ -99,6 +121,28 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/PasswordResetConfirmResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetConfirmResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetConfirmResponse'
+        '400':
+          description: Bad Request
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /api/auth/refresh:
     post:
       tags:
@@ -635,6 +679,16 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
   '/api/t/{slug}/channels/{channelPublicId}/messages':
     post:
       tags:
@@ -775,6 +829,16 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/SetupStatusResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupStatusResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/SetupStatusResponse'
   /api/setup/complete:
     post:
       tags:
@@ -791,8 +855,66 @@ paths:
             schema:
               $ref: '#/components/schemas/SetupCompleteRequest'
       responses:
-        '200':
-          description: OK
+        '201':
+          description: Created
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/SetupCompleteResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupCompleteResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/SetupCompleteResponse'
+        '400':
+          description: Bad Request
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '410':
+          description: Gone
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   '/api/t/{slug}/dashboard':
     get:
       tags:
@@ -1011,6 +1133,19 @@ components:
             $ref: '#/components/schemas/ChannelListItem'
           nullable: true
       additionalProperties: false
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          nullable: true
+        version:
+          type: string
+          nullable: true
+        uptime_seconds:
+          type: integer
+          format: int64
+      additionalProperties: false
     LoginRequest:
       type: object
       properties:
@@ -1040,6 +1175,15 @@ components:
         newPassword:
           type: string
           nullable: true
+      additionalProperties: false
+    PasswordResetConfirmResponse:
+      type: object
+      properties:
+        reset:
+          type: boolean
+        sessionsRevoked:
+          type: integer
+          format: int32
       additionalProperties: false
     PasswordResetRequestRequest:
       type: object
@@ -1116,6 +1260,31 @@ components:
           type: string
           nullable: true
       additionalProperties: false
+    SetupCompleteResponse:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        tenantSlug:
+          type: string
+          nullable: true
+        ownerUserId:
+          type: integer
+          format: int64
+        verificationEmailSent:
+          type: boolean
+      additionalProperties: false
+    SetupStatusResponse:
+      type: object
+      properties:
+        completed:
+          type: boolean
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+      additionalProperties: false
     TestEditRequest:
       type: object
       properties:
@@ -1142,6 +1311,12 @@ components:
         token:
           type: string
           nullable: true
+      additionalProperties: false
+    VerifyEmailConfirmResponse:
+      type: object
+      properties:
+        verified:
+          type: boolean
       additionalProperties: false
     VerifyEmailResendRequest:
       type: object

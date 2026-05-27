@@ -29,12 +29,6 @@ export function PasswordResetPage(): React.JSX.Element {
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
-  /**
-   * NOTE: The generated schema has `content?: never` for the 200 response of
-   * /api/auth/password-reset/confirm (schema gap). openapi-fetch still reads
-   * the body internally; on non-2xx responses `error` already contains the
-   * parsed JSON body — no need to call `response.json()` again.
-   */
   const mutation = useMutation<void, Error, FormValues>({
     mutationFn: async (values: FormValues) => {
       const { error } = await api.POST("/api/auth/password-reset/confirm", {

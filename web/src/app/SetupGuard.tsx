@@ -4,11 +4,6 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useApiClient } from "@/lib/api/useApiClient";
 import { qk } from "@/lib/api/queryKeys";
 
-/** Shape of the /api/setup/status response body. */
-interface SetupStatusBody {
-  completed: boolean;
-}
-
 /**
  * Top-level wrapper that fetches /api/setup/status once on mount.
  * If setup is incomplete and the user is not already on /setup, declaratively
@@ -20,10 +15,6 @@ interface SetupStatusBody {
  * Uses useApiClient() + TanStack Query instead of a raw fetch/useEffect.
  * The endpoint is public — useApiClient() works with accessToken === null
  * because the auth middleware silently omits the Authorization header.
- *
- * NOTE: The generated schema has `content?: never` for the 200 response of
- * /api/setup/status (schema gap), so `data` from openapi-fetch is `undefined`.
- * We read the body from the raw `response` object instead.
  */
 export function SetupGuard({
   children,
@@ -35,10 +26,10 @@ export function SetupGuard({
 
   const { data, isLoading, isError } = useQuery({
     queryKey: qk.setup.status(),
-    queryFn: async (): Promise<SetupStatusBody> => {
-      const { response, error } = await api.GET("/api/setup/status");
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/setup/status");
       if (error) throw error;
-      return response.json() as Promise<SetupStatusBody>;
+      return data;
     },
   });
 

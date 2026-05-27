@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DwbHub.Api.Controllers;
@@ -18,14 +19,13 @@ public sealed class HealthController : ControllerBase
 
     /// <summary>Return status, version, and uptime in seconds. No authentication required.</summary>
     [HttpGet]
+    [ProducesResponseType<HealthResponse>(StatusCodes.Status200OK)]
     public IActionResult Get()
     {
-        var payload = new
-        {
-            status = "ok",
-            version = s_version,
-            uptime_seconds = (long)(DateTimeOffset.UtcNow - s_startedAt).TotalSeconds,
-        };
+        var payload = new HealthResponse(
+            Status: "ok",
+            Version: s_version,
+            UptimeSeconds: (long)(DateTimeOffset.UtcNow - s_startedAt).TotalSeconds);
         return Ok(payload);
     }
 }

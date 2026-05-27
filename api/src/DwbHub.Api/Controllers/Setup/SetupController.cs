@@ -20,6 +20,7 @@ public sealed class SetupController(ISetupService setupService) : ControllerBase
     /// </summary>
     [HttpGet("/api/setup/status")]
     [AllowAnonymous]
+    [ProducesResponseType<SetupStatusResponse>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Status(CancellationToken ct)
     {
         var status = await setupService.GetStatusAsync(ct);
@@ -33,6 +34,11 @@ public sealed class SetupController(ISetupService setupService) : ControllerBase
     /// </summary>
     [HttpPost("/api/setup/complete")]
     [AllowAnonymous]
+    [ProducesResponseType<SetupCompleteResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status410Gone)]
     public async Task<IActionResult> Complete([FromBody] SetupCompleteRequest body, CancellationToken ct)
     {
         var ip = HttpContext.Connection.RemoteIpAddress;

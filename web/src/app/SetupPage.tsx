@@ -22,11 +22,6 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
-/** Shape of the /api/setup/complete response body. */
-interface SetupCompleteBody {
-  tenantSlug: string;
-}
-
 type ErrorReason =
   | "invalid_bootstrap_token"
   | "setup_already_completed"
@@ -49,12 +44,6 @@ export function SetupPage(): React.JSX.Element {
   });
   const [serverError, setServerError] = useState<ErrorReason | null>(null);
 
-  /**
-   * NOTE: The generated schema has `content?: never` for the 200/201 response
-   * of /api/setup/complete (schema gap). openapi-fetch still parses the JSON
-   * body at runtime; we cast `data as unknown` to recover it. On error paths,
-   * `error` from openapi-fetch already contains the parsed JSON body.
-   */
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
       const { data, error } = await api.POST("/api/setup/complete", {
@@ -82,12 +71,13 @@ export function SetupPage(): React.JSX.Element {
                   : "invalid_request";
         throw new Error(reason);
       }
-      // openapi-fetch parses the JSON body at runtime even when the schema
-      // declares `content?: never`; cast to recover the actual value.
-      return data as unknown as SetupCompleteBody;
+      if (data === undefined) throw new Error("invalid_request");
+      return data;
     },
     onSuccess: (result) => {
-      navigate(`/t/${result.tenantSlug}/verify-email-prompt`);
+      const slug = result?.tenantSlug;
+      if (!slug) throw new Error("invalid_request");
+      navigate(`/t/${slug}/verify-email-prompt`);
     },
     onError: (err: Error) => {
       const reason = (err.message as ErrorReason) ?? "network";
