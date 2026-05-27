@@ -12,8 +12,8 @@ import type { paths } from "./generated/schema";
  * forwards /api/* to the backend in dev and the production deploy serves both
  * SPA and API from the same host.
  */
-export function createApiClient(accessToken: string | null) {
-  const client = createClient<paths>({ baseUrl: "/" });
+export function createApiClient(accessToken: string | null, baseUrl = "/") {
+  const client = createClient<paths>({ baseUrl });
 
   const authMiddleware: Middleware = {
     async onRequest({ request }) {
