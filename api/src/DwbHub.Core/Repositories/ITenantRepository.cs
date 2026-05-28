@@ -21,4 +21,11 @@ public interface ITenantRepository
 
     /// <summary>List every tenant in the system, ordered by name. Returns an empty list when none exist.</summary>
     Task<IReadOnlyList<Tenant>> ListAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Overwrite the per-tenant message edit-window setting.
+    /// Pass <c>null</c> to reset to the system default.
+    /// Returns <c>true</c> when the row was updated, <c>false</c> when the id was not found.
+    /// </summary>
+    Task<bool> UpdateMessageEditWindowAsync(long id, int? windowSeconds, CancellationToken ct = default);
 }
