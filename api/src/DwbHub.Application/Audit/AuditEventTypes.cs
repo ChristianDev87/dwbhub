@@ -24,4 +24,5 @@ public static class AuditEventTypes
     public const string MessageEdited = "message.edited";
     public const string MessageReceivedInbound = "message.received_inbound";
     public const string MessageSentOutbound = "message.sent_outbound";
+    public const string TenantSettingsMessageEditWindowUpdated = "tenant.settings.message_edit_window_updated";
 }

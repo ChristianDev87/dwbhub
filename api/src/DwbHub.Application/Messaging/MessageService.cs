@@ -32,6 +32,7 @@ public sealed class MessageService : IMessageService
     private readonly IAuditWriter _audit;
     private readonly IMessagesBroadcaster _broadcaster;
     private readonly ILogger<MessageService> _logger;
+    private readonly ITenantRepository _tenants;
 
     public MessageService(
         IMessageRepository messages,
@@ -43,7 +44,8 @@ public sealed class MessageService : IMessageService
         IDiscordRestChannelClient discord,
         IAuditWriter audit,
         IMessagesBroadcaster broadcaster,
-        ILogger<MessageService> logger)
+        ILogger<MessageService> logger,
+        ITenantRepository tenants)
     {
         _messages = messages;
         _channels = channels;
@@ -55,6 +57,7 @@ public sealed class MessageService : IMessageService
         _audit = audit;
         _broadcaster = broadcaster;
         _logger = logger;
+        _tenants = tenants;
     }
 
     // ── Inbound ───────────────────────────────────────────────────────────────
@@ -265,9 +268,13 @@ public sealed class MessageService : IMessageService
         if (message.DwbhubUserId != actorUserId)
             return new EditMessageResult.Forbidden();
 
-        // 10-minute edit window.
+        // Per-tenant override falls back to the system default.
+        var tenant = await _tenants.GetByIdAsync(tenantId, ct).ConfigureAwait(false);
+        var window = tenant?.MessageEditWindowSeconds is int s
+            ? TimeSpan.FromSeconds(s)
+            : EditWindow;
         var age = DateTimeOffset.UtcNow - message.SentAt;
-        if (age > EditWindow)
+        if (age > window)
             return new EditMessageResult.EditWindowExpired();
 
         // Resolve webhook for this channel to call Discord.
