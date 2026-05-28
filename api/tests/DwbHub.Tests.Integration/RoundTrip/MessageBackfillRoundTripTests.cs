@@ -1,25 +1,13 @@
-using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Dapper;
 using Discord;
-using Discord.Rest;
-using DwbHub.Application.Bot;
 using DwbHub.Application.Messaging;
-using DwbHub.Core.Entities;
-using DwbHub.Core.Messaging;
-using DwbHub.Data.Connections;
-using DwbHub.Data.Repositories;
-using DwbHub.Infrastructure.Auth;
-using DwbHub.Infrastructure.Bot;
-using DwbHub.Infrastructure.Messaging;
 using DwbHub.Tests.Integration.Infrastructure;
+using DwbHub.Tests.Shared.Api;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
-using Npgsql;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace DwbHub.Tests.Integration.RoundTrip;
 
@@ -45,224 +33,79 @@ namespace DwbHub.Tests.Integration.RoundTrip;
 /// "all 20 of ours arrived", not "only 20 messages exist", so other tests'
 /// leftover markers do not interfere.
 /// </summary>
-[Collection(DatabaseCollection.Name)]
-[Trait("Category", "DiscordRoundTrip")]
-public sealed class MessageBackfillRoundTripTests : IAsyncLifetime
+public sealed class MessageBackfillRoundTripTests(
+    PostgresFixture fixture, ITestOutputHelper output)
+    : RoundTripTestBase(fixture, output)
 {
-    // ── Required env vars ──────────────────────────────────────────────────────
-    private string? _botToken;           // Bot A — main app bot
-    private string? _helperBotToken;     // Bot B — posts pre-bridge messages
-    private ulong _discordGuildId;
-    private ulong _testChannelDiscordId;
-    private bool _envOk;
+    protected override string TenantSlug => "roundtrip-backfill";
+    protected override string MarkerPrefix => "[dwbhub-roundtrip-backfill:";
+    protected override bool RequiresHelperBot => true;
 
-    // ── Fixed keys — serial tests under one collection ────────────────────────
-    private const string Base64JwtKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
-    private static readonly string Base64EncKey =
-        Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
-
-    // ── Infrastructure ────────────────────────────────────────────────────────
-    private readonly PostgresFixture _fixture;
-    private NpgsqlDataSource _ds = null!;
-    private TenantRepository _tenants = null!;
-    private UserRepository _users = null!;
-    private GuildRepository _guilds = null!;
-    private GuildChannelRepository _channels = null!;
-
-    private DwbHubRoundTripTestFactory _factory = null!;
-    private HttpClient _client = null!;             // owner-authed API client
-
-    // ── Test state set during InitializeAsync ──────────────────────────────────
-    private string _slug = null!;
-    private JwtIssuer _issuer = null!;
-    private string _ownerJwt = null!;
-    private Guid _bridgedChannelPublicId;
-    private long _tenantId;
-    private long _guildId;
-    private Guid _guildPublicId;
-
-    // ── Webhook credentials (recovered from DB after bridge) ──────────────────
-    private ulong _webhookId;
-    private string? _webhookToken;
-    private IChannelWebhookCipher _webhookCipher = null!;
-
-    // ── Verification REST client (direct Discord REST, bypasses app stack) ────
-    private HttpClient _verifyHttp = null!;
-    private DiscordRestChannelClient _verifyClient = null!;
-
-    // ── Helper bot (Bot B) — Discord REST for posting + cleanup ───────────────
-    private DiscordRestClient? _helperBot;
-    private readonly List<ulong> _helperPostedMessageIds = new();
+    // Bridge is NOT called in setup — it happens inside the test after pre-bridge posts.
+    protected override bool BridgeInSetup => false;
 
     // ── Unique marker for this test run ───────────────────────────────────────
     private string _marker = null!;
 
-    public MessageBackfillRoundTripTests(PostgresFixture fixture)
+    // ── Sub-class setup hook ───────────────────────────────────────────────────
+
+    protected override async Task OnSetupCompleted()
     {
-        _fixture = fixture;
-        DefaultTypeMap.MatchNamesWithUnderscores = true;
-        SqlMapper.AddTypeHandler(new DateTimeOffsetTypeHandler());
-    }
-
-    // ── IAsyncLifetime ────────────────────────────────────────────────────────
-
-    public async Task InitializeAsync()
-    {
-        // 1. Read env — skip-flag if not all present.
-        _botToken = Environment.GetEnvironmentVariable("DISCORD_DEV_BOT_TOKEN");
-        _helperBotToken = Environment.GetEnvironmentVariable("DISCORD_DEV_HELPER_BOT_TOKEN");
-        var guildIdStr = Environment.GetEnvironmentVariable("DISCORD_DEV_GUILD_ID");
-        var channelIdStr = Environment.GetEnvironmentVariable("DISCORD_DEV_CHANNEL_ID");
-
-        _envOk = !string.IsNullOrWhiteSpace(_botToken)
-            && !string.IsNullOrWhiteSpace(_helperBotToken)
-            && !string.IsNullOrWhiteSpace(guildIdStr) && ulong.TryParse(guildIdStr, out _discordGuildId)
-            && !string.IsNullOrWhiteSpace(channelIdStr) && ulong.TryParse(channelIdStr, out _testChannelDiscordId);
-
-        if (!_envOk) return;
-
-        // 2. Fresh DB.
-        await _fixture.ResetAsync().ConfigureAwait(false);
-
-        // 3. Set env vars the app host reads on startup.
-        _slug = "roundtrip-backfill";
-        var uniqueLogDir = Path.Combine(
-            Path.GetTempPath(), "dwbhub-test-logs", Guid.NewGuid().ToString("N"));
-        Environment.SetEnvironmentVariable("DWBHUB_LOG_DIR", uniqueLogDir);
-        Environment.SetEnvironmentVariable("DWBHUB_DB_CONNECTION", _fixture.ConnectionString);
-        Environment.SetEnvironmentVariable("DWBHUB_JWT_SECRET", Base64JwtKey);
-        Environment.SetEnvironmentVariable("DWBHUB_ENCRYPTION_KEY", Base64EncKey);
-        Environment.SetEnvironmentVariable("DWBHUB_SMTP_HOST", "localhost");
-        Environment.SetEnvironmentVariable("DWBHUB_SMTP_PORT", "11025");
-        Environment.SetEnvironmentVariable("DWBHUB_SMTP_FROM", "noreply@test.local");
-        Environment.SetEnvironmentVariable("DWBHUB_PUBLIC_BASE_URL", "http://localhost:5173");
-        Environment.SetEnvironmentVariable("DWBHUB_BOOTSTRAP_TOKEN_FILE", Path.GetTempFileName());
-        // CRITICAL: do NOT set DWBHUB_DISCORD_TEST_MODE — production code path only.
-
-        // 4. Repositories for seeding.
-        _ds = NpgsqlDataSource.Create(_fixture.ConnectionString);
-        var connFactory = new NpgsqlConnectionFactory(_ds);
-        _tenants = new TenantRepository(connFactory);
-        _users = new UserRepository(connFactory);
-        _guilds = new GuildRepository(connFactory);
-        _channels = new GuildChannelRepository(connFactory);
-        _issuer = new JwtIssuer(Base64JwtKey);
-
-        // 5. Seed: tenant + owner user.
-        _tenantId = await _tenants.CreateAsync(name: "Round-Trip Backfill Tenant", slug: _slug)
-            .ConfigureAwait(false);
-        var ownerUid = await _users.CreateAsync(new User(
-            Id: 0, TenantId: _tenantId,
-            Email: "owner@roundtrip-backfill.test",
-            EmailVerifiedAt: DateTimeOffset.UtcNow,
-            PasswordHash: new BCryptPasswordHasher().Hash("pw"),
-            DisplayName: "RTBackfillOwner",
-            Role: UserRole.Owner,
-            IsActive: true,
-            CreatedAt: default,
-            UpdatedAt: default)).ConfigureAwait(false);
-        var ownerUser = new User(ownerUid, _tenantId, "owner@roundtrip-backfill.test",
-            DateTimeOffset.UtcNow, "", "RTBackfillOwner", UserRole.Owner, true, default, default);
-        var tenantEntity = new Tenant(_tenantId, "Round-Trip Backfill Tenant", _slug, "en", default, default);
-        _ownerJwt = _issuer.Issue(ownerUser, tenantEntity);
-
-        // 6. Seed guild using the real Discord guild ID.
-        (_guildId, _guildPublicId) = await _guilds.CreateAsync(
-            tenantId: _tenantId,
-            discordGuildId: _discordGuildId.ToString(),
-            displayName: "RT Backfill Guild",
-            registeredByUserId: ownerUid).ConfigureAwait(false);
-
-        // 7. Start factory + client.
-        _factory = new DwbHubRoundTripTestFactory();
-        _client = _factory.CreateClient();
-        _client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", _ownerJwt);
-
-        // 7a. Resolve the webhook cipher from DI so we can decrypt the token after bridging.
-        _webhookCipher = _factory.Services.GetRequiredService<IChannelWebhookCipher>();
-
-        // 8. Set real bot credentials (Bot A) via API.
-        var credRes = await _client.PutAsJsonAsync(
-            $"/api/t/{_slug}/guilds/{_guildPublicId:D}/bot-credentials",
-            new { token = _botToken }).ConfigureAwait(false);
-        credRes.StatusCode.Should().BeOneOf(
-            [HttpStatusCode.NoContent, HttpStatusCode.OK],
-            "PUT bot-credentials must succeed");
-
-        // 9. Activate guild — triggers OnGuildActivatedAsync → BotConnectionManager connects.
-        var activateRes = await _client.PostAsync(
-            $"/api/t/{_slug}/guilds/{_guildPublicId:D}/activate", null).ConfigureAwait(false);
-        activateRes.StatusCode.Should().Be(HttpStatusCode.NoContent, "guild activate must succeed");
-
-        // 10. Wait for Bot A to reach Connected state.
-        var manager = _factory.Services.GetRequiredService<BotConnectionManager>();
-        await WaitForBotConnectedAsync(manager, _guildId, TimeSpan.FromSeconds(30))
-            .ConfigureAwait(false);
-
-        // 11. Sync channels from Discord.
-        var syncRes = await _client.PostAsync(
-            $"/api/t/{_slug}/guilds/{_guildPublicId:D}/channels/sync", null).ConfigureAwait(false);
-        syncRes.StatusCode.Should().Be(HttpStatusCode.NoContent, "channel sync must succeed");
-
-        // 12. Find the target channel in DB by its Discord snowflake.
-        var targetChannel = await _channels.GetByDiscordIdAsync(
-            _tenantId, (long)_testChannelDiscordId).ConfigureAwait(false);
-        targetChannel.Should().NotBeNull(
-            $"channel {_testChannelDiscordId} must be visible to Bot A after sync");
-        _bridgedChannelPublicId = targetChannel!.PublicId;
-
-        // 13. Defensive pre-bridge cleanup: delete any leaked "DwbHub" webhooks from
-        //     previous test runs that crashed before DisposeAsync could clean them up.
-        //     Discord caps webhooks at 10 per channel — without this, bridging fails with 500.
+        // Defensive pre-test cleanup: sweep old [dwbhub-roundtrip-backfill:...] messages
+        // from crashed prior runs so the channel doesn't accumulate stale markers.
         try
         {
-            using var cleanupDiscord = new DiscordRestClient();
-            await cleanupDiscord.LoginAsync(TokenType.Bot, _botToken).ConfigureAwait(false);
-            var cleanupChannel = await cleanupDiscord.GetChannelAsync(_testChannelDiscordId)
-                .ConfigureAwait(false) as RestTextChannel;
-            if (cleanupChannel is not null)
-            {
-                var existingWebhooks = await cleanupChannel.GetWebhooksAsync().ConfigureAwait(false);
-                foreach (var wh in existingWebhooks.Where(w =>
-                    w.Name.Equals("DwbHub", StringComparison.OrdinalIgnoreCase)))
-                {
-                    try { await wh.DeleteAsync().ConfigureAwait(false); } catch { /* swallow */ }
-                }
-            }
-        }
-        catch { /* swallow — cleanup failure must not block the test setup */ }
-
-        // 14. Log in helper bot (Bot B).
-        _helperBot = new DiscordRestClient();
-        await _helperBot.LoginAsync(TokenType.Bot, _helperBotToken).ConfigureAwait(false);
-
-        // 15. Defensive pre-test cleanup: sweep old [dwbhub-roundtrip-backfill:...] messages
-        //     from crashed prior runs so the channel doesn't accumulate stale markers.
-        try
-        {
-            var ch = await _helperBot.GetChannelAsync(_testChannelDiscordId)
+            var ch = await HelperBot!.GetChannelAsync(TestChannelDiscordId)
                 .ConfigureAwait(false) as IMessageChannel;
             if (ch is not null)
             {
                 var old = await ch.GetMessagesAsync(100).FlattenAsync().ConfigureAwait(false);
+                int swept = 0;
                 foreach (var msg in old.Where(m =>
                     m.Content.StartsWith("[dwbhub-roundtrip-backfill:", StringComparison.Ordinal)))
                 {
-                    try { await msg.DeleteAsync().ConfigureAwait(false); } catch { /* swallow — MANAGE_MESSAGES may be absent */ }
+                    try { await msg.DeleteAsync().ConfigureAwait(false); swept++; } catch { /* swallow — MANAGE_MESSAGES may be absent */ }
                 }
+                if (swept > 0)
+                    Log($"Setup: swept {swept} stale backfill marker message(s)");
             }
         }
         catch { /* swallow */ }
 
-        // 16. Stand up a DiscordRestChannelClient for webhook delete in DisposeAsync.
-        _verifyHttp = new HttpClient();
-        _verifyClient = new DiscordRestChannelClient(
-            _verifyHttp,
-            NullLogger<DiscordRestChannelClient>.Instance);
+        Log("Setup: backfill pre-cleanup complete");
+    }
 
-        // NOTE: Bridge is NOT called here — it is called inside the test so that the
-        // helper-bot messages are guaranteed to be pre-bridge (historical).
+    // ── Sub-class teardown hook ────────────────────────────────────────────────
+
+    protected override async Task OnTeardown()
+    {
+        // Clean up helper bot messages — sweep by marker prefix.
+        if (HelperBot is not null)
+        {
+            try
+            {
+                var ch = await HelperBot.GetChannelAsync(TestChannelDiscordId)
+                    .ConfigureAwait(false) as IMessageChannel;
+
+                if (ch is not null)
+                {
+                    try
+                    {
+                        var msgs = await ch.GetMessagesAsync(100)
+                            .FlattenAsync().ConfigureAwait(false);
+                        int swept = 0;
+                        foreach (var msg in msgs.Where(m =>
+                            m.Content.StartsWith("[dwbhub-roundtrip-backfill:", StringComparison.Ordinal)))
+                        {
+                            try { await msg.DeleteAsync().ConfigureAwait(false); swept++; } catch { /* swallow */ }
+                        }
+                        Log($"Teardown: helper bot message sweep ({swept} message(s))");
+                    }
+                    catch { /* swallow */ }
+                }
+            }
+            catch { /* swallow */ }
+        }
     }
 
     // ── Test ──────────────────────────────────────────────────────────────────
@@ -271,15 +114,17 @@ public sealed class MessageBackfillRoundTripTests : IAsyncLifetime
     [Trait("Category", "DiscordRoundTrip")]
     public async Task Backfill_after_bridge_imports_helper_bot_messages()
     {
-        Skip.IfNot(_envOk,
+        Skip.IfNot(EnvOk,
             "DISCORD_DEV_BOT_TOKEN / DISCORD_DEV_HELPER_BOT_TOKEN / DISCORD_DEV_GUILD_ID / DISCORD_DEV_CHANNEL_ID not all set");
 
         // ── 1) Helper bot posts 20 pre-bridge marker messages ──────────────────
         _marker = $"[dwbhub-roundtrip-backfill:{Guid.NewGuid():N}]";
-        var channel = await _helperBot!.GetChannelAsync(_testChannelDiscordId)
+        Log($"Step: helper bot posting 20 pre-bridge messages with marker prefix");
+
+        var channel = await HelperBot!.GetChannelAsync(TestChannelDiscordId)
             .ConfigureAwait(false) as IMessageChannel;
         channel.Should().NotBeNull(
-            $"Helper bot must be able to see channel {_testChannelDiscordId}; " +
+            $"Helper bot must be able to see channel {TestChannelDiscordId}; " +
             "check that it is a member of the guild with SEND_MESSAGES");
 
         const int MessageCount = 20;
@@ -288,58 +133,44 @@ public sealed class MessageBackfillRoundTripTests : IAsyncLifetime
         {
             var content = $"{_marker} pre-bridge-{i:D2}";
             var sent = await channel!.SendMessageAsync(content).ConfigureAwait(false);
-            _helperPostedMessageIds.Add(sent.Id);
+            HelperPostedMessageIds.Add(sent.Id);
             postedContents.Add(content);
             // Stay under Discord's bot rate limit (5 messages / 5 s per channel).
             await Task.Delay(150).ConfigureAwait(false);
         }
 
+        Log($"Step: posted {MessageCount} pre-bridge messages");
+
         // ── 2) Bridge the channel — creates webhook + enqueues backfill job ────
-        var bridgeRes = await _client.PostAsync(
-            $"/api/t/{_slug}/channels/{_bridgedChannelPublicId:D}/bridge", null).ConfigureAwait(false);
-        bridgeRes.StatusCode.Should().Be(HttpStatusCode.Accepted,
+        Log("Step: bridging channel via API");
+        var bridgeRes = await Client.BridgeChannelAsync(TenantSlug, BridgedChannelPublicId)
+            .ConfigureAwait(false);
+        bridgeRes.StatusCode.Should().Be(System.Net.HttpStatusCode.Accepted,
             "bridge must succeed so the backfill pipeline can fetch the pre-bridge messages");
 
         var bridgeBody = await bridgeRes.Content.ReadFromJsonAsync<JsonElement>().ConfigureAwait(false);
         var backfillJobId = bridgeBody.GetProperty("backfillJobId").GetInt64();
         backfillJobId.Should().BePositive("bridge response must include a valid backfill job ID");
 
-        // 2a. Read webhook credentials from DB so DisposeAsync can delete the webhook.
-        var channelRow = await _channels.GetByPublicIdAsync(_tenantId, _bridgedChannelPublicId)
-            .ConfigureAwait(false);
-        if (channelRow is not null)
-        {
-            await using var dbConn = _ds.CreateConnection();
-            await dbConn.OpenAsync().ConfigureAwait(false);
-            var webhookRow = await dbConn.QuerySingleOrDefaultAsync("""
-                SELECT discord_webhook_id, ciphertext, nonce, auth_tag, key_version
-                FROM channel_webhooks
-                WHERE tenant_id = @TenantId AND channel_id = @ChannelId
-                """,
-                new { TenantId = _tenantId, ChannelId = channelRow.Id }).ConfigureAwait(false);
-            if (webhookRow is not null)
-            {
-                _webhookId = (ulong)(long)webhookRow.discord_webhook_id;
-                var envelope = new ChannelWebhookEnvelope(
-                    Ciphertext: (byte[])webhookRow.ciphertext,
-                    Nonce: (byte[])webhookRow.nonce,
-                    AuthTag: (byte[])webhookRow.auth_tag,
-                    KeyVersion: (int)webhookRow.key_version);
-                _webhookToken = _webhookCipher.Decrypt(envelope);
-            }
-        }
+        Log($"Step: channel bridged, backfillJobId={backfillJobId}");
+
+        // 2a. Read webhook credentials from DB so base teardown can delete the webhook.
+        await ReadAndStoreWebhookCredentialsAsync().ConfigureAwait(false);
+        Log($"Step: webhook credentials loaded (webhookId={WebhookId})");
 
         // ── 3) Run the backfill job in-process ────────────────────────────────
         // The DwbHubRoundTripTestFactory removes Hangfire's BackgroundProcessingServer
         // (to avoid teardown races). We therefore invoke the runner directly via DI
         // rather than waiting for Hangfire to pick it up.
-        using var scope = _factory.Services.CreateScope();
+        Log("Step: running backfill job in-process");
+        using var scope = Factory.Services.CreateScope();
         var runner = scope.ServiceProvider.GetRequiredService<IBackfillRunner>();
-        await runner.RunAsync(_tenantId, backfillJobId).ConfigureAwait(false);
+        await runner.RunAsync(TenantId, backfillJobId).ConfigureAwait(false);
+        Log("Step: backfill RunAsync completed");
 
         // ── 4) Verify: backfill-status must be "complete" ─────────────────────
-        var statusRes = await _client.GetAsync(
-            $"/api/t/{_slug}/channels/{_bridgedChannelPublicId:D}/backfill-status")
+        Log("Step: checking backfill-status via API");
+        var statusRes = await Client.GetBackfillStatusAsync(TenantSlug, BridgedChannelPublicId)
             .ConfigureAwait(false);
         statusRes.IsSuccessStatusCode.Should().BeTrue(
             "GET /backfill-status must return 200 after RunAsync completes");
@@ -348,6 +179,8 @@ public sealed class MessageBackfillRoundTripTests : IAsyncLifetime
         var status = statusBody.GetProperty("status").GetProperty("status").GetString();
         status.Should().Be("complete",
             "backfill job must be in 'complete' state after RunAsync returns");
+
+        Log($"Step: backfill-status = {status}");
 
         // fetchedCount reflects newly-inserted rows only (ON CONFLICT DO NOTHING).
         // When the test channel already contains messages from prior round-trip test
@@ -360,6 +193,7 @@ public sealed class MessageBackfillRoundTripTests : IAsyncLifetime
 
         // ── 5) Verify: all 20 helper-bot messages are in the DB ───────────────
         // Use a generous limit to absorb any extra historical messages in the channel.
+        Log("Step: verifying all 20 messages are in GET /messages response");
         var fetched = await GetMessagesFromApiAsync(limit: 100).ConfigureAwait(false);
         var fetchedContents = fetched.Select(m => m.Content).ToList();
 
@@ -368,14 +202,15 @@ public sealed class MessageBackfillRoundTripTests : IAsyncLifetime
             fetchedContents.Should().Contain(expected,
                 $"helper-bot message '{expected}' must have been backfilled into the DB");
         }
+
+        Log($"Step: all {MessageCount} messages confirmed in DB");
     }
 
     // ── Helper: GET /messages from the API ────────────────────────────────────
 
     private async Task<IReadOnlyList<BackfillHistoryItem>> GetMessagesFromApiAsync(int limit = 100)
     {
-        var resp = await _client.GetAsync(
-            $"/api/t/{_slug}/channels/{_bridgedChannelPublicId:D}/messages?limit={limit}")
+        var resp = await Client.GetMessagesAsync(TenantSlug, BridgedChannelPublicId, limit: limit)
             .ConfigureAwait(false);
         resp.IsSuccessStatusCode.Should().BeTrue(
             $"GET /messages must succeed after backfill completes (status: {resp.StatusCode})");
@@ -384,82 +219,6 @@ public sealed class MessageBackfillRoundTripTests : IAsyncLifetime
             .ReadFromJsonAsync<BackfillMessageHistoryApiResponse>()
             .ConfigureAwait(false);
         return body?.Messages ?? [];
-    }
-
-    // ── Helper: wait for Bot A to connect ─────────────────────────────────────
-
-    private static async Task WaitForBotConnectedAsync(
-        BotConnectionManager manager,
-        long guildId,
-        TimeSpan timeout)
-    {
-        var deadline = DateTimeOffset.UtcNow + timeout;
-        while (DateTimeOffset.UtcNow < deadline)
-        {
-            if (manager.GetState(guildId) == BotConnectionState.Connected)
-                return;
-            await Task.Delay(TimeSpan.FromMilliseconds(500)).ConfigureAwait(false);
-        }
-        var finalState = manager.GetState(guildId);
-        throw new TimeoutException(
-            $"Bot for guild {guildId} did not reach Connected state within {timeout.TotalSeconds:F0}s " +
-            $"(final state: {finalState?.ToString() ?? "null"}).");
-    }
-
-    // ── IAsyncLifetime.DisposeAsync ────────────────────────────────────────────
-
-    public async Task DisposeAsync()
-    {
-        // 1. Clean up helper bot messages — sweep both explicit IDs and marker prefix.
-        if (_helperBot is not null)
-        {
-            try
-            {
-                var ch = await _helperBot.GetChannelAsync(_testChannelDiscordId)
-                    .ConfigureAwait(false) as IMessageChannel;
-
-                if (ch is not null)
-                {
-                    // Sweep by prefix — catches crash-survivors from previous runs too.
-                    try
-                    {
-                        var msgs = await ch.GetMessagesAsync(100)
-                            .FlattenAsync().ConfigureAwait(false);
-                        foreach (var msg in msgs.Where(m =>
-                            m.Content.StartsWith("[dwbhub-roundtrip-backfill:", StringComparison.Ordinal)))
-                        {
-                            try { await msg.DeleteAsync().ConfigureAwait(false); } catch { /* swallow */ }
-                        }
-                    }
-                    catch { /* swallow */ }
-                }
-            }
-            catch { /* swallow */ }
-
-            try { _helperBot.Dispose(); } catch { /* swallow */ }
-        }
-
-        // 2. Delete the test webhook to avoid hitting Discord's 10-webhook-per-channel limit.
-        if (_verifyClient is not null && _webhookId != 0 && _webhookToken is not null)
-        {
-            try
-            {
-                await _verifyClient.DeleteWebhookAsync(
-                    _webhookId, _webhookToken, CancellationToken.None).ConfigureAwait(false);
-            }
-            catch { /* swallow — webhook may have been deleted already */ }
-        }
-
-        // 3. Dispose HTTP clients + factory.
-        try { _client?.Dispose(); } catch { /* swallow */ }
-        try { _verifyHttp?.Dispose(); } catch { /* swallow */ }
-        if (_factory is not null)
-        {
-            try { await _factory.DisposeAsync().ConfigureAwait(false); } catch { /* swallow */ }
-        }
-
-        // 4. Dispose data source.
-        try { _ds?.Dispose(); } catch { /* swallow */ }
     }
 }
 

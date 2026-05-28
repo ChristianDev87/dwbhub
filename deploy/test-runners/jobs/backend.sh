@@ -37,7 +37,7 @@ dotnet test api/tests/DwbHub.Tests.Integration/DwbHub.Tests.Integration.csproj \
     --no-build -c Release \
     --logger "trx;LogFileName=$RESULTS/integration.trx" \
     --logger "console;verbosity=minimal" \
-    --filter "Category!=DiscordLive"
+    --filter "Category!=DiscordLive&Category!=DiscordRoundTrip"
 
 echo "=== backend.sh: Security tests ==="
 dotnet test api/tests/DwbHub.Tests.Security/DwbHub.Tests.Security.csproj \
