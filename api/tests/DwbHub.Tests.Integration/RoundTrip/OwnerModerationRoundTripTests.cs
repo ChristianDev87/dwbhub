@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Dapper;
 using Discord;
 using DwbHub.Tests.Integration.Infrastructure;
 using DwbHub.Tests.Shared.Api;
@@ -175,12 +177,27 @@ public sealed class OwnerModerationRoundTripTests(
 
         // ── Owner deletes the message via the API ─────────────────────────────
         Log("Step: owner DELETE inbound message via API");
+        var sw = Stopwatch.StartNew();
         var deleteRes = await Client.DeleteMessageAsync(TenantSlug, BridgedChannelPublicId, publicId)
             .ConfigureAwait(false);
+        sw.Stop();
+        Log($"Step: DELETE returned {(int)deleteRes.StatusCode} in {sw.ElapsedMilliseconds}ms");
+
         deleteRes.StatusCode.Should().Be(HttpStatusCode.NoContent,
             "owner deleting an inbound message must succeed with 204");
 
-        Log("Step: DELETE returned 204 — verifying Discord deletion");
+        sw.ElapsedMilliseconds.Should().BeGreaterThan(50,
+            "a real Discord REST round-trip must not return in under 50 ms — " +
+            "faster suggests the backend skipped the Discord call silently");
+
+        Log("Step: timing assertion passed — verifying Discord deletion");
+
+        // ── Negative-elimination: mark this message as already cleaned ────────
+        // The helper bot posted this message and immediately after that stopped
+        // touching it. By removing it from the cleanup list, we ensure the
+        // teardown sweep never deletes it — so the only plausible actor that
+        // could have removed it from Discord is Bot A via the DELETE API call above.
+        HelperPostedMessageIds.Remove(sentMessage.Id);
 
         // ── Verify message is gone from Discord ───────────────────────────────
         // Poll Discord REST until the message is no longer in the channel history.
@@ -191,6 +208,34 @@ public sealed class OwnerModerationRoundTripTests(
             .ConfigureAwait(false);
 
         Log("Step: message confirmed gone in Discord");
+
+        // ── Verify app-side audit log ─────────────────────────────────────────
+        // The app must have written a "message.deleted" audit entry attributing
+        // the delete to the owner. We read directly from DB (same pattern as
+        // BotConnectionLifecycleTests.ReadLatestAuditEventAsync).
+        Log("Step: verifying app audit log");
+        (string EventType, long? ActorUserId, string PayloadJson) auditRow;
+        await using (var dbConn = Ds.CreateConnection())
+        {
+            await dbConn.OpenAsync().ConfigureAwait(false);
+            auditRow = await dbConn.QuerySingleAsync<(string, long?, string)>("""
+                SELECT event_type,
+                       actor_user_id,
+                       payload_json::text AS payload_json
+                FROM   audit_log
+                WHERE  tenant_id  = @TenantId
+                  AND  event_type = 'message.deleted'
+                ORDER  BY id DESC
+                LIMIT  1
+                """, new { TenantId }).ConfigureAwait(false);
+        }
+
+        auditRow.EventType.Should().Be("message.deleted",
+            "a message.deleted audit row must exist for this tenant");
+        auditRow.PayloadJson.Should().Contain(publicId.ToString(),
+            "the audit entry payload must reference the deleted message's public id");
+
+        Log($"Step: audit log verified (actor_user_id={auditRow.ActorUserId}, contains publicId={publicId})");
 
         // ── Verify soft-delete in DB via REST ─────────────────────────────────
         // GET /messages should no longer include this message (soft-deleted rows
@@ -205,7 +250,7 @@ public sealed class OwnerModerationRoundTripTests(
         stillVisible.Should().BeFalse(
             "a soft-deleted inbound message must not appear in the GET /messages history");
 
-        Log("PASS: owner moderation delete verified in Discord and DB");
+        Log("PASS: owner moderation delete verified — Discord + audit log + DB all consistent");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
