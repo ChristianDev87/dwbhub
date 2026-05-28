@@ -169,6 +169,24 @@
       "genericError": "Löschen fehlgeschlagen. Erneut versuchen."
     }
   },
+  "settings": {
+    "title": "Tenant-Einstellungen",
+    "editWindowSection": "Edit-Fenster für eigene Nachrichten",
+    "editWindowLabel": "Edit-Fenster",
+    "editWindowCustomLabel": "Benutzerdefiniert (Minuten, 1–525600)",
+    "editWindowCustomError": "Bitte eine Zahl zwischen 1 und 525600 eingeben.",
+    "presetDefault": "System-Standard (10 Min)",
+    "preset5m": "5 Minuten",
+    "preset15m": "15 Minuten",
+    "preset1h": "1 Stunde",
+    "preset24h": "24 Stunden",
+    "presetCustom": "Benutzerdefiniert…",
+    "save": "Speichern",
+    "saving": "Wird gespeichert…",
+    "saved": "Gespeichert",
+    "outOfRangeError": "Der Wert liegt außerhalb des erlaubten Bereichs.",
+    "ownerOnly": "Nur Owner können die Tenant-Einstellungen ändern."
+  },
   "botCredentials": {
     "configured": "Bot-Token konfiguriert",
     "notConfigured": "Bot-Token nicht konfiguriert",
