@@ -156,6 +156,8 @@ builder.Services.AddScoped<DwbHub.Application.Tenancy.ITenantContext,
                            DwbHub.Infrastructure.Tenancy.TenantContext>();
 builder.Services.AddScoped<DwbHub.Application.Tenancy.IGuildContext,
                            DwbHub.Infrastructure.Tenancy.GuildContext>();
+builder.Services.AddScoped<DwbHub.Application.Tenancy.ITenantSettingsService,
+                           DwbHub.Application.Tenancy.TenantSettingsService>();
 builder.Services.AddScoped<DwbHub.Core.Repositories.IGuildRepository,
                            DwbHub.Data.Repositories.GuildRepository>();
 
