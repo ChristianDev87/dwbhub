@@ -169,6 +169,24 @@
       "genericError": "Delete failed. Try again."
     }
   },
+  "settings": {
+    "title": "Tenant Settings",
+    "editWindowSection": "Edit window for own messages",
+    "editWindowLabel": "Edit window",
+    "editWindowCustomLabel": "Custom (minutes, 1–525600)",
+    "editWindowCustomError": "Please enter a number between 1 and 525600.",
+    "presetDefault": "System default (10 min)",
+    "preset5m": "5 minutes",
+    "preset15m": "15 minutes",
+    "preset1h": "1 hour",
+    "preset24h": "24 hours",
+    "presetCustom": "Custom…",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "outOfRangeError": "The value is outside the allowed range.",
+    "ownerOnly": "Only Owners can change tenant settings."
+  },
   "botCredentials": {
     "configured": "Bot token configured",
     "notConfigured": "Bot token not configured",

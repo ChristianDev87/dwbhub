@@ -26,6 +26,8 @@ type Tenant = {
   slug: string;
   name: string;
   locale?: "de" | "en";
+  /** Per-tenant edit-window override in seconds; null means system default. */
+  messageEditWindowSeconds?: number | null;
 };
 
 export type AuthState =
