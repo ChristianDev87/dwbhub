@@ -414,12 +414,39 @@ public sealed class MessageService : IMessageService
                         botToken: botToken,
                         ct: ct).ConfigureAwait(false);
                 }
-                catch (Exception ex)
+                catch (DiscordPermissionException ex)
                 {
+                    // 401/403: bot lacks MANAGE_MESSAGES on this channel, or token invalid.
+                    // Soft-delete proceeds locally — Discord state may diverge.
                     _logger.LogWarning(ex,
-                        "Discord moderation delete failed for inbound message {MessageId} " +
+                        "Discord moderation delete refused (permission/auth) for inbound message {MessageId} " +
                         "(discord_id={DiscordMessageId}); proceeding with DB soft-delete only. " +
-                        "Discord state may diverge from DB.",
+                        "Ensure the bot has MANAGE_MESSAGES on this channel.",
+                        message.Id, message.DiscordMessageId);
+                }
+                catch (DiscordRateLimitException)
+                {
+                    // Rate-limited — re-throw so the caller (HTTP request pipeline) can surface
+                    // a 429 to the client and let it retry. Do not soft-delete yet.
+                    throw;
+                }
+                catch (HttpRequestException ex)
+                {
+                    // Transient network failure. Log at Error so it is visible in CI and
+                    // test output rather than silently swallowed. Soft-delete proceeds.
+                    _logger.LogError(ex,
+                        "Discord moderation delete network failure for inbound message {MessageId} " +
+                        "(discord_id={DiscordMessageId}); proceeding with DB soft-delete only.",
+                        message.Id, message.DiscordMessageId);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Unexpected exception — log at Error (not Warning) so it surfaces in
+                    // test logs and CI, making the root cause visible rather than hidden.
+                    // OperationCanceledException is let through (request cancelled / timeout).
+                    _logger.LogError(ex,
+                        "Discord moderation delete unexpected error for inbound message {MessageId} " +
+                        "(discord_id={DiscordMessageId}); proceeding with DB soft-delete only.",
                         message.Id, message.DiscordMessageId);
                 }
                 // botToken eligible for GC here — never stored, cached, or logged.

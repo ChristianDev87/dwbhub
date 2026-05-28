@@ -123,8 +123,12 @@ public abstract class RoundTripTestBase : IAsyncLifetime
 
     protected ITestOutputHelper Output { get; }
 
-    protected void Log(string step) =>
-        Output.WriteLine($"[{TenantSlug}] {DateTime.UtcNow:HH:mm:ss.fff} {step}");
+    protected void Log(string step)
+    {
+        var line = $"[{TenantSlug}] {DateTime.UtcNow:HH:mm:ss.fff} {step}";
+        Console.WriteLine(line);   // live in container stdout / GitHub Actions
+        Output.WriteLine(line);    // xUnit TRX / test report
+    }
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
