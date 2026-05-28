@@ -107,6 +107,8 @@ public sealed class BotConnectionManagerMessageEventsTests
             => throw new NotSupportedException();
         public Task<IReadOnlyList<Tenant>> ListAsync(CancellationToken ct = default)
             => throw new NotSupportedException();
+        public Task<bool> UpdateMessageEditWindowAsync(long id, int? windowSeconds, CancellationToken ct = default)
+            => throw new NotSupportedException();
     }
 
     // ── Build helper ──────────────────────────────────────────────────────────

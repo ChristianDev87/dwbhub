@@ -1,6 +1,7 @@
 using DwbHub.Application.Audit;
 using DwbHub.Application.Encryption;
 using DwbHub.Application.Messaging;
+using DwbHub.Core.Entities;
 using DwbHub.Core.Messaging;
 using DwbHub.Core.Repositories;
 using FluentAssertions;
@@ -116,12 +117,18 @@ public sealed class MessageServiceTests
             It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
+        var tenants = new Mock<ITenantRepository>();
+        // Default: returns null (system default window applies).
+        tenants.Setup(t => t.GetByIdAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync((Tenant?)null);
+
         var svc = new MessageService(
             msgRepo.Object, channelRepo.Object, webhookRepo.Object,
             cipher.Object, botCredentials.Object, encryptor.Object,
             discord.Object,
             audit.Object, broadcaster.Object,
-            NullLogger<MessageService>.Instance);
+            NullLogger<MessageService>.Instance,
+            tenants.Object);
 
         return (svc, msgRepo, channelRepo, webhookRepo, cipher, discord, audit, broadcaster);
     }

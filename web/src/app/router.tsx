@@ -11,6 +11,7 @@ import { GuildsPage } from "./GuildsPage";
 import { AuthGuard } from "./AuthGuard";
 import { ChannelsPage } from "./messaging/ChannelsPage";
 import { ChatPage } from "./messaging/ChatPage";
+import { SettingsPage } from "./SettingsPage";
 
 export function AppRouter(): React.JSX.Element {
   return (
@@ -53,6 +54,14 @@ export function AppRouter(): React.JSX.Element {
         element={
           <AuthGuard>
             <ChatPage />
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/t/:slug/settings"
+        element={
+          <AuthGuard>
+            <SettingsPage />
           </AuthGuard>
         }
       />
