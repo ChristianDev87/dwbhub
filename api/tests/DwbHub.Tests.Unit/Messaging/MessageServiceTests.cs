@@ -1,4 +1,5 @@
 using DwbHub.Application.Audit;
+using DwbHub.Application.Encryption;
 using DwbHub.Application.Messaging;
 using DwbHub.Core.Messaging;
 using DwbHub.Core.Repositories;
@@ -94,6 +95,8 @@ public sealed class MessageServiceTests
         var channelRepo = new Mock<IGuildChannelRepository>();
         var webhookRepo = new Mock<IChannelWebhookRepository>();
         var cipher = new Mock<IChannelWebhookCipher>();
+        var botCredentials = new Mock<IGuildBotCredentialRepository>();
+        var encryptor = new Mock<IBotTokenEncryptor>();
         var discord = new Mock<IDiscordRestChannelClient>();
         var audit = new Mock<IAuditWriter>();
         var broadcaster = new Mock<IMessagesBroadcaster>();
@@ -115,7 +118,8 @@ public sealed class MessageServiceTests
 
         var svc = new MessageService(
             msgRepo.Object, channelRepo.Object, webhookRepo.Object,
-            cipher.Object, discord.Object,
+            cipher.Object, botCredentials.Object, encryptor.Object,
+            discord.Object,
             audit.Object, broadcaster.Object,
             NullLogger<MessageService>.Instance);
 

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace DwbHub.Tests.Integration.RoundTrip;
 
@@ -29,6 +30,24 @@ public sealed class DwbHubRoundTripTestFactory : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // Suppress verbose HTTP-client request logging.
+        //
+        // Microsoft.Extensions.Http logs every outbound HTTP request at Information
+        // level under categories like:
+        //   "System.Net.Http.HttpClient.{name}.LogicalHandler"
+        //   "System.Net.Http.HttpClient.{name}.ClientHandler"
+        // For our DiscordRestChannelClient the URLs include the real Discord channel
+        // snowflake (e.g. DELETE .../channels/1508256725302640690/messages/...).
+        // The credential-leak self-check in discord-roundtrip.sh greps for the
+        // channel snowflake in test result artifacts — these log lines trigger it.
+        //
+        // Fix: suppress all System.Net.Http categories to Warning. Our custom
+        // ILogger<DiscordRestChannelClient> logs remain unaffected (different category).
+        builder.ConfigureLogging(logging =>
+        {
+            logging.AddFilter("System.Net.Http", LogLevel.Warning);
+        });
+
         builder.ConfigureServices(services =>
         {
             // Remove Hangfire BackgroundProcessingServer — same fix as DwbHubTestFactory.

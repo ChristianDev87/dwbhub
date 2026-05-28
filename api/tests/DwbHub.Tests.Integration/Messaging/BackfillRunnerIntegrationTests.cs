@@ -123,6 +123,10 @@ public sealed class BackfillRunnerIntegrationTests : IAsyncLifetime
         public Task<bool> DeleteWebhookMessageAsync(
             ulong webhookId, string webhookToken, ulong messageId, CancellationToken ct = default) =>
             Task.FromResult(true);
+
+        public Task<bool> DeleteMessageAsync(
+            ulong channelId, ulong messageId, string botToken, CancellationToken ct = default) =>
+            Task.FromResult(true);
     }
 
     /// <summary>

@@ -1,4 +1,6 @@
 using DwbHub.Application.Audit;
+using DwbHub.Application.Encryption;
+using DwbHub.Core.Encryption;
 using DwbHub.Core.Entities;
 using DwbHub.Core.Messaging;
 using DwbHub.Core.Repositories;
@@ -24,6 +26,8 @@ public sealed class MessageService : IMessageService
     private readonly IGuildChannelRepository _channels;
     private readonly IChannelWebhookRepository _webhooks;
     private readonly IChannelWebhookCipher _webhookCipher;
+    private readonly IGuildBotCredentialRepository _botCredentials;
+    private readonly IBotTokenEncryptor _encryptor;
     private readonly IDiscordRestChannelClient _discord;
     private readonly IAuditWriter _audit;
     private readonly IMessagesBroadcaster _broadcaster;
@@ -34,6 +38,8 @@ public sealed class MessageService : IMessageService
         IGuildChannelRepository channels,
         IChannelWebhookRepository webhooks,
         IChannelWebhookCipher webhookCipher,
+        IGuildBotCredentialRepository botCredentials,
+        IBotTokenEncryptor encryptor,
         IDiscordRestChannelClient discord,
         IAuditWriter audit,
         IMessagesBroadcaster broadcaster,
@@ -43,6 +49,8 @@ public sealed class MessageService : IMessageService
         _channels = channels;
         _webhooks = webhooks;
         _webhookCipher = webhookCipher;
+        _botCredentials = botCredentials;
+        _encryptor = encryptor;
         _discord = discord;
         _audit = audit;
         _broadcaster = broadcaster;
@@ -341,32 +349,80 @@ public sealed class MessageService : IMessageService
         if (!isAuthor && !isOwner)
             return new DeleteMessageResult.Forbidden();
 
-        // Hard-delete from Discord. 404 (false return) is tolerated — we still soft-delete locally.
-        var webhookRow = await _webhooks.GetByChannelAsync(tenantId, channelId, ct)
+        // Hard-delete from Discord. Path depends on message origin:
+        //   ViaDwbhub=true  → posted by our webhook → use webhook token (existing path)
+        //   ViaDwbhub=false → inbound from gateway  → must use bot token for moderation delete
+        var channel = await ResolveChannelByIdAsync(tenantId, channelId, ct)
             .ConfigureAwait(false);
-        if (webhookRow is not null)
-        {
-            var token = _webhookCipher.Decrypt(
-                new ChannelWebhookEnvelope(
-                    webhookRow.Ciphertext,
-                    webhookRow.Nonce,
-                    webhookRow.AuthTag,
-                    webhookRow.KeyVersion));
 
-            try
+        if (message.ViaDwbhub)
+        {
+            // Existing outbound webhook delete path — unverändert.
+            var webhookRow = await _webhooks.GetByChannelAsync(tenantId, channelId, ct)
+                .ConfigureAwait(false);
+            if (webhookRow is not null)
             {
-                await _discord.DeleteWebhookMessageAsync(
-                    (ulong)webhookRow.DiscordWebhookId,
-                    token,
-                    (ulong)message.DiscordMessageId,
-                    ct).ConfigureAwait(false);
+                var token = _webhookCipher.Decrypt(
+                    new ChannelWebhookEnvelope(
+                        webhookRow.Ciphertext,
+                        webhookRow.Nonce,
+                        webhookRow.AuthTag,
+                        webhookRow.KeyVersion));
+
+                try
+                {
+                    await _discord.DeleteWebhookMessageAsync(
+                        (ulong)webhookRow.DiscordWebhookId,
+                        token,
+                        (ulong)message.DiscordMessageId,
+                        ct).ConfigureAwait(false);
+                }
+                catch (WebhookGoneException)
+                {
+                    // Webhook gone — still proceed with local soft-delete.
+                    _logger.LogWarning(
+                        "Webhook gone when trying to delete message {DiscordMessageId} for tenant {TenantId}; proceeding with local soft-delete",
+                        message.DiscordMessageId, tenantId);
+                }
             }
-            catch (WebhookGoneException)
+        }
+        else
+        {
+            // Inbound message (ViaDwbhub=false): use the bot token for a moderation delete.
+            // The bot needs MANAGE_MESSAGES on the channel.
+            // Production setup note: the test server grants admin to all bots (MANAGE_MESSAGES
+            // included); production channel permissions must explicitly grant MANAGE_MESSAGES
+            // to the bot role, otherwise Discord returns 403.
+            var cred = await _botCredentials.GetByGuildIdAsync(channel.GuildId, tenantId, ct)
+                .ConfigureAwait(false);
+
+            if (cred is null)
             {
-                // Webhook gone — still proceed with local soft-delete.
                 _logger.LogWarning(
-                    "Webhook gone when trying to delete message {DiscordMessageId} for tenant {TenantId}; proceeding with local soft-delete",
-                    message.DiscordMessageId, tenantId);
+                    "Cannot moderation-delete inbound message {MessageId} (discord_id={DiscordMessageId}): " +
+                    "no bot credentials for guild {GuildId}; proceeding with DB soft-delete only",
+                    message.Id, message.DiscordMessageId, channel.GuildId);
+            }
+            else
+            {
+                var botToken = _encryptor.Decrypt(new CipherEnvelope(cred.Nonce, cred.Ciphertext, cred.Tag));
+                try
+                {
+                    await _discord.DeleteMessageAsync(
+                        channelId: (ulong)channel.DiscordChannelId,
+                        messageId: (ulong)message.DiscordMessageId,
+                        botToken: botToken,
+                        ct: ct).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Discord moderation delete failed for inbound message {MessageId} " +
+                        "(discord_id={DiscordMessageId}); proceeding with DB soft-delete only. " +
+                        "Discord state may diverge from DB.",
+                        message.Id, message.DiscordMessageId);
+                }
+                // botToken eligible for GC here — never stored, cached, or logged.
             }
         }
 
