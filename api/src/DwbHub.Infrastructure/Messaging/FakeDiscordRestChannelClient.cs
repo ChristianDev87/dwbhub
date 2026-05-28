@@ -1,6 +1,7 @@
 using DwbHub.Application.Messaging;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 
 namespace DwbHub.Infrastructure.Messaging;
 
@@ -64,6 +65,22 @@ public sealed class FakeDiscordRestChannelClient : IDiscordRestChannelClient
         }
         return result.AsReadOnly();
     }
+
+    // ── Call tracking for integration-test assertions ─────────────────────────
+
+    /// <summary>
+    /// Tracks every (channelId, messageId) pair passed to <see cref="DeleteMessageAsync"/>.
+    /// Integration tests can inspect this to verify the correct delete path was taken
+    /// (bot-token moderation delete vs. webhook delete).
+    /// Thread-safe via ConcurrentBag.
+    /// </summary>
+    public ConcurrentBag<(ulong ChannelId, ulong MessageId)> BotDeleteCalls { get; } = new();
+
+    /// <summary>
+    /// Tracks every (webhookId, messageId) pair passed to <see cref="DeleteWebhookMessageAsync"/>.
+    /// Allows tests to assert that the webhook path was NOT taken for inbound messages.
+    /// </summary>
+    public ConcurrentBag<(ulong WebhookId, ulong MessageId)> WebhookDeleteCalls { get; } = new();
 
     // ── Ctor — production guard ───────────────────────────────────────────────
 
@@ -188,5 +205,21 @@ public sealed class FakeDiscordRestChannelClient : IDiscordRestChannelClient
         string webhookToken,
         ulong messageId,
         CancellationToken ct = default)
-        => Task.FromResult(true); // no-op: fake messages are never stored externally
+    {
+        WebhookDeleteCalls.Add((webhookId, messageId));
+        return Task.FromResult(true); // no-op: fake messages are never stored externally
+    }
+
+    /// <inheritdoc/>
+    public Task<bool> DeleteMessageAsync(
+        ulong channelId,
+        ulong messageId,
+        string botToken,
+        CancellationToken ct = default)
+    {
+        // Track the call so integration tests can assert the correct path was taken.
+        // botToken is intentionally NOT logged — treat as max-sensitivity credential.
+        BotDeleteCalls.Add((channelId, messageId));
+        return Task.FromResult(true); // no-op in test mode
+    }
 }

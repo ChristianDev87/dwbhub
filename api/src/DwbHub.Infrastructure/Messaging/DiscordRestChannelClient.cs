@@ -342,6 +342,56 @@ public sealed class DiscordRestChannelClient : IDiscordRestChannelClient
         return true;
     }
 
+    // ── Bot message delete (moderation) ──────────────────────────────────────
+
+    /// <inheritdoc/>
+    public async Task<bool> DeleteMessageAsync(
+        ulong channelId,
+        ulong messageId,
+        string botToken,
+        CancellationToken ct = default)
+    {
+        // DELETE /channels/{channel_id}/messages/{message_id}
+        // Authorization: Bot {botToken}
+        var url = $"{WebhookBaseUrl}/channels/{channelId}/messages/{messageId}";
+        using var request = new HttpRequestMessage(HttpMethod.Delete, url);
+        request.Headers.TryAddWithoutValidation("Authorization", $"Bot {botToken}");
+
+        var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            _logger.LogDebug(
+                "DeleteMessageAsync: message {MessageId} not found (404) — idempotent success",
+                messageId);
+            return false; // already gone — idempotent success
+        }
+
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            var retryAfter = response.Headers.RetryAfter?.Delta is { } d
+                ? (int)Math.Ceiling(d.TotalSeconds)
+                : 5;
+            throw new DiscordRateLimitException(retryAfter,
+                $"Discord rate-limited when deleting message {messageId} in channel {channelId}");
+        }
+
+        if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+            throw new DiscordPermissionException(
+                $"Discord returned {(int)response.StatusCode} when deleting message {messageId} in channel {channelId}. " +
+                "Ensure the bot has MANAGE_MESSAGES on this channel.");
+
+        if (!response.IsSuccessStatusCode)
+            throw new DiscordPermissionException(
+                $"Discord returned unexpected {(int)response.StatusCode} when deleting message {messageId} in channel {channelId}");
+
+        _logger.LogDebug(
+            "DeleteMessageAsync: successfully deleted message {MessageId}",
+            messageId);
+
+        return true;
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private static async Task<DiscordRestClient> CreateRestClientAsync(
