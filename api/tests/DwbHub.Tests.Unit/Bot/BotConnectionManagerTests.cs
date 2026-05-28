@@ -267,17 +267,39 @@ public sealed class BotConnectionManagerTests
 
         var t0 = new DateTimeOffset(2024, 1, 1, 12, 0, 0, TimeSpan.Zero);
         mgr._now = () => t0;
-        var first = await mgr.OnManualReconnectAsync(120, actorUserId: 1, CancellationToken.None);
-        first.Should().BeOfType<ManualReconnectOutcome.Triggered>();
+        var firstOutcome = await mgr.OnManualReconnectAsync(120, actorUserId: 1, CancellationToken.None);
+        firstOutcome.Should().BeOfType<ManualReconnectOutcome.Triggered>();
+
+        // Wait for the first fire-and-forget reconnect to complete before advancing the clock.
+        // Without this the second OnManualReconnectAsync races the first background task and
+        // WaitForConnectAsync may observe the replacement connection before ConnectAsync runs.
+        var firstConn = await factory.WaitForConnectAsync(120, TimeSpan.FromSeconds(2));
+        firstConn.State.Should().Be(BotConnectionState.Connected);
 
         // Advance exactly 61 seconds — cool-down has expired.
         mgr._now = () => t0.AddSeconds(61);
-        var second = await mgr.OnManualReconnectAsync(120, actorUserId: 1, CancellationToken.None);
+        var secondOutcome = await mgr.OnManualReconnectAsync(120, actorUserId: 1, CancellationToken.None);
+        secondOutcome.Should().BeOfType<ManualReconnectOutcome.Triggered>();
 
-        second.Should().BeOfType<ManualReconnectOutcome.Triggered>();
-        // Background reconnect is fire-and-forget — wait for it to complete before asserting state.
-        var conn = await factory.WaitForConnectAsync(120, TimeSpan.FromSeconds(2));
-        conn.State.Should().Be(BotConnectionState.Connected);
+        // Wait for the second fire-and-forget reconnect cycle. The second reconnect disposes
+        // firstConn and swaps in a fresh FakeBotConnection. Poll until the factory reports a
+        // *different* instance so we don't accidentally return firstConn (which has Count > 0
+        // from the first cycle and would satisfy WaitForConnectAsync immediately).
+        var deadline = DateTime.UtcNow.AddSeconds(2);
+        DwbHub.Tests.Integration.Bot.FakeBotConnection? secondConn = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            var candidate = factory.Created.TryGetValue(120, out var c) ? c : null;
+            if (candidate is not null && !ReferenceEquals(candidate, firstConn)
+                                     && candidate.ConnectCallsWithTokens.Count > 0)
+            {
+                secondConn = candidate;
+                break;
+            }
+            await Task.Delay(20);
+        }
+        secondConn.Should().NotBeNull("second reconnect should have produced a new connection within the timeout");
+        secondConn!.State.Should().Be(BotConnectionState.Connected);
     }
 
     [Fact]

@@ -84,6 +84,28 @@ public interface IDiscordRestChannelClient
         string webhookToken,
         ulong messageId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Delete a non-webhook message from a Discord channel via the bot token.
+    /// Required for moderation: tenant owners deleting messages that were not
+    /// posted through our app's webhook (e.g. inbound messages from other bots
+    /// or users that arrived via the gateway).
+    ///
+    /// The bot identity behind <paramref name="botToken"/> needs MANAGE_MESSAGES
+    /// permission on the channel. The test server currently grants admin to all
+    /// bots, so MANAGE_MESSAGES is implicitly included; production setup must
+    /// explicitly add MANAGE_MESSAGES to the bot's channel permissions, otherwise
+    /// this call returns 403.
+    ///
+    /// Returns <c>true</c> on 2xx, <c>false</c> on 404 (already gone — idempotent),
+    /// throws <see cref="DiscordPermissionException"/> for 403/401, and
+    /// <see cref="DiscordRateLimitException"/> for 429.
+    /// </summary>
+    Task<bool> DeleteMessageAsync(
+        ulong channelId,
+        ulong messageId,
+        string botToken,
+        CancellationToken ct = default);
 }
 
 /// <summary>Discord channel metadata returned from the channel-list sync.</summary>

@@ -102,21 +102,25 @@ if [ -n "$HELPER_BOT_TOKEN" ]; then
 fi
 RAW_OUT="$RESULTS/.dotnet-raw.tmp"
 
+DOTNET_EXIT_FILE="$RESULTS/.dotnet-exit.tmp"
+
 set +e
-dotnet test api/tests/DwbHub.Tests.Integration/DwbHub.Tests.Integration.csproj \
+# Pipe through sed for live token-redaction so that step-logs from Console.WriteLine
+# appear in the container stdout immediately (not buffered until the end).
+# We write the dotnet exit code to a temp file because PIPESTATUS is bash-only.
+# tee writes the redacted stream to $RAW_OUT so the post-run leak-check can grep it.
+(dotnet test api/tests/DwbHub.Tests.Integration/DwbHub.Tests.Integration.csproj \
     --filter "Category=DiscordRoundTrip" \
     --logger "trx;LogFileName=discord-roundtrip.trx" \
+    --logger "console;verbosity=normal" \
     --results-directory /results/discord-roundtrip \
     --nologo \
     -v minimal \
-    > "$RAW_OUT" 2>&1
-DOTNET_EXIT=$?
+    2>&1; echo $? > "$DOTNET_EXIT_FILE") | sed -E "$SED_SCRIPT" | tee "$RAW_OUT"
 set -e
 
-# Redact both tokens from captured output, then print.
-sed -E "$SED_SCRIPT" "$RAW_OUT"
-rm -f "$RAW_OUT"
-
+DOTNET_EXIT=$(cat "$DOTNET_EXIT_FILE" 2>/dev/null || echo 1)
+rm -f "$DOTNET_EXIT_FILE" "$RAW_OUT"
 echo "[discord-roundtrip] dotnet test exit: ${DOTNET_EXIT}"
 
 # ---------------------------------------------------------------------------

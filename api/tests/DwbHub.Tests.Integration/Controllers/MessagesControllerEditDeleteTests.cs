@@ -4,13 +4,16 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Dapper;
 using DwbHub.Application.Audit;
+using DwbHub.Application.Encryption;
 using DwbHub.Application.Messaging;
+using DwbHub.Core.Encryption;
 using DwbHub.Core.Entities;
 using DwbHub.Core.Messaging;
 using DwbHub.Core.Repositories;
 using DwbHub.Data.Connections;
 using DwbHub.Data.Repositories;
 using DwbHub.Infrastructure.Auth;
+using DwbHub.Infrastructure.Encryption;
 using DwbHub.Infrastructure.Messaging;
 using DwbHub.Tests.Integration.Infrastructure;
 using DwbHub.Tests.Shared.Api;
@@ -48,10 +51,12 @@ public sealed class MessagesControllerEditDeleteTests : IAsyncLifetime
     private readonly GuildRepository _guilds;
     private readonly GuildChannelRepository _channels;
     private readonly ChannelWebhookRepository _webhooks;
+    private readonly GuildBotCredentialRepository _botCreds;
     private readonly MessageRepository _msgRepo;
     private readonly BCryptPasswordHasher _hasher;
     private readonly JwtIssuer _issuer;
     private readonly AesGcmChannelWebhookCipher _cipher;
+    private readonly AesGcmBotTokenEncryptor _botEncryptor;
 
     private WebApplicationFactory<Program> _factory = null!;
 
@@ -67,10 +72,12 @@ public sealed class MessagesControllerEditDeleteTests : IAsyncLifetime
         _guilds = new GuildRepository(fac);
         _channels = new GuildChannelRepository(fac);
         _webhooks = new ChannelWebhookRepository(fac);
+        _botCreds = new GuildBotCredentialRepository(fac);
         _msgRepo = new MessageRepository(fac);
         _hasher = new BCryptPasswordHasher();
         _issuer = new JwtIssuer(Base64JwtKey);
         _cipher = new AesGcmChannelWebhookCipher(Base64EncKey);
+        _botEncryptor = new AesGcmBotTokenEncryptor(Base64EncKey);
     }
 
     public async Task InitializeAsync()
@@ -161,6 +168,48 @@ public sealed class MessagesControllerEditDeleteTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// Seeds bot credentials for a guild using the test encryptor.
+    /// Required for inbound-delete tests so MessageService can decrypt the bot token.
+    /// The actual token value is irrelevant — FakeDiscordRestChannelClient accepts any token.
+    /// </summary>
+    private async Task SeedBotCredentialsAsync(long guildId, long tenantId)
+    {
+        // The guild_bot_credentials CHECK constraint requires ciphertext BETWEEN 50 AND 200 bytes.
+        // AES-GCM ciphertext length = plaintext length, so we need a plaintext of at least 50 chars.
+        // Real Discord bot tokens are 70+ chars, so this is representative.
+        const string fakeBotToken =
+            "FAKE_BOT_TOKEN_FOR_INTEGRATION_TESTING_ONLY.AAAAAAAAAAAAAAAAAAAAAAAAA";
+        var envelope = _botEncryptor.Encrypt(fakeBotToken);
+        await _botCreds.UpsertAsync(guildId, tenantId, envelope);
+    }
+
+    /// <summary>
+    /// Inserts a via_dwbhub=false (inbound) message, e.g. one posted by an external bot
+    /// or user directly in the Discord channel (not via our webhook).
+    /// Returns the persisted row (with public_id).
+    /// </summary>
+    private async Task<Message> SeedInboundMessageAsync(
+        long tenantId, long channelId,
+        long snowflake, string content = "Inbound message from Discord",
+        DateTimeOffset? sentAt = null)
+    {
+        var msg = new Message
+        {
+            TenantId = tenantId,
+            ChannelId = channelId,
+            // Snowflake must be a valid 18-digit Discord-like value
+            DiscordMessageId = snowflake,
+            DiscordAuthorId = 300000000000000099L, // external author — not a dwbhub user
+            DiscordAuthorName = "ExternalUser",
+            ViaDwbhub = false,
+            DwbhubUserId = null, // inbound messages have no dwbhub user
+            Content = content,
+            SentAt = sentAt ?? DateTimeOffset.UtcNow,
+        };
+        return (await _msgRepo.InsertAsync(msg))!;
+    }
+
+    /// <summary>
     /// Inserts a via_dwbhub=true message authored by <paramref name="authorUserId"/>.
     /// Returns the persisted row (with public_id).
     /// </summary>
@@ -189,8 +238,22 @@ public sealed class MessagesControllerEditDeleteTests : IAsyncLifetime
     /// and FakeDiscordRestChannelClient.
     /// </summary>
     private HttpClient BuildClient(string jwt)
+        => BuildClientWithFakeTracking(jwt, out _);
+
+    /// <summary>
+    /// Builds an HTTP client and also outputs the <see cref="FakeDiscordRestChannelClient"/>
+    /// singleton so callers can inspect <see cref="FakeDiscordRestChannelClient.BotDeleteCalls"/>
+    /// and <see cref="FakeDiscordRestChannelClient.WebhookDeleteCalls"/> after the request.
+    /// </summary>
+    private HttpClient BuildClientWithFakeTracking(string jwt, out FakeDiscordRestChannelClient fake)
     {
         var connFac = new NpgsqlConnectionFactory(_ds);
+        // Use a minimal IHostEnvironment that reports "Development" (non-Production)
+        // so FakeDiscordRestChannelClient's production guard does not throw.
+        var sharedFake = new FakeDiscordRestChannelClient(
+            new TestHostEnvironment(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<FakeDiscordRestChannelClient>.Instance);
+        fake = sharedFake;
 
         var client = _factory
             .WithWebHostBuilder(b => b.ConfigureTestServices(svc =>
@@ -204,13 +267,16 @@ public sealed class MessagesControllerEditDeleteTests : IAsyncLifetime
                 svc.AddScoped<IChannelWebhookRepository>(_ => new ChannelWebhookRepository(connFac));
                 svc.RemoveAll<IUserRepository>();
                 svc.AddScoped<IUserRepository>(_ => new UserRepository(connFac));
+                svc.RemoveAll<IGuildBotCredentialRepository>();
+                svc.AddScoped<IGuildBotCredentialRepository>(_ => new GuildBotCredentialRepository(connFac));
 
-                // Fake Discord (no real HTTP calls).
+                // Fake Discord (no real HTTP calls) — shared instance for call tracking.
                 svc.RemoveAll<IDiscordRestChannelClient>();
-                svc.AddSingleton<IDiscordRestChannelClient>(sp =>
-                    new FakeDiscordRestChannelClient(
-                        sp.GetRequiredService<IHostEnvironment>(),
-                        sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<FakeDiscordRestChannelClient>>()));
+                svc.AddSingleton<IDiscordRestChannelClient>(sharedFake);
+
+                // Real encryptor so bot-token decrypt round-trips work.
+                svc.RemoveAll<IBotTokenEncryptor>();
+                svc.AddSingleton<IBotTokenEncryptor>(new AesGcmBotTokenEncryptor(Base64EncKey));
 
                 // Real MessageService (uses the real repos above).
                 svc.RemoveAll<IMessageService>();
@@ -467,6 +533,83 @@ public sealed class MessagesControllerEditDeleteTests : IAsyncLifetime
         res2.StatusCode.Should().Be(HttpStatusCode.NotFound, "second delete on soft-deleted row should return 404");
     }
 
+    // ── DELETE inbound message tests ──────────────────────────────────────────
+
+    [Fact]
+    public async Task Delete_Message_AsOwner_Inbound_Returns204_AndCallsBotDelete()
+    {
+        // Arrange: owner + guild + bridged channel + bot credentials + inbound message.
+        var (tid, authorId, _) = await SeedUserAsync("del-inbound-owner", "author@delinbound.test", "Author", UserRole.Member);
+        var (ownerId, ownerJwt) = await AddUserToTenantAsync(tid, "del-inbound-owner", "owner@delinbound.test", "Owner", UserRole.Owner);
+        var (gid, _) = await _guilds.CreateAsync(tid, "100000000000000231", "Guild", authorId);
+        var (cid, cpid) = await SeedBridgedChannelAsync(tid, gid, 100000000000020031L);
+        await SeedBotCredentialsAsync(gid, tid);
+        // No webhook seed — inbound messages don't go through our webhook.
+        var msg = await SeedInboundMessageAsync(tid, cid, 500000000000000031L);
+
+        using var client = BuildClientWithFakeTracking(ownerJwt, out var fake);
+
+        // Act.
+        var res = await client.DeleteMessageAsync("del-inbound-owner", cpid, msg.PublicId);
+
+        // Assert: HTTP 204.
+        res.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        // Assert: bot-token delete was called (not webhook delete).
+        fake.BotDeleteCalls.Should().ContainSingle(
+            call => call.MessageId == (ulong)msg.DiscordMessageId,
+            "owner deleting an inbound message must route to DeleteMessageAsync (bot-token path)");
+        fake.WebhookDeleteCalls.Should().BeEmpty(
+            "inbound messages must NOT go through the webhook delete path");
+
+        // Assert: DB soft-delete.
+        await using var conn = await _ds.OpenConnectionAsync();
+        var deletedAt = await conn.QuerySingleOrDefaultAsync<DateTimeOffset?>(
+            "SELECT deleted_at FROM messages WHERE id = @Id", new { Id = msg.Id });
+        deletedAt.Should().NotBeNull("soft-delete must set deleted_at");
+    }
+
+    [Fact]
+    public async Task Delete_Message_AsOtherMember_Inbound_Returns403()
+    {
+        // Arrange: two members (neither is owner), inbound message from an external user.
+        var (tid, authorId, _) = await SeedUserAsync("del-inbound-403", "author@delinbound403.test", "Author", UserRole.Member);
+        var (otherId, otherJwt) = await AddUserToTenantAsync(tid, "del-inbound-403", "other@delinbound403.test", "Other", UserRole.Member);
+        var (gid, _) = await _guilds.CreateAsync(tid, "100000000000000232", "Guild", authorId);
+        var (cid, cpid) = await SeedBridgedChannelAsync(tid, gid, 100000000000020032L);
+        var msg = await SeedInboundMessageAsync(tid, cid, 500000000000000032L);
+
+        using var client = BuildClient(otherJwt);
+
+        var res = await client.DeleteMessageAsync("del-inbound-403", cpid, msg.PublicId);
+
+        res.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "a regular member cannot delete someone else's inbound message");
+    }
+
+    [Fact]
+    public async Task Delete_Message_AsAuthor_Of_Inbound_Cannot_Delete()
+    {
+        // Inbound messages (ViaDwbhub=false) have DwbhubUserId=null — no dwbhub user is the
+        // "author" in our system. This means isAuthor check (DwbhubUserId == actorUserId) will
+        // always be false for a non-null actorUserId. Only Owners can delete inbound messages.
+        // This test asserts that a regular member who happened to post the inbound message
+        // (from Discord's side) cannot delete it via our API.
+        var (tid, memberId, memberJwt) = await SeedUserAsync("del-inbound-noauthor", "member@delinbound.test", "Member", UserRole.Member);
+        var (gid, _) = await _guilds.CreateAsync(tid, "100000000000000233", "Guild", memberId);
+        var (cid, cpid) = await SeedBridgedChannelAsync(tid, gid, 100000000000020033L);
+        // Inbound: DwbhubUserId is null — no member can claim authorship.
+        var msg = await SeedInboundMessageAsync(tid, cid, 500000000000000033L);
+
+        using var client = BuildClient(memberJwt);
+
+        var res = await client.DeleteMessageAsync("del-inbound-noauthor", cpid, msg.PublicId);
+
+        res.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "members cannot delete inbound messages even if they were the Discord sender — " +
+            "only Owners can perform moderation deletes via the API");
+    }
+
     // ── DELETE audit — content must NOT appear in audit payload ──────────────
 
     [Fact]
@@ -490,6 +633,21 @@ public sealed class MessagesControllerEditDeleteTests : IAsyncLifetime
         payload.Should().NotBeNull();
         payload.Should().NotContain("very sensitive content");
     }
+}
+
+// ── Minimal IHostEnvironment for test use ─────────────────────────────────────
+
+/// <summary>
+/// Reports "Development" environment so FakeDiscordRestChannelClient's
+/// production guard (env.IsProduction() check) does not throw in tests.
+/// </summary>
+file sealed class TestHostEnvironment : IHostEnvironment
+{
+    public string EnvironmentName { get; set; } = "Development";
+    public string ApplicationName { get; set; } = "DwbHub.Tests";
+    public string ContentRootPath { get; set; } = Path.GetTempPath();
+    public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; }
+        = new Microsoft.Extensions.FileProviders.NullFileProvider();
 }
 
 // ── No-op broadcaster for edit/delete tests ───────────────────────────────────
